@@ -1,5 +1,5 @@
 /**
- * DockPage.tsx — MakeChurchEasy Dock Control Panel
+ * DockPage.tsx — MakeChurchEazy Dock Control Panel
  *
  * The dock keeps Bible, Worship + Notes, and Media production controls inside OBS.
  */
@@ -276,18 +276,18 @@ function getCompactDockTabLabel(tab: DockTab, t: (key: string) => string): strin
 
 function formatDockObsError(message: string): string {
   if (!message) {
-    return "Failed to connect to OBS. Please check your OBS WebSocket settings (Tools → WebSocket Server Settings) and confirm port 4455 and password align with MakeChurchEasy.";
+    return "Failed to connect to OBS. Please check your OBS WebSocket settings (Tools → WebSocket Server Settings) and confirm port 4455 and password align with MakeChurchEazy.";
   }
   if (/No source was found.*MCE Presentation.*within the canvas/i.test(message)) {
-    return "MCE Presentation scene was not found. Please refresh the dock, or check that MakeChurchEasy is running.";
+    return "MCE Presentation scene was not found. Please refresh the dock, or check that MakeChurchEazy is running.";
   }
   if (/connection failed|failed to connect|websocket.*fail|timeout|timed out|refused/i.test(message)) {
-    return "Failed to connect to OBS. Please confirm OBS Studio is running, check OBS → Tools → WebSocket Server Settings is enabled on port 4455, and confirm your password aligns with MakeChurchEasy.";
+    return "Failed to connect to OBS. Please confirm OBS Studio is running, check OBS → Tools → WebSocket Server Settings is enabled on port 4455, and confirm your password aligns with MakeChurchEazy.";
   }
   if (/auth|authentication|password/i.test(message)) {
     return "OBS WebSocket authentication failed. Please check your OBS WebSocket password in Tools → WebSocket Server Settings and re-enter it here.";
   }
-  return `OBS Error: ${message}. Check OBS → Tools → WebSocket Server Settings and confirm port and password align with MakeChurchEasy.`;
+  return `OBS Error: ${message}. Check OBS → Tools → WebSocket Server Settings and confirm port and password align with MakeChurchEazy.`;
 }
 
 interface DockPageProps {
@@ -339,6 +339,14 @@ function DockPageContent({
   const initialActiveTab = resolveDockTab(shellPreferences.activeTab, isFreePlan);
   const initialSearchPlacement = normalizeDockSearchPlacement(shellPreferences.searchPlacement);
   const [activeTab, setActiveTab] = useState<DockTab>(() => initialActiveTab);
+  // The tab the operator last chose. When a tab is temporarily unavailable at
+  // startup (plan not bridged yet), the Dock shows a fallback tab but keeps this
+  // preference, then returns to it once it becomes available.
+  const preferredTabRef = useRef<DockTab>(resolveDockTab(shellPreferences.activeTab, false));
+  // The tab shown only because the preferred one is unavailable right now (null = none).
+  const fallbackTabRef = useRef<DockTab | null>(
+    initialActiveTab !== preferredTabRef.current ? initialActiveTab : null,
+  );
   const [searchPlacement, setSearchPlacement] = useState<DockSearchPlacement>(() => initialSearchPlacement);
   const [renderedTab, setRenderedTab] = useState<DockTab>(() => initialActiveTab);
   const [lowMemoryMode, setLowMemoryMode] = useState(() =>
@@ -659,9 +667,18 @@ function DockPageContent({
   }, [registerDropHandler, handleFiles]);
 
   useEffect(() => {
+    // Never write before the saved preferences were loaded, or the default tab
+    // would replace the operator's last tab.
+    if (!isNativeDockSettingsHydrated()) return;
+    // A forced fallback (preferred tab hidden for now) must not overwrite the
+    // operator's choice; any other tab change is the operator's choice.
+    if (activeTab !== fallbackTabRef.current) {
+      preferredTabRef.current = activeTab;
+      fallbackTabRef.current = null;
+    }
     saveDockShellPreferences({
       ...loadDockShellPreferences(),
-      activeTab,
+      activeTab: preferredTabRef.current,
       disabledTabs,
       searchPlacement,
     });
@@ -691,8 +708,21 @@ function DockPageContent({
   }, [activeTab, lowMemoryMode]);
 
   useEffect(() => {
+    const preferred = preferredTabRef.current;
+    if (
+      fallbackTabRef.current === activeTab
+      && preferred !== activeTab
+      && visibleDockTabs.some((tab) => tab.id === preferred)
+    ) {
+      // The saved tab became available (e.g. the plan arrived after startup).
+      fallbackTabRef.current = null;
+      setActiveTab(preferred);
+      return;
+    }
     if (visibleDockTabs.some((tab) => tab.id === activeTab)) return;
-    setActiveTab(visibleDockTabs[0]?.id ?? "bible");
+    const fallback = visibleDockTabs[0]?.id ?? "bible";
+    fallbackTabRef.current = fallback;
+    setActiveTab(fallback);
   }, [activeTab, visibleDockTabs]);
 
   const mountedDockTabs = useMemo(() => {
@@ -897,7 +927,7 @@ function DockPageContent({
           setStaged((current) => {
             if (current) return current;
             if (recovered.bible) {
-              setActiveTab("bible");
+              // Show what is live without moving the operator off the tab they chose.
               const compare = recovered.bible.compare;
               const leftColumn = compare?.columns?.[0] ?? null;
               const compareLabel =
@@ -925,7 +955,7 @@ function DockPageContent({
               };
             }
             if (recovered.worship) {
-              setActiveTab("worship");
+              // Show what is live without moving the operator off the tab they chose.
               return {
                 type: "worship",
                 label: recovered.worship.sectionLabel || t('dock.worshipFallback'),
@@ -1826,29 +1856,22 @@ function DockPageContent({
                           {t('page.presentationAudioVisibilityDesc', 'When Bible, Worship, or Notes is pushed, keep background music and audio tracks playing in OBS.')}
                         </div>
 
-                        <label className="dock-sidebar__select-field">
-                          <span className="dock-sidebar__select-label">
-                            <Icon name="branding_watermark" size={14} />
-                            <span>{t('page.lowerThirdSourceVisibility', 'Lower third behavior')}</span>
-                          </span>
-                          <select
-                            className="dock-sidebar__select"
-                            value={projectionSettings.lowerThirdSourceVisibility}
+                        <label className="dock-sidebar__check dock-sidebar__check--stacked">
+                          <input
+                            type="checkbox"
+                            checked={projectionSettings.lowerThirdSourceVisibility === "active-only"}
                             onChange={(event) => {
                               updateProjectionSettings({
-                                lowerThirdSourceVisibility: event.target.value as ProjectionSettings["lowerThirdSourceVisibility"],
+                                lowerThirdSourceVisibility: event.target.checked ? "active-only" : "overlay",
                               });
                               void dockObsClient.reconcileMcePresentationVisibility().catch(() => {});
                             }}
-                            aria-label={t('page.lowerThirdSourceVisibility', 'Lower third behavior')}
-                          >
-                            <option value="keep-first">{t('page.lowerThirdKeepFirst', 'Keep the first MCE layer visible')}</option>
-                            <option value="active-only">{t('page.lowerThirdActiveOnly', 'Show only the active lower third')}</option>
-                          </select>
+                          />
+                          <span className="dock-sidebar__check-copy">
+                            <span>{t('page.lowerThirdHideOthers', 'Hide slides and verses while a lower third is showing')}</span>
+                            <small>{t('page.lowerThirdHideOthersDesc', 'Off (recommended): a lower third appears on top of whatever is already on screen. On: only the lower third shows. OBS sources you created yourself are never changed.')}</small>
+                          </span>
                         </label>
-                        <div className="dock-sidebar__hint">
-                          {t('page.lowerThirdSourceVisibilityDesc', 'This applies inside MCE Presentation. OBS sources you created yourself are never changed.')}
-                        </div>
                       </div>
                     )}
                   </>
@@ -2461,9 +2484,18 @@ export default function DockPage(props: DockPageProps = {}) {
   const [initialProductionSettings, setInitialProductionSettings] = useState<DockProductionSettingsPayload | null>(
     () => readFastDockProductionSettings(),
   );
-  const [settingsReady, setSettingsReady] = useState(
-    () => isNativeDockSettingsHydrated() || Boolean(initialProductionSettings),
-  );
+  // Mount the Dock only after the saved settings database is loaded. Mounting
+  // early (from the fast localStorage cache) let every saved preference — like
+  // the last open tab — start from its default and then overwrite the saved value.
+  const [settingsReady, setSettingsReady] = useState(() => isNativeDockSettingsHydrated());
+
+  useEffect(() => {
+    if (settingsReady || !initialProductionSettings) return;
+    // Safety valve: never leave the operator on a loading screen if the local
+    // settings service is slow; the Dock then opens without saved shell prefs.
+    const timer = window.setTimeout(() => setSettingsReady(true), 3000);
+    return () => window.clearTimeout(timer);
+  }, [settingsReady, initialProductionSettings]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2472,6 +2504,9 @@ export default function DockPage(props: DockPageProps = {}) {
     const hydrate = async () => {
       try {
         await hydrateNativeDockSettings();
+        // The saved preferences are loaded; with a cached production snapshot the
+        // Dock can open now instead of waiting for the full settings load.
+        if (!cancelled && initialProductionSettings) setSettingsReady(true);
         const productionSettings = await loadDockProductionSettings();
         if (!cancelled) {
           setInitialProductionSettings(productionSettings);
@@ -2494,7 +2529,7 @@ export default function DockPage(props: DockPageProps = {}) {
     };
   }, []);
 
-  const effectiveSettings = initialProductionSettings ?? (settingsReady ? getDefaultDockProductionSettings() : null);
+  const effectiveSettings = settingsReady ? (initialProductionSettings ?? getDefaultDockProductionSettings()) : null;
 
   if (!effectiveSettings) {
     return (

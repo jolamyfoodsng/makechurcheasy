@@ -52,6 +52,11 @@ const MAX_HISTORY = 50;
 const MAX_TRANSCRIPT_LINES = 40;
 const MAX_QUEUE_SIZE = 3;
 const LM_QUEUE_RETENTION_MS = 90_000;
+/**
+ * Auto-push only acts on a verse detected moments ago. Anything older is
+ * history: it stays clickable, but is never sent to the screen on its own.
+ */
+export const LM_AUTO_PUSH_MAX_AGE_MS = 15_000;
 const LM_LIVE_VERSE_STORAGE_KEY = "ocs-lm-dock-live-verse";
 const SUGGESTION_COOLDOWN_MS = 60_000;
 // The relay is local-only. Poll often enough for a detected reference to feel live;
@@ -201,6 +206,13 @@ export function getLmCandidateKey(candidate: Pick<VoiceBibleCandidate, "book" | 
   return `${candidate.book}:${candidate.chapter}:${candidate.verse}`;
 }
 
+/** True when a detection is recent enough to be auto-pushed. Unknown age = not fresh. */
+export function isFreshForLmAutoPush(detectedAt: number | undefined, nowMs: number): boolean {
+  if (!detectedAt || !Number.isFinite(detectedAt)) return false;
+  const age = nowMs - detectedAt;
+  return age >= -5_000 && age <= LM_AUTO_PUSH_MAX_AGE_MS;
+}
+
 export function claimNextLmAutoPushCandidate<T extends { key: string; candidate: VoiceBibleCandidate }>(
   candidates: T[],
   claimedKeys: Set<string>,
@@ -304,7 +316,7 @@ export default function DockLmTab({
   const allowLocalMicControls = presentationLinkMode && enablePresentationMicControls;
   const isTestEnv = getEnvConfig().isTest;
   const openAppToStartText = isTestEnv
-    ? "Open Speech to Scripture in MakeChurchEasy Test on this computer to start listening."
+    ? "Open Speech to Scripture in MakeChurchEazy Test on this computer to start listening."
     : allowLocalMicControls
       ? "Choose a microphone in settings, then start listening from this presentation page."
       : t("lm.openAppToStart");
@@ -1189,8 +1201,10 @@ export default function DockLmTab({
     if (allowLocalMicControls) {
       const service = await loadLmDockService();
       service.confirmStillUsing();
+    } else {
+      sendLmCommand("lm:keep-listening");
     }
-  }, [allowLocalMicControls]);
+  }, [allowLocalMicControls, sendLmCommand]);
 
   const handleInactivityStop = useCallback(async () => {
     setInactivityPrompt(null);
@@ -1250,19 +1264,25 @@ export default function DockLmTab({
   }, [isListening, queuedVerseKeys, suggestionExpiryMs, suggestions, now]);
 
   useEffect(() => {
-    const visibleAutoPushKeys = new Set<string>();
-    for (const c of queueVerses) visibleAutoPushKeys.add(`queue:${getLmCandidateKey(c)}:${c.detectedAt ?? "legacy"}`);
-    for (const c of filteredSuggestions) visibleAutoPushKeys.add(`suggestion:${getLmCandidateKey(c)}:${c.detectedAt ?? "legacy"}`);
-
+    // Forget an auto-pushed detection only once it is far too old to be pushed
+    // again. Forgetting it as soon as it left the list let it be pushed again
+    // when a later snapshot brought the same old detection back.
+    const nowMs = Date.now();
     for (const key of Array.from(autoPushedKeysRef.current)) {
-      if (!visibleAutoPushKeys.has(key)) autoPushedKeysRef.current.delete(key);
+      const detectedAt = Number(key.slice(key.lastIndexOf(":") + 1));
+      if (!Number.isFinite(detectedAt) || nowMs - detectedAt > 10 * 60_000) {
+        autoPushedKeysRef.current.delete(key);
+      }
     }
   }, [filteredSuggestions, queueVerses]);
 
   useEffect(() => {
     if (!settings.autoPushQueue && !settings.autoPushSuggestions) return;
+    // Auto-push follows live speech only; nothing is pushed while not listening.
+    if (!isListening) return;
     if (!presentationLinkMode && obsStatus !== "connected") return;
     if (pushing || autoPushInFlightRef.current.size > 0) return;
+    const nowMs = Date.now();
 
     const candidatesToPush: Array<{
       key: string;
@@ -1272,6 +1292,7 @@ export default function DockLmTab({
 
     if (settings.autoPushQueue) {
       for (const candidate of queueVerses) {
+        if (!isFreshForLmAutoPush(candidate.detectedAt, nowMs)) continue;
         candidatesToPush.push({
           key: `queue:${getLmCandidateKey(candidate)}:${candidate.detectedAt ?? "legacy"}`,
           source: "queue",
@@ -1282,6 +1303,7 @@ export default function DockLmTab({
 
     if (settings.autoPushSuggestions) {
       for (const candidate of filteredSuggestions.slice(0, 1).filter(isConfidentScriptureSuggestion)) {
+        if (!isFreshForLmAutoPush(candidate.detectedAt, nowMs)) continue;
         candidatesToPush.push({
           key: `suggestion:${getLmCandidateKey(candidate)}:${candidate.detectedAt ?? "legacy"}`,
           source: "suggestion",
@@ -1294,7 +1316,7 @@ export default function DockLmTab({
       candidatesToPush,
       autoPushedKeysRef.current,
       autoPushLastPushedAtRef.current,
-      Date.now(),
+      nowMs,
       settings.autoPushDedupWindow,
     );
     if (!target) return;
@@ -1310,6 +1332,7 @@ export default function DockLmTab({
   }, [
     filteredSuggestions,
     handlePushVerse,
+    isListening,
     obsStatus,
     presentationLinkMode,
     queueVerses,
@@ -2254,15 +2277,15 @@ export default function DockLmTab({
             </div>
             <div style={S.modalBody}>
               <p style={S.modalText}>
-                No speech detected for {inactivityPrompt.intervalMinutes} minutes. Listening will automatically stop in {inactivityPrompt.remainingSeconds}s to conserve credits.
+                No speech detected for {inactivityPrompt.intervalMinutes} minutes. Voice AI will stop in {inactivityPrompt.remainingSeconds}s unless you keep it on.
               </p>
             </div>
             <div style={S.modalFooter}>
               <button style={S.modalBtnGhost} onClick={handleInactivityStop}>
-                Stop
+                No, stop
               </button>
               <button style={S.modalBtnPrimary} onClick={handleConfirmStillUsing}>
-                I'm still using it
+                Yes, keep listening
               </button>
             </div>
           </div>

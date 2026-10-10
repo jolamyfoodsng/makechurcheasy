@@ -1,4 +1,34 @@
-# MakeChurchEazy Release Highlights (v4.1.2)
+# MakeChurchEazy Release Highlights (v4.1.3)
+
+## 1. Voice AI Stops When You Walk Away
+- **Lead:** Voice AI stops listening when the screen turns off or the computer goes to sleep, instead of running in the background.
+- **Lead:** After 5 minutes without speech, a 60-second prompt asks whether to keep listening. The next check comes after 10 minutes, then every 15 minutes; if nobody responds, Voice AI stops automatically.
+- **Lead:** The prompt works on every app page and in the OBS Scripture Assistant dock, and the dock buttons respond correctly.
+- **Lead:** Empty or garbled transcripts no longer count as speech or keep a session running.
+
+## 2. Scripture Assistant Auto-Push Fix
+- **Lead:** Auto-push now sends only verses detected in the last few seconds while Voice AI is listening, and never sends the same detection twice. Older detections remain in the queue for manual selection.
+- **Lead:** Auto-pushed verses use the Bible theme selected in the Bible tab; only the verse and reference change.
+
+## 3. The Dock Remembers Where You Were
+- **Lead:** Reloading the OBS Dock returns to the last tab, selected Bible verse, and open worship song and slide, including when a verse is already live.
+- **Lead:** Restored items are selected only; reloading does not send anything to OBS.
+
+## 4. Lower Thirds & Broadcast Graphics
+- **Lead:** Lower thirds now appear over lyrics, slides, tickers, and media. A new lower third replaces the previous one. Dock settings let you hide slides and verses while a lower third is showing.
+- **Lead:** The lower-third editor gives each text box a clear heading, hint, and Reset link. It fills in church name, pastor, and role from the church profile when available, and keeps Send to OBS visible.
+- **Lead:** Broadcast Graphics previews load as you scroll, keeping the page responsive. The larger preview includes Animate In and Animate Out controls.
+- **Lead:** After OBS connects, MakeChurchEazy refreshes its browser sources one at a time when no output is live, streaming, or recording.
+
+## 5. Smaller Fixes
+- **Lead:** Dock upgrade links open the plans page in your browser.
+- **Lead:** The desktop dashboard greeting uses the signed-in account name.
+
+> **How to get it:** Install the update when the app prompts you, or download the latest version from makechurcheazy.com/downloads.
+
+---
+
+## Previous Release Highlights (v4.1.2)
 
 ## 1. Broadcast Graphics Fix (Windows & Installed App)
 - **Lead:** Fixed blank or plain-text previews on Windows and installed Mac copies. Graphics now show their colours, fonts, and animation in the library, Customize editor, and Dock.
@@ -11,7 +41,6 @@
 > **How to get the fix:** Install the update when the app prompts you, or download the latest version from makechurcheazy.com/downloads. If your graphics already looked fine, nothing changes for you.
 
 ---
-
 ## Previous Release Highlights (v4.1.0)
 
 ## 1. Multi-Stream Broadcasting

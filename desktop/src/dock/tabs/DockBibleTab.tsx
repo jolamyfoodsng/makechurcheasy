@@ -377,7 +377,17 @@ interface DockBiblePreferences {
   keywordMatchPushDirectlyToObs?: boolean;
   selectedBook?: string;
   selectedChapter?: number;
+  /** The verse that was selected when the dock was last used (selected only, never sent to the output). */
+  selectedVerse?: number;
   updatedAt?: string;
+}
+
+/** The saved verse, if it still belongs to the saved book and chapter. */
+function resolveSavedVerse(book: string | null, chapter: number | null, saved: unknown): number | null {
+  if (!book || chapter === null) return null;
+  if (typeof saved !== "number" || !Number.isInteger(saved) || saved < 1) return null;
+  const max = getCanonicalVerseCount(book, chapter);
+  return max !== null && saved > max ? null : saved;
 }
 
 interface DockBibleUiPreferences {
@@ -1707,7 +1717,9 @@ function DockBibleTab({
   const [selectedBook, setSelectedBook] = useState<string | null>(initialBook);
   const [selectedChapter, setSelectedChapter] = useState<number | null>(initialChapter);
   const selectedChapterRef = useRef<number | null>(initialChapter);
-  const [selectedVerse, setSelectedVerse] = useState<number | null>(null);
+  const [selectedVerse, setSelectedVerse] = useState<number | null>(
+    () => resolveSavedVerse(initialBook, initialChapter, initialPrefs.selectedVerse),
+  );
   const [selectedColumn, setSelectedColumn] = useState(0);
 
   // Floating Book & Chapter Dropdown state
@@ -2403,7 +2415,7 @@ function DockBibleTab({
         setSelectedBook(initialBook);
         selectedChapterRef.current = initialBook ? initialChapter : null;
         setSelectedChapter(initialBook ? initialChapter : null);
-        setSelectedVerse(null);
+        setSelectedVerse(resolveSavedVerse(initialBook, initialBook ? initialChapter : null, prefs.selectedVerse));
         setSelectedColumn(0);
       }
 
@@ -2487,6 +2499,7 @@ function DockBibleTab({
         sceneQuickThemeSettings,
         selectedBook: selectedBook ?? undefined,
         selectedChapter: selectedChapter ?? undefined,
+        selectedVerse: selectedVerse ?? undefined,
       });
     }, 300);
   }, [
@@ -2516,6 +2529,7 @@ function DockBibleTab({
     selectedBook,
     selectedChapter,
     selectedLowerThirdTheme.id,
+    selectedVerse,
     translationsLoaded,
   ]);
 
@@ -2818,6 +2832,11 @@ function DockBibleTab({
       sceneQuickThemeSettings,
       selectedBook: selectedBook ?? undefined,
       selectedChapter: selectedChapter ?? undefined,
+      // When the book or chapter is being changed, the verse in this closure belongs to the old
+      // chapter, so it is left out. The debounced save above stores the right one right after.
+      selectedVerse: ("selectedBook" in overrides || "selectedChapter" in overrides)
+        ? undefined
+        : (selectedVerse ?? undefined),
       ...overrides,
     });
   }, [
@@ -2838,6 +2857,7 @@ function DockBibleTab({
     sceneQuickThemeSettings,
     selectedBook,
     selectedChapter,
+    selectedVerse,
     translationA,
     translationB,
     verseLineCount,

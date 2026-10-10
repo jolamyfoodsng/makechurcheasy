@@ -17,6 +17,7 @@
 // localhost server.
 
 mod assemblyai_stream;
+mod voice_guard;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 mod audio_capture;
 mod device_fingerprint;
@@ -8606,6 +8607,8 @@ pub fn run() {
 
             app.manage(audio_capture::AudioCaptureState::default());
             app.manage(assemblyai_stream::AssemblyAiStreamState::default());
+            // Stops Voice AI if the screen turns off or an inactivity prompt is ignored.
+            voice_guard::init(app.handle());
 
             if let Some(window) = app.get_webview_window("main") {
                 if let Some(icon) = dev_window_icon() {
@@ -8838,6 +8841,7 @@ pub fn run() {
             assemblyai_stream::is_assemblyai_streaming,
             assemblyai_stream::set_microphone_gain,
             assemblyai_stream::set_assemblyai_stream_speed,
+            voice_guard::voice_guard_keep_alive,
             close_app_confirmed,
             set_update_close_guard,
             local_llm::get_local_llm_runtime_status,

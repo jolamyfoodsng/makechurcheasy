@@ -20,7 +20,6 @@ import { useNavigate } from "react-router-dom";
 import { getBibleSettings, getInstalledTranslations } from "../bible/bibleDb";
 import { useAuth } from "../contexts/AuthContext";
 import { getAllMedia } from "../library/libraryDb";
-import { getSettings } from "../multiview/mvStore";
 import { track } from "../services/analytics";
 import { lmDockService, type LmDockSnapshot } from "../services/lmDockService";
 import { obsService, type ConnectionStatus } from "../services/obsService";
@@ -47,16 +46,31 @@ function getGreetingKey(): string {
   return "dashboard.greeting.evening";
 }
 
+const GREETING_TITLES = /^(pastor|pst\.?|dr\.?|rev\.?|reverend|bishop|apostle|prophet|prophetess|evangelist|elder|minister|mr\.?|mrs\.?|ms\.?)$/i;
+
+/**
+ * The name used in the greeting: the signed-in person's own name from their account
+ * (the one they signed up with). The church profile (church name, main pastor) is a
+ * different thing and is never used here, because the person using the app is not
+ * always the pastor.
+ */
+function getGreetingName(accountName: string | undefined | null): string {
+  const parts = String(accountName ?? "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "";
+  if (parts.length > 1 && GREETING_TITLES.test(parts[0])) return `${parts[0]} ${parts[1]}`;
+  return parts[0];
+}
+
 // ── 1. Greeting Section ────────────────────────────────────────────────────
 
 interface DashboardGreetingProps {
-  pastorName: string;
+  userName: string;
   obsConnected: boolean;
   onWatchTutorials: () => void;
 }
 
 function DashboardGreeting({
-  pastorName,
+  userName,
   obsConnected,
   onWatchTutorials,
 }: DashboardGreetingProps) {
@@ -68,7 +82,7 @@ function DashboardGreeting({
       <div className="header-left">
         <div>
           <h2 className="header-title">
-            {t(greetingKey)}, {pastorName || "User"}{" "}
+            {t(greetingKey)}, {userName || "User"}{" "}
             <span className="header-emoji">&#x1F44B;</span>
           </h2>
           <p className="header-subtitle">
@@ -297,7 +311,7 @@ function DashboardObsDockStatus({
             <ol className="urls-info-list">
               <li>{t("dashboard.urls.step1", "Open OBS Studio.")}</li>
               <li>{t("dashboard.urls.step2", "Go to Docks → Custom Browser Docks.")}</li>
-              <li>{t("dashboard.urls.step3", "Enter a name for the dock (e.g. \"MakeChurchEasy\").")}</li>
+              <li>{t("dashboard.urls.step3", "Enter a name for the dock (e.g. \"MakeChurchEazy\").")}</li>
               <li>{t("dashboard.urls.step4", "Paste the URL.")}</li>
               <li>{t("dashboard.urls.step5", "Click Apply.")}</li>
               <li>{t("dashboard.urls.step6", "The dock will appear inside OBS and can be moved, resized, or docked anywhere in the interface.")}</li>
@@ -573,8 +587,8 @@ export default function ProductionHomePage() {
   const [showHowItWorksModal, setShowHowItWorksModal] = useState(false);
   const moveTransitionEnsureAttempt = useRef(false);
 
-  // ── Settings ──
-  const [pastorName, setPastorName] = useState("");
+  // ── Who is signed in (greeting) ──
+  const greetingName = useMemo(() => getGreetingName(user?.name), [user?.name]);
 
   // ── OBS ──
   const [obsStatus, setObsStatus] = useState<ConnectionStatus>(
@@ -610,10 +624,6 @@ export default function ProductionHomePage() {
 
   // ── Load initial data ──
   useEffect(() => {
-    // Settings
-    const s = getSettings();
-    setPastorName(s.mainPastorName || user?.name || "User");
-
     // OBS
     setObsStatus(obsService.status);
 
@@ -755,7 +765,7 @@ export default function ProductionHomePage() {
       <OnboardingResumeBanner />
 
       <DashboardGreeting
-        pastorName={pastorName}
+        userName={greetingName}
         obsConnected={obsStatus === "connected"}
         onWatchTutorials={() => navigate("/tutorials")}
       />

@@ -76,6 +76,7 @@ import { deleteMedia, deleteUploadedMediaFile, getAllMedia, saveMedia } from "./
 import { syncCustomThemesToDock, syncInstalledTranslationsToDock } from "./bible/bibleDb";
 import CreditsGuard from "./components/CreditsGuard";
 import { AnnouncementModalHost } from "./components/AnnouncementModalHost";
+import { VoiceAiInactivityModal } from "./components/VoiceAiInactivityModal";
 import {
   getServicePlannerSnapshot,
   importDockServicePlansFromUploads,
@@ -1596,6 +1597,7 @@ function App() {
       )}
 
       <AnnouncementModalHost />
+      <VoiceAiInactivityModal />
       {!splashVisible && <UpdateDownloadingBanner />}
       <UpdateBackgroundNoticeModal />
       <UpdateCloseAppWarningModal />

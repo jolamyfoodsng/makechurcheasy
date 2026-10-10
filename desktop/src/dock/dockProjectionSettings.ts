@@ -7,8 +7,8 @@ export interface ProjectionSettings {
   presentationOnly: boolean;
   /** Hide other sources created by MCE when a presentation source is sent. */
   presentationSourceVisibility: "active-only" | "keep-visible";
-  /** Decide whether lower thirds may leave the first MCE source visible. */
-  lowerThirdSourceVisibility: "keep-first" | "active-only";
+  /** Show lower thirds over existing content, or hide all other MCE content. */
+  lowerThirdSourceVisibility: "overlay" | "active-only";
   /** Decide whether background audio keeps playing when other presentation content is pushed. */
   preserveAudioOnSourceSwitch: boolean;
 }
@@ -22,7 +22,7 @@ const DEFAULT_PROJECTION_SETTINGS: ProjectionSettings = {
   restoreOriginalScene: false,
   presentationOnly: false,
   presentationSourceVisibility: "active-only",
-  lowerThirdSourceVisibility: "keep-first",
+  lowerThirdSourceVisibility: "overlay",
   preserveAudioOnSourceSwitch: true,
 };
 

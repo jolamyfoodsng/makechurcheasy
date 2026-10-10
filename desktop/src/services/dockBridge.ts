@@ -1,5 +1,5 @@
 /**
- * dockBridge.ts — BroadcastChannel bridge for MakeChurchEasy Dock
+ * dockBridge.ts — BroadcastChannel bridge for MakeChurchEazy Dock
  *
  * When the dock page is loaded inside OBS's Custom Browser Dock
  * (via the overlay HTTP server), it shares the same origin as the
@@ -7,7 +7,7 @@
  * BroadcastChannel without needing WebSockets.
  *
  * Architecture:
- *   Dock (MakeChurchEasy Dock)  ──BroadcastChannel──►  Main App (Tauri)
+ *   Dock (MakeChurchEazy Dock)  ──BroadcastChannel──►  Main App (Tauri)
  *     sends commands (e.g. "show-speaker", "send-bible-verse")
  *     receives state updates (e.g. OBS connected, current speaker, service status)
  *
@@ -55,6 +55,7 @@ export type DockCommandType =
   // LM Dock
   | "lm:start"
   | "lm:stop"
+  | "lm:keep-listening"
   | "lm:navigate"
   // General
   | "ping"

@@ -35,7 +35,10 @@ import {
 } from "../../lowerthirds/types";
 import type { SpeakerProfileSetting } from "../../multiview/mvStore";
 import { MV_SETTINGS_UPDATED_EVENT } from "../../multiview/mvStore";
-import { buildSpeakerRoleMap, ensureMinistryData, getMinistryData, refreshMinistry } from "../../services/ministryStore";
+import { buildSpeakerRoleMap, ensureChurchInfo, ensureMinistryData, getMinistryData, refreshMinistry } from "../../services/ministryStore";
+import { describeField } from "../../lowerthirds/fieldGuide";
+import type { ChurchThemeLike } from "../../lowerthirds/churchDefaults";
+import { churchAwareDefaults, churchValueFor, sameValues } from "../../lowerthirds/churchDefaults";
 import { getSafeFileName, saveToDisk } from "../dockUploadService";
 import Icon from "../DockIcon";
 import DockMotionControls from "./DockMotionControls";
@@ -156,6 +159,33 @@ const dockFieldLabelStyle: React.CSSProperties = {
   fontWeight: 600,
   color: "var(--dock-text)",
   margin: "2px 0 3px",
+};
+
+const dockFieldHeadStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 6,
+  margin: "2px 0 3px",
+};
+
+const dockFieldHintStyle: React.CSSProperties = {
+  fontSize: 9,
+  lineHeight: 1.3,
+  color: "var(--dock-text-dim)",
+  margin: "2px 0 0",
+};
+
+const dockFieldResetStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "none",
+  padding: 0,
+  fontSize: 9,
+  fontFamily: "inherit",
+  color: "var(--dock-accent, #6366f1)",
+  cursor: "pointer",
+  textDecoration: "underline",
+  flexShrink: 0,
 };
 
 /** Fill variables that older saved slots don't have yet with the theme defaults. */
@@ -530,6 +560,49 @@ export default function DockLowerThirdEditor({
     }
   }, [theme, activeSlotIndex]);
 
+  // ── Church details (church name, pastor, role) saved on the website ──
+  const [ministryTick, setMinistryTick] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const bump = () => {
+      refreshMinistry();
+      setMinistryTick((n) => n + 1);
+    };
+    window.addEventListener(MV_SETTINGS_UPDATED_EVENT, bump);
+    // The OBS dock keeps no copy of the church profile, so it is fetched once in the background.
+    ensureChurchInfo()
+      .then((changed) => { if (changed && !cancelled) setMinistryTick((n) => n + 1); })
+      .catch(() => { /* keep the generic placeholder text */ });
+    return () => {
+      cancelled = true;
+      window.removeEventListener(MV_SETTINGS_UPDATED_EVENT, bump);
+    };
+  }, []);
+
+  /** What "Reset" brings a box back to: the church's own details where known, otherwise the design's placeholder. */
+  const themeDefaultValues = useMemo(
+    () => churchAwareDefaults(theme as unknown as ChurchThemeLike, getMinistryData()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [theme, ministryTick],
+  );
+
+  // Fill the church's details into boxes that still show the design's placeholder.
+  // Anything the person has typed is left alone.
+  useEffect(() => {
+    const ministry = getMinistryData();
+    setVariableValues((prev) => {
+      const next = { ...prev };
+      for (const v of theme.variables) {
+        const fill = churchValueFor(v, theme as unknown as ChurchThemeLike, ministry);
+        if (fill === null) continue;
+        const current = String(prev[v.key] ?? "").trim();
+        const placeholder = String(v.defaultValue ?? "").trim();
+        if (prev[v.key] === undefined || current === placeholder) next[v.key] = fill;
+      }
+      return sameValues(prev, next) ? prev : next;
+    });
+  }, [theme, ministryTick]);
+
   // ── Cards accordion state ──
   const [cardsOpen, setCardsOpen] = useState(true);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
@@ -833,7 +906,7 @@ export default function DockLowerThirdEditor({
         )}
 
         {/* ── Speaker Quick Select (only for speaker themes; Motion straps show it in DockMotionControls) ── */}
-        {isCurrentThemeSpeaker && !kineticTheme && (
+        {isCurrentThemeSpeaker && !kineticTheme && speakers.length > 0 && (
           <div style={{ padding: "0 0 6px" }}>
             <label style={{ fontSize: 10, color: "var(--dock-text-dim)", display: "block", marginBottom: 4 }}>
               {t("lowerThird.speaker")}
@@ -864,19 +937,7 @@ export default function DockLowerThirdEditor({
                   </option>
                 ))}
               </select>
-            ) : (
-              <div style={{
-                fontSize: 10,
-                color: "var(--dock-text-dim)",
-                background: "var(--dock-surface)",
-                border: "1px solid var(--dock-border)",
-                borderRadius: 3,
-                padding: "6px 8px",
-                lineHeight: 1.4,
-              }}>
-                {t("lowerThird.noSpeakers")} <strong>{t("ministry.ministrySettings")}</strong>{t("lowerThird.speakerHint")}
-              </div>
-            )}
+            ) : null}
           </div>
         )}
 
@@ -1004,21 +1065,48 @@ export default function DockLowerThirdEditor({
                         </div>
                       );
                     }
+                    const guide = describeField(v);
+                    const resetTo = themeDefaultValues[v.key] ?? "";
+                    const canReset = (variableValues[v.key] ?? "") !== resetTo;
                     return (
-                      <div className="dock-lt-field-row" key={v.key} style={graphicsTheme ? { display: "block" } : undefined}>
-                        {graphicsTheme && (
-                          <label style={dockFieldLabelStyle} htmlFor={`dock-lt-field-${v.key}`}>{v.label || v.key}</label>
+                      <div className="dock-lt-field-row" key={v.key} style={{ display: "block" }}>
+                        <div style={dockFieldHeadStyle}>
+                          <label style={{ ...dockFieldLabelStyle, margin: 0 }} htmlFor={`dock-lt-field-${v.key}`} title={guide.hint || undefined}>
+                            {guide.heading}
+                          </label>
+                          {canReset && (
+                            <button
+                              type="button"
+                              style={dockFieldResetStyle}
+                              title="Put this box back to its default text"
+                              onClick={() => setVariableValues((prev) => ({ ...prev, [v.key]: resetTo }))}
+                            >
+                              Reset
+                            </button>
+                          )}
+                        </div>
+                        {v.multiline ? (
+                          <textarea
+                            id={`dock-lt-field-${v.key}`}
+                            className="dock-lt-field-input"
+                            rows={4}
+                            style={{ width: "100%", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
+                            value={variableValues[v.key] ?? ""}
+                            onChange={(e) => setVariableValues((prev) => ({ ...prev, [v.key]: e.target.value }))}
+                            placeholder={guide.heading}
+                          />
+                        ) : (
+                          <input
+                            id={`dock-lt-field-${v.key}`}
+                            className="dock-lt-field-input"
+                            type="text"
+                            style={{ width: "100%", boxSizing: "border-box" }}
+                            value={variableValues[v.key] ?? ""}
+                            onChange={(e) => setVariableValues((prev) => ({ ...prev, [v.key]: e.target.value }))}
+                            placeholder={guide.heading}
+                          />
                         )}
-                        <input
-                          id={`dock-lt-field-${v.key}`}
-                          className="dock-lt-field-input"
-                          type="text"
-                          style={graphicsTheme ? { width: "100%", boxSizing: "border-box" } : undefined}
-                          value={variableValues[v.key] ?? ""}
-                          onChange={(e) => setVariableValues((prev) => ({ ...prev, [v.key]: e.target.value }))}
-                          placeholder={v.label || v.key}
-                        />
-
+                        {guide.hint ? <div style={dockFieldHintStyle}>{guide.hint}</div> : null}
                       </div>
                     );
                   })}
@@ -1188,9 +1276,7 @@ export default function DockLowerThirdEditor({
                     clearTimeout(autoSaveTimerRef.current);
                     autoSaveTimerRef.current = null;
                   }
-                  const defaults: Record<string, string> = {};
-                  for (const v of theme.variables) { defaults[v.key] = v.defaultValue ?? ""; }
-                  setVariableValues(defaults);
+                  setVariableValues({ ...themeDefaultValues });
                   setCustomStyles({ ...LT_DEFAULT_CUSTOM_STYLE });
                   setPosition("bottom-left");
                   setAnimationIn((theme.animation?.name as LTAnimationIn) || "slide-left");
@@ -1215,7 +1301,7 @@ export default function DockLowerThirdEditor({
                 <span className="material-icons" style={{ fontSize: 12, verticalAlign: "middle", marginRight: 2 }}>
                   restart_alt
                 </span>
-                Clear
+                Reset all
               </button>
 
               <ul className="dock-lt-memory-slots">

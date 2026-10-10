@@ -1,5 +1,5 @@
 /**
- * DockWorshipTab.tsx — Worship tab for the MakeChurchEasy Dock
+ * DockWorshipTab.tsx — Worship tab for the MakeChurchEazy Dock
  *
  * Dense operator console for song browsing, lyric cueing, and live transport.
  */
@@ -173,6 +173,10 @@ interface DockWorshipUiPreferences {
   quickActionsTop?: number;
   quickActionsLeft?: number | null;
   quickUpdateImmediately?: boolean;
+  /** The song that was open when the dock was last used, so a reload can open it again. */
+  lastSongId?: string;
+  /** The slide that was selected in that song (selected only, never sent to the output). */
+  lastSlideIndex?: number;
 }
 
 const DOCK_WORSHIP_PREFS_KEY = "ocs-dock-worship-preferences";
@@ -459,6 +463,10 @@ function loadDockWorshipUiPreferences(): DockWorshipUiPreferences {
         ? parsed.quickActionsLeft
         : null,
       quickUpdateImmediately: parsed.quickUpdateImmediately !== false,
+      lastSongId: typeof parsed.lastSongId === "string" && parsed.lastSongId ? parsed.lastSongId : undefined,
+      lastSlideIndex: typeof parsed.lastSlideIndex === "number" && Number.isInteger(parsed.lastSlideIndex) && parsed.lastSlideIndex >= 0
+        ? parsed.lastSlideIndex
+        : undefined,
     };
   } catch {
     return {};
@@ -2104,6 +2112,7 @@ function DockWorshipTab({
 
   useEffect(() => {
     saveDockWorshipUiPreferences({
+      ...loadDockWorshipUiPreferences(),
       toolbarCollapsed,
       activeSubTab: worshipSubTab,
       quickActionsTop,
@@ -2394,6 +2403,41 @@ function DockWorshipTab({
     }
     return locked;
   }, [songs, songLimit]);
+
+  // ── Remember the open song and slide across reloads ──
+  // Reopening only selects them. Nothing is sent to the output until the operator does it.
+  const [songRestoreTarget] = useState<{ songId: string; slideIdx: number } | null>(() => {
+    const prefs = loadDockWorshipUiPreferences();
+    return prefs.lastSongId ? { songId: prefs.lastSongId, slideIdx: prefs.lastSlideIndex ?? 0 } : null;
+  });
+  const songRestoreSettledRef = useRef(songRestoreTarget === null);
+
+  useEffect(() => {
+    if (songRestoreSettledRef.current || !songRestoreTarget) return;
+    // Something else (the operator, a staged item, another tab) already opened a song.
+    if (selectedSong) {
+      songRestoreSettledRef.current = true;
+      return;
+    }
+    // The song list may still be loading; try again when it changes.
+    const match = songs.find((song) => song.id === songRestoreTarget.songId);
+    if (!match) return;
+    songRestoreSettledRef.current = true;
+    if (lockedSongIds.has(match.id)) return;
+    setSelectedSong(match);
+    setSelectedIdx(songRestoreTarget.slideIdx);
+    setVisibleIdx(null);
+    setHiddenSectionIndexes(new Set());
+  }, [songs, selectedSong, songRestoreTarget, lockedSongIds]);
+
+  useEffect(() => {
+    if (!songRestoreSettledRef.current) return;
+    saveDockWorshipUiPreferences({
+      ...loadDockWorshipUiPreferences(),
+      lastSongId: selectedSong?.id,
+      lastSlideIndex: selectedSong ? (selectedIdx ?? 0) : undefined,
+    });
+  }, [selectedSong?.id, selectedIdx]);
 
   const baseFullscreenTheme = useMemo(() => {
     const variant = selectedFSTheme.variants?.fullscreen;

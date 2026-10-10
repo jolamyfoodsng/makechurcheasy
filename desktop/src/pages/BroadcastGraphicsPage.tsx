@@ -40,6 +40,7 @@ import { getEffectivePlan } from "../services/licenseService";
 import { checkEntitlementSync } from "../services/entitlementClient";
 import { openDashboardSubscriptionPlans } from "../services/subscriptionNavigation";
 import UpgradeModal from "../components/UpgradeModal";
+import LazyPreviewFrame from "../components/LazyPreviewFrame";
 import { trackGraphicUsage } from "../services/tracking";
 
 import { KINETIC_LOWER_THIRD_THEMES } from "../lowerthirds/kineticThemes";
@@ -1206,9 +1207,10 @@ export default function BroadcastGraphicsPage() {
                           <Star size={16} fill={isFav ? "#fbbf24" : "none"} />
                         </button>}
 
-                        <iframe
+                        <LazyPreviewFrame
                           className="bg-card__iframe"
-                          srcDoc={buildThemePreviewHtml(template, { hover: true })}
+                          buildHtml={() => buildThemePreviewHtml(template, { hover: true })}
+                          cacheKey={template.id}
                           sandbox={obsPreviewSandbox(template)}
                           title={template.name}
                         />
@@ -1419,9 +1421,9 @@ export default function BroadcastGraphicsPage() {
                           <Star size={16} fill={graphic.isAddedToObs ? "#fbbf24" : "none"} />
                         </button>}
 
-                        <iframe
+                        <LazyPreviewFrame
                           className="bg-card__iframe"
-                          srcDoc={buildThemePreviewHtml(template, {
+                          buildHtml={() => buildThemePreviewHtml(template, {
                             hover: true,
                             customVariables: graphic.variables,
                             backdrop:
@@ -1429,6 +1431,7 @@ export default function BroadcastGraphicsPage() {
                                 ? undefined
                                 : graphic.design?.bgColor,
                           })}
+                          cacheKey={`${graphic.id}:${JSON.stringify(graphic.variables)}:${graphic.design?.bgColor ?? ""}`}
                           sandbox={obsPreviewSandbox(template)}
                           title={graphic.name}
                         />
@@ -1801,8 +1804,9 @@ export default function BroadcastGraphicsPage() {
                       }}
                     >
                       <div className="bg-template-picker-card__thumb">
-                        <iframe
-                          srcDoc={buildThemePreviewHtml(tpl, { hover: true })}
+                        <LazyPreviewFrame
+                          buildHtml={() => buildThemePreviewHtml(tpl, { hover: true })}
+                          cacheKey={tpl.id}
                           sandbox={obsPreviewSandbox(tpl)}
                           title={tpl.name}
                         />
@@ -2162,7 +2166,7 @@ export default function BroadcastGraphicsPage() {
                       }}
                     >
                       <Play size={14} />
-                      <span>Replay In</span>
+                      <span>Animate In</span>
                     </button>
 
                     <button

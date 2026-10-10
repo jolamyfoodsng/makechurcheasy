@@ -337,7 +337,11 @@ export class LmDockService {
   private commandPollTimer: ReturnType<typeof setInterval> | null = null;
   /** Inactivity detection timer and thresholds */
   private inactivityTimer: ReturnType<typeof setInterval> | null = null;
-  private currentInactivityThresholdMs = 5 * 60 * 1000; // 5 min initially, 10 min on confirmation
+  /** Prompt intervals: first after 5 min of silence, then 10, then every 15. */
+  private static readonly INACTIVITY_STEPS_MIN = [5, 10, 15];
+  private static readonly INACTIVITY_COUNTDOWN_S = 60;
+  private inactivityStep = 0;
+  private currentInactivityThresholdMs = 5 * 60 * 1000;
   private inactivityPromptActive = false;
   private inactivityPromptExpiresAt = 0;
   /** Serialized final chunks plus one latest-wins interim chunk. */
@@ -565,6 +569,8 @@ export class LmDockService {
         void this.startListening(payload?.micId);
       } else if (cmd.type === "lm:stop") {
         this.stopListening();
+      } else if (cmd.type === "lm:keep-listening") {
+        if (this.inactivityPromptActive) this.confirmStillUsing();
       } else if (cmd.type === "ping") {
         // Dock just connected — push current state so it updates immediately
         this.pushStatus();
@@ -610,6 +616,8 @@ export class LmDockService {
             void this.startListening(payload?.micId);
           } else if (cmd.type === "lm:stop") {
             this.stopListening();
+          } else if (cmd.type === "lm:keep-listening") {
+            if (this.inactivityPromptActive) this.confirmStillUsing();
           } else if (cmd.type === "lm:navigate") {
             // The LM dock can run in a separate OBS CEF process. Re-broadcast
             // the relayed command so the Bible dock can focus the reference
@@ -656,6 +664,10 @@ export class LmDockService {
 
   private pushStatus(): void {
     this.notifyListeners();
+    // Lets the app show the "still using it?" prompt on any page without loading this service.
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("mce:voice-ai-inactivity", { detail: this.snapshot.inactivityPrompt ?? null }));
+    }
     dockBridge.sendState({
       type: "state:lm-status",
       payload: { ...this.snapshot },
@@ -1241,17 +1253,20 @@ export class LmDockService {
   }): void {
     const { text, end_of_turn, audio_start, audio_end } = payload;
     const now = Date.now();
+
+    // Filter hallucinated transcripts (non-Latin script garbage or repetitive loops).
+    // These must not count as speech, or background noise keeps Voice AI alive forever.
+    if (isHallucinated(text)) {
+      console.warn("[Transcript] Hallucinated entry discarded:", text.substring(0, 60));
+      return;
+    }
+    if (!String(text || "").trim()) return;
+
     this.lastSpeechReceivedAt = now;
     this.lastSpeechTime = now;
     this.snapshot = { ...this.snapshot, lastSpeechAt: now };
     if (this.inactivityPromptActive) {
       this.confirmStillUsing();
-    }
-
-    // Filter hallucinated transcripts (non-Latin script garbage or repetitive loops)
-    if (isHallucinated(text)) {
-      console.warn("[Transcript] Hallucinated entry discarded:", text.substring(0, 60));
-      return;
     }
 
     // Strip out text that was already committed into completed lines earlier in this turn
@@ -1419,7 +1434,10 @@ export class LmDockService {
     const sessionStartAt = options.reconnect
       ? this.snapshot.startedAt ?? Date.now()
       : Date.now();
-    this.currentInactivityThresholdMs = 5 * 60 * 1000;
+    if (!options.reconnect) {
+      this.inactivityStep = 0;
+      this.currentInactivityThresholdMs = LmDockService.INACTIVITY_STEPS_MIN[0] * 60 * 1000;
+    }
     this.inactivityPromptActive = false;
     this.inactivityPromptExpiresAt = 0;
     this.lastSpeechReceivedAt = sessionStartAt;
@@ -1506,13 +1524,16 @@ export class LmDockService {
           (event) => {
           if (token !== this.sessionToken) return;
           const { status } = event.payload;
-          if (status === "connected") {
+          if (status === "stopped-inactivity" || status === "stopped-screen-off") {
+            this.handleNativeGuardStop(status === "stopped-screen-off" ? "screen-off" : "inactivity");
+          } else if (status === "connected") {
             this.reconnectAttempts = 0;
             this.stopConnectionWatchdog();
             this.startAudioSignalMonitor();
             this.snapshot = { ...this.snapshot, status: "listening", error: undefined };
             this.pushStatus();
             this.startInactivityMonitor();
+            this.syncNativeGuard();
           } else if (status.startsWith("error")) {
             this.stopConnectionWatchdog();
             this.stopAudioSignalMonitor();
@@ -1735,7 +1756,8 @@ export class LmDockService {
     this.stopInactivityMonitor();
     this.inactivityPromptActive = false;
     this.inactivityPromptExpiresAt = 0;
-    this.currentInactivityThresholdMs = 5 * 60 * 1000;
+    this.inactivityStep = 0;
+    this.currentInactivityThresholdMs = LmDockService.INACTIVITY_STEPS_MIN[0] * 60 * 1000;
 
     void this.cleanup();
 
@@ -1784,12 +1806,12 @@ export class LmDockService {
     if (!this.inactivityPromptActive) {
       if (now - lastSpeech >= this.currentInactivityThresholdMs) {
         this.inactivityPromptActive = true;
-        this.inactivityPromptExpiresAt = now + 60_000;
+        this.inactivityPromptExpiresAt = now + LmDockService.INACTIVITY_COUNTDOWN_S * 1000;
         this.snapshot = {
           ...this.snapshot,
           inactivityPrompt: {
             active: true,
-            remainingSeconds: 60,
+            remainingSeconds: LmDockService.INACTIVITY_COUNTDOWN_S,
             intervalMinutes: Math.round(this.currentInactivityThresholdMs / 60_000),
           },
         };
@@ -1815,14 +1837,46 @@ export class LmDockService {
 
   confirmStillUsing(): void {
     const now = Date.now();
+    const steps = LmDockService.INACTIVITY_STEPS_MIN;
     this.inactivityPromptActive = false;
     this.inactivityPromptExpiresAt = 0;
-    this.currentInactivityThresholdMs = 10 * 60 * 1000; // 10 minutes for subsequent check
+    this.inactivityStep = Math.min(this.inactivityStep + 1, steps.length - 1);
+    this.currentInactivityThresholdMs = steps[this.inactivityStep] * 60 * 1000;
+    this.syncNativeGuard();
     this.lastSpeechReceivedAt = now;
     this.snapshot = {
       ...this.snapshot,
       lastSpeechAt: now,
       inactivityPrompt: null,
+    };
+    this.pushStatus();
+  }
+
+  /** Tell the native safety net the current prompt interval (it stops the mic if the UI is frozen). */
+  private syncNativeGuard(): void {
+    if (!hasTauriInvoke()) return;
+    safeTauriInvoke("voice_guard_keep_alive", {
+      intervalMinutes: Math.round(this.currentInactivityThresholdMs / 60_000),
+    }).catch(() => { });
+  }
+
+  /** The native side already stopped the microphone (screen off or no answer to the prompt). */
+  private handleNativeGuardStop(reason: "inactivity" | "screen-off"): void {
+    this.shouldKeepListening = false;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.inactivityPromptActive = false;
+    this.inactivityPromptExpiresAt = 0;
+    this.stopInactivityMonitor();
+    this.stopListening();
+    this.snapshot = {
+      ...this.snapshot,
+      inactivityPrompt: null,
+      inactivityNotice: reason === "screen-off"
+        ? "Voice AI stopped because the screen turned off"
+        : "Stopped due to inactivity",
     };
     this.pushStatus();
   }

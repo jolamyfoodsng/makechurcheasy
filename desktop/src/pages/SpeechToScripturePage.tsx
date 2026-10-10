@@ -1784,24 +1784,24 @@ export default function SpeechToScripturePage() {
             </div>
             <div className="sts3-modal-body">
               <p className="sts3-modal-text">
-                No speech detected for {snapshot.inactivityPrompt.intervalMinutes} minutes. Listening will automatically stop in{" "}
-                <strong>{snapshot.inactivityPrompt.remainingSeconds}s</strong> to conserve credits.
+                No speech detected for {snapshot.inactivityPrompt.intervalMinutes} minutes. Voice AI will stop in{" "}
+                <strong>{snapshot.inactivityPrompt.remainingSeconds}s</strong> unless you keep it on.
               </p>
             </div>
             <div className="sts3-modal-footer">
               <button
                 className="sts3-modal-btn sts3-modal-btn--ghost"
                 onClick={handleInactivityStop}
-                title="Stop listening"
+                title="No, stop"
               >
-                Stop
+                No, stop
               </button>
               <button
                 className="sts3-modal-btn sts3-modal-btn--primary"
                 onClick={() => lmDockService.confirmStillUsing()}
-                title="I'm still using it"
+                title="Yes, keep listening"
               >
-                I'm still using it
+                Yes, keep listening
               </button>
             </div>
           </div>

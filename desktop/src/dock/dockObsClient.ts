@@ -69,6 +69,7 @@ import {
   isFreeDockPlan,
   isPresentationLinkUrl,
 } from "./dockMutationPolicy";
+import { scheduleMceBrowserSourceRefresh } from "../services/obsBrowserSourceRefresh";
 import { recordPresentationHistory } from "./dockScheduleService";
 
 // ---------------------------------------------------------------------------
@@ -295,7 +296,7 @@ const DOCK_TICKER_CLEARANCE_GAP_PX = 10;
 const DOCK_TICKER_CLEARANCE_MAX_PX = 220;
 
 /**
- * Sources that MakeChurchEasy may place inside MCE Presentation. We use the
+ * Sources that MakeChurchEazy may place inside MCE Presentation. We use the
  * known MCE naming families instead of touching every source whose name merely
  * happens to contain "MCE". User-owned OBS sources are never included here.
  */
@@ -423,17 +424,30 @@ export function isMceAudioSource(sourceName: string): boolean {
   );
 }
 
+/** True for the sources that carry a lower third (the main one, animated ones and "MCE LT:" designs). */
+export function isMceLowerThirdSourceName(sourceName: string): boolean {
+  const name = sourceName.trim();
+  return name === DOCK_LT_SOURCE
+    || name === DOCK_ANIMATED_LT_SOURCE
+    || name.startsWith("MCE Lower Third")
+    || name.startsWith("MCE Animated Lower Third")
+    || name.startsWith("MCE LT:");
+}
+
 /**
  * Build the MCE-owned sources that should remain visible for an active push.
  * The program-scene reference is structural, so it is intentionally preserved
  * but is not treated as a content source.
  * When preserveAudio is true (default), background music and audio tracks stay
  * on when switching between Bible, Worship, or Notes.
+ * With "overlay" (lower thirds only) everything stays except other lower thirds:
+ * a lower third sits on top of whatever is already on screen, and two lower
+ * thirds never share the same spot.
  */
 export function getMcePresentationVisibilityKeepSet(
   primarySourceName: string,
   items: ReadonlyArray<{ sourceName: string; sceneItemIndex?: number }>,
-  lowerThirdSourceVisibility: "keep-first" | "active-only" = "active-only",
+  lowerThirdSourceVisibility: "overlay" | "active-only" | "keep-first" = "active-only",
   preserveAudio: boolean = true,
 ): Set<string> {
   const primary = primarySourceName.trim();
@@ -448,7 +462,15 @@ export function getMcePresentationVisibilityKeepSet(
     }
   }
 
-  if (lowerThirdSourceVisibility === "keep-first") {
+  if (lowerThirdSourceVisibility === "overlay") {
+    for (const item of items) {
+      if (isMcePresentationManagedSource(item.sourceName) && !isMceLowerThirdSourceName(item.sourceName)) {
+        keepSet.add(item.sourceName);
+      }
+    }
+  } else if (lowerThirdSourceVisibility === "keep-first") {
+    // Legacy mode remains understood for older callers; saved preferences now
+    // migrate to the recommended overlay behavior.
     const firstMceSource = [...items]
       .filter((item) => isMcePresentationManagedSource(item.sourceName) && item.sourceName !== primary && (!preserveAudio || !isMceAudioSource(item.sourceName)))
       .sort((first, second) => (first.sceneItemIndex ?? 0) - (second.sceneItemIndex ?? 0))[0];
@@ -1392,6 +1414,11 @@ export class DockObsClient {
         // and the dock stays stuck in "connecting".
         this.setStatus("connected");
         connTracker.register("dock-cef", this._url);
+        // Wake any MCE browser source that loaded before the overlay server was ready.
+        // Skipped automatically while OBS is streaming or recording.
+        if (!isFreeDockPlan()) {
+          void scheduleMceBrowserSourceRefresh((type, data) => this.call(type, data, { priority: "low" }), "dock");
+        }
 
         // Persist normal dock connection params so auto-reconnect works across
         // dock reloads. Remote presentation uses a transient target and must
@@ -2605,14 +2632,14 @@ export class DockObsClient {
     const targetScene = sceneName.trim();
     if (!targetScene || !primary) return;
     const projectionSettings = loadProjectionSettings();
-    const isLowerThirdSource = primary === DOCK_LT_SOURCE
-      || primary === SOURCE_NAMES.LOWER_THIRD
-      || primary.startsWith("MCE Lower Third")
-      || primary.startsWith("MCE Animated Lower Third")
-      || primary.startsWith("MCE LT:");
-    // Lower thirds always isolate MCE Presentation. Their separate setting
-    // only controls whether the first MCE content layer is added to the keep
-    // set; regular Bible/Worship/Notes/Media visibility can be opt-out.
+    const isLowerThirdSource = isMceLowerThirdSourceName(primary);
+    // A lower third is an overlay by default: it sits on top of whatever is on
+    // screen (slides, lyrics, ticker, media) and only swaps out other lower
+    // thirds. The operator can choose to hide everything else instead
+    // ("active-only"). Regular Bible/Worship/Notes/Media visibility has its own
+    // setting (presentationSourceVisibility).
+    const lowerThirdOverlay = isLowerThirdSource
+      && projectionSettings.lowerThirdSourceVisibility !== "active-only";
     const shouldIsolateSources = isLowerThirdSource
       ? true
       : projectionSettings.presentationSourceVisibility === "active-only";
@@ -2752,6 +2779,20 @@ export class DockObsClient {
       if (!isMcePresentationManagedSource(item.sourceName)) continue;
 
       const shouldKeep = keepSet.has(item.sourceName);
+      if (lowerThirdOverlay) {
+        // Turn on this lower third, swap out any other lower third, and leave
+        // everything else exactly as it is (never re-show what the operator hid).
+        if (item.sourceName === primary) {
+          if (item.sceneItemEnabled !== true) {
+            addVisibilityRequest(PRESENTATION_SCENE_NAME, item.sceneItemId, true);
+          }
+          this._mcePresentationSourcesDisabledByVisibility.delete(item.sourceName);
+        } else if (!shouldKeep && item.sceneItemEnabled !== false) {
+          addVisibilityRequest(PRESENTATION_SCENE_NAME, item.sceneItemId, false);
+          this._mcePresentationSourcesDisabledByVisibility.add(item.sourceName);
+        }
+        continue;
+      }
       if (shouldIsolateSources) {
         if (shouldKeep) {
           // A lower third sits on top of whatever is showing: it turns on only its
@@ -4198,7 +4239,7 @@ export class DockObsClient {
   // ── Source provisioning ──
 
   /**
-   * Returns the canonical overlay URL for known MakeChurchEasy browser sources.
+   * Returns the canonical overlay URL for known MakeChurchEazy browser sources.
    * This prevents browser sources from ever being initialized or left at about:blank.
    */
   getDefaultOverlayUrlForSource(sourceName: string): string {
@@ -4788,7 +4829,7 @@ export class DockObsClient {
   }
 
   /**
-   * Determine whether a scene name was created by MakeChurchEasy.
+   * Determine whether a scene name was created by MakeChurchEazy.
    *
    * Matches:
    *  - Exact names: "MCE Presentation", "MCE Lower Thirds", "MCE_PreService",
@@ -4823,7 +4864,7 @@ export class DockObsClient {
   }
 
   /**
-   * Delete every scene and source that MakeChurchEasy created in OBS.
+   * Delete every scene and source that MakeChurchEazy created in OBS.
    *
    * This removes MCE-managed scenes and strips MCE-prefixed sources from
    * any remaining (user-owned) scenes.  The user is responsible for
@@ -4885,7 +4926,7 @@ export class DockObsClient {
   }
 
   /**
-   * Determine whether an OBS source or input was created by MakeChurchEasy.
+   * Determine whether an OBS source or input was created by MakeChurchEazy.
    * Matches MCE, MCA, and OCS naming conventions. Leaves user sources intact.
    */
   public static isMCESource(name: string): boolean {

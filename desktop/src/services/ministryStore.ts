@@ -277,3 +277,33 @@ if (typeof window !== "undefined") {
     refreshCache();
   });
 }
+
+// ── Church details for graphics (church name, main pastor) ──
+
+let _churchInfoRequest: Promise<boolean> | null = null;
+
+/**
+ * Makes sure the church name and main pastor are available for graphics.
+ * The OBS dock keeps no copy of what the church saved on the website, so this
+ * fetches it once (in the background) when nothing is stored yet.
+ * Resolves true when new details were loaded, so the caller can read them again.
+ * Never throws and is safe to call many times: the lookup only happens once.
+ */
+export function ensureChurchInfo(): Promise<boolean> {
+  const current = getMinistryData();
+  if (current.churchName || current.mainPastorName) return Promise.resolve(false);
+  if (_churchInfoRequest) return _churchInfoRequest;
+
+  _churchInfoRequest = (async () => {
+    try {
+      const fetched = await fetchFromApi();
+      if (!fetched) return false;
+      if (!fetched.churchName && !fetched.mainPastorName && fetched.speakers.length === 0) return false;
+      _cache = fetched;
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+  return _churchInfoRequest;
+}
