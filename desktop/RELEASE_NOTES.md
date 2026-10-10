@@ -1,7 +1,14 @@
-# MakeChurchEasy Release Highlights (v4.1.1)
+# MakeChurchEazy Release Highlights (v4.1.2)
 
-## 1. Patch Release & Version Alignment
-- **Lead:** Refresh the v4.1 release as version 4.1.1 with synchronized application metadata and new Windows and macOS packages.
+## 1. Broadcast Graphics Fix (Windows & Installed App)
+- **Lead:** Fixed blank or plain-text previews on Windows and installed Mac copies. Graphics now show their colours, fonts, and animation in the library, Customize editor, and Dock.
+- **Lead:** Graphics sent to OBS now include their styles and animation files. These files ship with the app, so graphics also display correctly offline.
+
+## 2. New Broadcast Graphics
+- **Lead:** Live Social Bar adds a gradient title bar, logo tab, LIVE badge, and three social handles, with animated entrance and exit.
+- **Lead:** Arrow Logo Bar adds a chevron logo block, gradient arrow, social icons, and website strip, with animated entrance and exit.
+
+> **How to get the fix:** Install the update when the app prompts you, or download the latest version from makechurcheazy.com/downloads. If your graphics already looked fine, nothing changes for you.
 
 ---
 
