@@ -365,11 +365,6 @@ function divider(): string {
 
 /** Footer line for marketing email: one click to stop offers and promotional email. */
 function unsubscribeFooter(url: string): string {
-  return `<p style="margin:24px 0 0;font-family:${FONT};font-size:13px;color:${C.muted};line-height:1.6;">Don't want offers like this? <a href="${url}" style="color:${C.muted};text-decoration:underline;">Unsubscribe</a>. Account, security and billing emails will still reach you.</p>`;
-}
-
-/** Footer line for marketing email: one click to stop offers and promotional email. */
-function unsubscribeFooter(url: string): string {
   return `<p style="margin:26px 0 0;font-size:12px;color:#94a3b8;line-height:1.6;">Don't want offers like this? <a href="${url}" style="color:#64748b;text-decoration:underline;">Unsubscribe</a>. Account, security and billing emails will still reach you.</p>`;
 }
 

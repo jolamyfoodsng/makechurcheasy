@@ -28,7 +28,7 @@ export interface LTVariable {
   defaultValue: string;
   /** Placeholder text for text inputs */
   placeholder?: string;
-  /** Render long text fields as a multiline text area */
+  /** Render a taller multiline text area for long text or line-separated ticker entries. */
   multiline?: boolean;
   /** Options for select type */
   options?: { label: string; value: string }[];
@@ -40,8 +40,6 @@ export interface LTVariable {
   group?: string;
   /** Separator used to join list items (for type "list"). Defaults to " • " */
   separator?: string;
-  /** Show a taller box where each line is its own item (for example ticker messages). */
-  multiline?: boolean;
 }
 
 // ---------------------------------------------------------------------------

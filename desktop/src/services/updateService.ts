@@ -738,8 +738,8 @@ export async function downloadInstallerFromGitHub(
 
 /**
  * Download a verified update without installing it. The signed updater is
- * used when its manifest matches the real published release; otherwise (or
- * when the signed download fails) the published installer is downloaded.
+ * used when its manifest matches the real published release; otherwise the
+ * published installer is downloaded.
  */
 export async function downloadVerifiedUpdate(
   update: Update | undefined,
@@ -774,11 +774,10 @@ export async function downloadVerifiedUpdate(
 }
 
 /**
- * Download a verified update without installing it. The signed updater is
- * used when its manifest matches the real published release; otherwise (or
- * when the signed download fails) the published installer is downloaded.
+ * Download and install a verified update. The signed updater is used when its
+ * manifest matches the published release; otherwise the verified installer is used.
  */
-export async function downloadVerifiedUpdate(
+export async function downloadAndInstallVerifiedUpdate(
   update: Update | undefined,
   onProgress?: (progress: DownloadProgress) => void,
   onStatusChange?: (status: UpdateInstallStatus) => void,
