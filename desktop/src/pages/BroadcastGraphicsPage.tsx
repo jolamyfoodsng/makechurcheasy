@@ -1,7 +1,7 @@
 /**
  * BroadcastGraphicsPage.tsx
  *
- * Broadcast Graphics Suite for Make Church Easy.
+ * Broadcast Graphics Suite for Make Church Eazy.
  * Provides live church livestream graphics: speaker lower thirds, giving details,
  * welcome banners, announcements, subscriptions, tickers, and countdowns.
  *
@@ -40,10 +40,17 @@ import { getEffectivePlan } from "../services/licenseService";
 import { checkEntitlementSync } from "../services/entitlementClient";
 import { openDashboardSubscriptionPlans } from "../services/subscriptionNavigation";
 import UpgradeModal from "../components/UpgradeModal";
-import LazyPreviewFrame from "../components/LazyPreviewFrame";
 import { trackGraphicUsage } from "../services/tracking";
 
 import { KINETIC_LOWER_THIRD_THEMES } from "../lowerthirds/kineticThemes";
+import LazyPreviewFrame from "../components/LazyPreviewFrame";
+import { describeField } from "../lowerthirds/fieldGuide";
+import {
+  applyChurchDefaults,
+  churchAwareDefaults,
+  type ChurchThemeLike,
+} from "../lowerthirds/churchDefaults";
+import { getMinistryData, refreshMinistry } from "../services/ministryStore";
 import { defaultTickerThemes, type TickerTheme } from "../data/tickerThemes";
 import {
   TICKER_THEMES as DOCK_TICKER_THEMES,
@@ -703,12 +710,20 @@ export default function BroadcastGraphicsPage() {
         }
       }
 
+      // Fill in the church's own details (church name, main pastor) from the church profile.
+      refreshMinistry();
+      const filledVars = applyChurchDefaults(
+        template as unknown as ChurchThemeLike,
+        initialVars,
+        getMinistryData(),
+      );
+
       setEditorState({
         template,
         name: template.name,
         category: getTemplateCategory(template),
         displayType: "lower-third",
-        variables: initialVars,
+        variables: filledVars,
         accentColor: template.accentColor || "#5b5cf6",
         backgroundColor: "transparent",
         fontScale: 1,
@@ -718,6 +733,50 @@ export default function BroadcastGraphicsPage() {
     },
     [ensureUsable],
   );
+
+  // Fill the church name and main pastor from the church profile, replacing whatever is typed.
+  const handleUseChurchInfo = useCallback(() => {
+    refreshMinistry();
+    const ministry = getMinistryData();
+    if (!ministry.churchName.trim() && !ministry.mainPastorName.trim()) {
+      showToast(
+        "Your church profile is empty. Fill it in at makechurcheazy.com/church-profile, then try again.",
+        "error",
+      );
+      return;
+    }
+    setEditorState((prev) =>
+      prev
+        ? {
+            ...prev,
+            variables: applyChurchDefaults(
+              prev.template as unknown as ChurchThemeLike,
+              prev.variables,
+              ministry,
+              { onlyUntouched: false },
+            ),
+          }
+        : prev,
+    );
+  }, [showToast]);
+
+  // Put every text box back to its original text (your church details where known).
+  const handleResetAllText = useCallback(() => {
+    refreshMinistry();
+    setEditorState((prev) => {
+      if (!prev) return prev;
+      const defaults = churchAwareDefaults(prev.template as unknown as ChurchThemeLike, getMinistryData());
+      const next: Record<string, string> = { ...prev.variables };
+      for (const v of prev.template.variables ?? []) {
+        const def = v as unknown as Record<string, unknown>;
+        const key = typeof def.key === "string" ? def.key : "";
+        if (!key || key.startsWith("kx")) continue;
+        if (String(def.type || "text") !== "text") continue;
+        next[key] = defaults[key] ?? String(def.defaultValue ?? "");
+      }
+      return { ...prev, variables: next };
+    });
+  }, []);
 
   // Open editor from existing saved graphic
   const handleOpenEditSaved = useCallback(
@@ -837,11 +896,12 @@ export default function BroadcastGraphicsPage() {
                 </button>
               </div>
 
-              <div style={{ padding: 24, background: "#070d18" }}>
+              <div style={{ padding: "16px 24px 20px", background: "#070d18" }}>
                 <div
                   style={{
                     aspectRatio: "16 / 9",
-                    width: "100%",
+                    width: "min(100%, calc(50vh * 16 / 9))",
+                    margin: "0 auto",
                     borderRadius: 8,
                     overflow: "hidden",
                     border: "1px solid #293650",
@@ -860,39 +920,43 @@ export default function BroadcastGraphicsPage() {
                     title={previewGraphic.name}
                   />
                 </div>
+                {isKineticObsTheme(previewGraphic.theme) && (
+                  <div className="bg-preview-anim">
+                    <div className="bg-preview-anim__buttons">
+                      <button
+                        className="bg-btn bg-btn--primary"
+                        onClick={() => {
+                          const iframe = document.getElementById(
+                            "bg-preview-iframe",
+                          ) as HTMLIFrameElement;
+                          iframe?.contentWindow?.postMessage({ type: "mce-kx-in" }, "*");
+                        }}
+                      >
+                        <Play size={14} />
+                        <span>Animate In</span>
+                      </button>
+
+                      <button
+                        className="bg-btn bg-btn--secondary"
+                        onClick={() => {
+                          const iframe = document.getElementById(
+                            "bg-preview-iframe",
+                          ) as HTMLIFrameElement;
+                          iframe?.contentWindow?.postMessage({ type: "mce-kx-out" }, "*");
+                        }}
+                      >
+                        <RotateCcw size={14} />
+                        <span>Animate Out</span>
+                      </button>
+                    </div>
+                    <p className="bg-preview-anim__hint">
+                      Press Animate In to bring the graphic on screen, then Animate Out to take it off.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="bg-modal-footer">
-                {isKineticObsTheme(previewGraphic.theme) && (
-                  <>
-                    <button
-                      className="bg-btn bg-btn--ghost"
-                      onClick={() => {
-                        const iframe = document.getElementById(
-                          "bg-preview-iframe",
-                        ) as HTMLIFrameElement;
-                        iframe?.contentWindow?.postMessage({ type: "mce-kx-in" }, "*");
-                      }}
-                    >
-                      <Play size={14} />
-                      <span>Animate In</span>
-                    </button>
-
-                    <button
-                      className="bg-btn bg-btn--ghost"
-                      onClick={() => {
-                        const iframe = document.getElementById(
-                          "bg-preview-iframe",
-                        ) as HTMLIFrameElement;
-                        iframe?.contentWindow?.postMessage({ type: "mce-kx-out" }, "*");
-                      }}
-                    >
-                      <RotateCcw size={14} />
-                      <span>Animate Out</span>
-                    </button>
-                    <span style={{ flex: 1 }} />
-                  </>
-                )}
 
                 <button
                   className="bg-btn bg-btn--secondary"
@@ -1187,7 +1251,7 @@ export default function BroadcastGraphicsPage() {
                           <span
                             className="bg-card__obs-badge"
                             style={{ left: "auto", right: 44, background: availability.reason === "paused" ? "#475569" : "#b45309" }}
-                            title={availability.reason === "paused" ? "Paused by Make Church Easy" : `For ${describeGraphicTiers(availability.tiers).toLowerCase()}`}
+                            title={availability.reason === "paused" ? "Paused by Make Church Eazy" : `For ${describeGraphicTiers(availability.tiers).toLowerCase()}`}
                           >
                             {availability.reason === "paused" ? "PAUSED" : "LOCKED"}
                           </span>
@@ -1209,8 +1273,8 @@ export default function BroadcastGraphicsPage() {
 
                         <LazyPreviewFrame
                           className="bg-card__iframe"
-                          buildHtml={() => buildThemePreviewHtml(template, { hover: true })}
                           cacheKey={template.id}
+                          buildHtml={() => buildThemePreviewHtml(template, { hover: true })}
                           sandbox={obsPreviewSandbox(template)}
                           title={template.name}
                         />
@@ -1423,6 +1487,7 @@ export default function BroadcastGraphicsPage() {
 
                         <LazyPreviewFrame
                           className="bg-card__iframe"
+                          cacheKey={JSON.stringify([graphic.id, graphic.variables, graphic.design?.bgColor])}
                           buildHtml={() => buildThemePreviewHtml(template, {
                             hover: true,
                             customVariables: graphic.variables,
@@ -1431,7 +1496,6 @@ export default function BroadcastGraphicsPage() {
                                 ? undefined
                                 : graphic.design?.bgColor,
                           })}
-                          cacheKey={`${graphic.id}:${JSON.stringify(graphic.variables)}:${graphic.design?.bgColor ?? ""}`}
                           sandbox={obsPreviewSandbox(template)}
                           title={graphic.name}
                         />
@@ -1601,7 +1665,7 @@ export default function BroadcastGraphicsPage() {
                           <span
                             className="bg-card__obs-badge"
                             style={{ left: "auto", right: 44, background: tickerPaused ? "#475569" : "#b45309" }}
-                            title={tickerPaused ? "Paused by Make Church Easy" : `For ${describeGraphicTiers(tickerAvailability.tiers).toLowerCase()}`}
+                            title={tickerPaused ? "Paused by Make Church Eazy" : `For ${describeGraphicTiers(tickerAvailability.tiers).toLowerCase()}`}
                           >
                             {tickerPaused ? "PAUSED" : "LOCKED"}
                           </span>
@@ -1620,15 +1684,16 @@ export default function BroadcastGraphicsPage() {
                           <Star size={16} fill={isFav ? "#fbbf24" : "none"} />
                         </button>}
 
-                        <iframe
+                        <LazyPreviewFrame
                           className="bg-card__iframe"
-                          srcDoc={
+                          cacheKey={ticker.id}
+                          buildHtml={() =>
                             (ticker.source === "dock" || ticker.source === "remote") &&
                             ticker.dockTheme
                               ? buildDockTickerPreviewHtml(ticker.dockTheme, [
                                   "Welcome to church! We're glad you're here.",
                                   "Sunday Service: 10:00 AM",
-                                  "Follow us online @MakeChurchEasy",
+                                  "Follow us online @MakeChurchEazy",
                                 ])
                               : ticker.permanentTheme
                               ? buildTickerPreviewHtml(ticker.permanentTheme)
@@ -1739,7 +1804,7 @@ export default function BroadcastGraphicsPage() {
                   <div className="bg-how-step__content">
                     <h4>Show it from the OBS Dock</h4>
                     <p>
-                      In OBS, open the <strong>Make Church Easy Dock</strong> →{" "}
+                      In OBS, open the <strong>Make Church Eazy Dock</strong> →{" "}
                       <strong>Ministry</strong> tab → choose <strong>Lower Thirds</strong> or{" "}
                       <strong>Ticker</strong>. Refresh the Dock (right-click it → <strong>Refresh</strong>)
                       so your new graphic appears, select it, then click <strong>Send</strong> to
@@ -1749,7 +1814,7 @@ export default function BroadcastGraphicsPage() {
                 </div>
 
                 <div className="bg-how-callout">
-                  ✨ <strong>Zero OBS Scene Setup Required:</strong> Make Church Easy handles all
+                  ✨ <strong>Zero OBS Scene Setup Required:</strong> Make Church Eazy handles all
                   the rendering automatically. You don't have to manually configure OBS scenes or
                   add multiple browser sources.
                 </div>
@@ -1805,8 +1870,8 @@ export default function BroadcastGraphicsPage() {
                     >
                       <div className="bg-template-picker-card__thumb">
                         <LazyPreviewFrame
-                          buildHtml={() => buildThemePreviewHtml(tpl, { hover: true })}
                           cacheKey={tpl.id}
+                          buildHtml={() => buildThemePreviewHtml(tpl, { hover: true })}
                           sandbox={obsPreviewSandbox(tpl)}
                           title={tpl.name}
                         />
@@ -1879,7 +1944,7 @@ export default function BroadcastGraphicsPage() {
                       onChange={(e) =>
                         setEditorState({ ...editorState, name: e.target.value })
                       }
-                      placeholder="e.g. Pastor Henry — Speaker Intro"
+                      placeholder="e.g. Sunday Speaker Intro"
                     />
                   </div>
 
@@ -1889,6 +1954,24 @@ export default function BroadcastGraphicsPage() {
                   <div className="bg-editor-section-title">
                     <Edit2 size={14} />
                     <span>Content & Text</span>
+                    <span className="bg-editor-section-actions">
+                      <button
+                        type="button"
+                        className="bg-field-reset"
+                        onClick={handleUseChurchInfo}
+                        title="Fill in your church name and pastor from your church profile"
+                      >
+                        Use my church info
+                      </button>
+                      <button
+                        type="button"
+                        className="bg-field-reset"
+                        onClick={handleResetAllText}
+                        title="Put all the original text back"
+                      >
+                        Reset all
+                      </button>
+                    </span>
                   </div>
 
                   {editorState.template.variables &&
@@ -2018,16 +2101,49 @@ export default function BroadcastGraphicsPage() {
                         );
                       }
 
+                      const fieldGuide = describeField({ key, label, type });
+                      const defaultVal =
+                        churchAwareDefaults(editorState.template as unknown as ChurchThemeLike, getMinistryData())[key] ??
+                        String(varDef.defaultValue ?? "");
                       return (
                         <div key={key} className="bg-form-group">
-                          <label className="bg-form-group__label">{label}</label>
-                          <input
-                            type="text"
-                            className="bg-form-group__input"
-                            value={currentVal}
-                            placeholder={String(varDef.placeholder || "")}
-                            onChange={(e) => setVar(e.target.value)}
-                          />
+                          <div className="bg-field-head">
+                            <label className="bg-form-group__label" htmlFor={`bg-field-${key}`}>
+                              {fieldGuide.heading}
+                            </label>
+                            {currentVal !== defaultVal && (
+                              <button
+                                type="button"
+                                className="bg-field-reset"
+                                onClick={() => setVar(defaultVal)}
+                                title="Put the original text back"
+                              >
+                                <RotateCcw size={11} />
+                                <span>Reset</span>
+                              </button>
+                            )}
+                          </div>
+                          {fieldGuide.hint && <span className="bg-form-group__hint">{fieldGuide.hint}</span>}
+                          {varDef.multiline === true ? (
+                            <textarea
+                              id={`bg-field-${key}`}
+                              className="bg-form-group__input"
+                              rows={4}
+                              style={{ resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
+                              value={currentVal}
+                              placeholder={String(varDef.placeholder || "")}
+                              onChange={(e) => setVar(e.target.value)}
+                            />
+                          ) : (
+                            <input
+                              id={`bg-field-${key}`}
+                              type="text"
+                              className="bg-form-group__input"
+                              value={currentVal}
+                              placeholder={String(varDef.placeholder || "")}
+                              onChange={(e) => setVar(e.target.value)}
+                            />
+                          )}
                         </div>
                       );
                     })}
@@ -2157,7 +2273,7 @@ export default function BroadcastGraphicsPage() {
 
                   <div className="bg-editor-preview-controls">
                     <button
-                      className="bg-btn bg-btn--ghost"
+                      className="bg-btn bg-btn--secondary"
                       onClick={() => {
                         const iframe = document.getElementById(
                           "bg-editor-live-iframe",
@@ -2170,7 +2286,7 @@ export default function BroadcastGraphicsPage() {
                     </button>
 
                     <button
-                      className="bg-btn bg-btn--ghost"
+                      className="bg-btn bg-btn--secondary"
                       onClick={() => {
                         const iframe = document.getElementById(
                           "bg-editor-live-iframe",
@@ -2256,7 +2372,7 @@ export default function BroadcastGraphicsPage() {
                         ? buildDockTickerPreviewHtml(previewTicker.dockTheme, [
                             "Welcome to church! We're glad you're here.",
                             "Sunday Service: 10:00 AM",
-                            "Follow us online @MakeChurchEasy",
+                            "Follow us online @MakeChurchEazy",
                           ])
                         : previewTicker.permanentTheme
                         ? buildTickerPreviewHtml(previewTicker.permanentTheme)

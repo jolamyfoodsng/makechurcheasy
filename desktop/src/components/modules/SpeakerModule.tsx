@@ -97,7 +97,7 @@ function buildDefaultSpeakerPresets(): SpeakerPreset[] {
       {
         id: "lead-pastor",
         label: "Lead Pastor",
-        name: "Pastor Daniel Carter",
+        name: "Your Pastor's Name",
         title: `Lead Pastor, ${churchName}`,
         ministry: churchName,
         titleLabel: "Speaker",
@@ -378,7 +378,7 @@ function buildPreviewValue(
   if (hint.includes("reference")) {
     return "Hebrews 3:1 (NKJV)";
   }
-  if (hint.includes("line1")) return speakerName || "Pastor Daniel Carter";
+  if (hint.includes("line1")) return speakerName || "Your Pastor's Name";
   if (hint.includes("line2")) return resolvedTitle || "Lead Pastor";
   if (hint.includes("announcement") || hint.includes("event")) return titleLabelVal || "Sunday Service - 9:00 AM";
 

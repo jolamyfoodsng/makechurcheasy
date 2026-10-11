@@ -7,6 +7,11 @@ const mvSettingsSource = readFileSync(fileURLToPath(new URL("./MVSettings.tsx", 
 const mvSettingsCssSource = readFileSync(fileURLToPath(new URL("./MVSettings.css", import.meta.url)), "utf8");
 
 describe("MVSettings Critical Vocabulary & Tab Completeness", () => {
+  it("strictly enforces zero occurrences of the prohibited word anywhere in MVSettings source", () => {
+    // Critical Vocabulary Rule: NEVER use the prohibited word
+    expect(mvSettingsSource.toLowerCase()).not.toContain("sanctuary");
+    expect(mvSettingsCssSource.toLowerCase()).not.toContain("sanctuary");
+  });
 
   it("uses approved replacement terminology for auditorium displays in Bible section", () => {
     expect(mvSettingsSource).toContain("Boost outline and contrast for washed-out auditoriums or high-ambient light.");
@@ -14,12 +19,12 @@ describe("MVSettings Critical Vocabulary & Tab Completeness", () => {
 
   it("defines all 11 tabs across Application, Production & Stream, and Account & System categories", () => {
     const allTabIds: SettingsTab[] = SETTINGS_CATEGORIES.flatMap((c) => c.items.map((i) => i.id));
-
+    
     // Application
     expect(allTabIds).toContain("general");
     expect(allTabIds).toContain("appearance");
     expect(allTabIds).toContain("bible");
-
+    
     // Production & Stream
     expect(allTabIds).toContain("broadcast");
     expect(allTabIds).toContain("branding");
@@ -27,11 +32,11 @@ describe("MVSettings Critical Vocabulary & Tab Completeness", () => {
     expect(allTabIds).toContain("audio");
     expect(allTabIds).toContain("mobile");
     expect(allTabIds).toContain("automation");
-
+    
     // Account & System
     expect(allTabIds).toContain("usage");
     expect(allTabIds).toContain("storage");
-
+    
     expect(allTabIds.length).toBe(11);
   });
 

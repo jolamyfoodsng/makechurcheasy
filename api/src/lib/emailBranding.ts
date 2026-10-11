@@ -7,6 +7,7 @@ type TemplateContext = {
   brand: EmailBrandingSettings;
   social: EmailBrandingSettings["social"];
   year: string;
+  recipient?: string;
 };
 
 function escapeHtml(value: unknown): string {
@@ -59,7 +60,8 @@ function normalizeEmail(value: unknown, fallback: string): string {
 
 function normalizeText(value: unknown, fallback: string): string {
   const text = typeof value === "string" ? value.trim() : "";
-  return text || fallback;
+  // Settings saved before the rename still carry the old spelling of the brand.
+  return (text || fallback).replace(/MakeChurchEasy/g, "MakeChurchEazy");
 }
 
 function normalizeBranding(settings: Partial<EmailBrandingSettings> = {}): EmailBrandingSettings {
@@ -71,6 +73,8 @@ function normalizeBranding(settings: Partial<EmailBrandingSettings> = {}): Email
     appName: normalizeText(settings.appName, fallback.appName),
     logoUrl: normalizeUrl(settings.logoUrl, fallback.logoUrl),
     logoAlt: normalizeText(settings.logoAlt, fallback.logoAlt),
+    markUrl: normalizeUrl(settings.markUrl, fallback.markUrl),
+    markLightUrl: normalizeUrl(settings.markLightUrl, fallback.markLightUrl),
     primaryColor: normalizeColor(settings.primaryColor, fallback.primaryColor),
     accentColor: normalizeColor(settings.accentColor, fallback.accentColor),
     supportEmail: normalizeEmail(settings.supportEmail, fallback.supportEmail),
@@ -126,12 +130,16 @@ export function renderHandlebarsTemplate(
   return output;
 }
 
-export async function renderEmailHtml(html: string): Promise<string> {
+export async function renderEmailHtml(
+  html: string,
+  options: { recipient?: string } = {},
+): Promise<string> {
   const brand = await getEmailBrandingSettings();
 
   return renderHandlebarsTemplate(html, {
     brand,
     social: brand.social,
     year: String(new Date().getFullYear()),
+    recipient: options.recipient?.trim() || "",
   });
 }

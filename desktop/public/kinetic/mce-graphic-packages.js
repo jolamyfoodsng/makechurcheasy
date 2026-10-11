@@ -1,5 +1,5 @@
 /*
- * Make Church Easy — runtime for admin-published broadcast graphics ("graphic packages").
+ * Make Church Eazy — runtime for admin-published broadcast graphics ("graphic packages").
  * Loads after kinetic-lower-thirds.js and teaches the Motion engine to render any graphic whose
  * .kx-root carries an embedded package (data-kx-pkg). Packages are data only: an HTML template,
  * CSS, fields and a declarative GSAP animation. See the format notes below.

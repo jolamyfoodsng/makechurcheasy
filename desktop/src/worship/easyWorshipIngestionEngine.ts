@@ -5,7 +5,7 @@
  * 1. Auto-detection / resolution of EasyWorship profile directory.
  * 2. Media Asset Ingestion (Videos & Images from Resources/Videos & Resources/Images).
  * 3. Theme & Layout Ingestion (Themes.db & PresentationLayouts.db).
- * 4. Song Database Ingestion (Songs.db + SongWords.db RTF parsing & MakeChurchEasy song creation).
+ * 4. Song Database Ingestion (Songs.db + SongWords.db RTF parsing & MakeChurchEazy song creation).
  */
 
 import {
@@ -70,7 +70,7 @@ export async function runEasyWorshipIngestion(
       options.onProgress?.("Reading Songs.db and SongWords.db...", 20, 100);
       const drafts = await importEasyWorshipFolder(profilePath);
 
-      options.onProgress?.(`Saving ${drafts.length} songs to MakeChurchEasy library...`, 60, 100);
+      options.onProgress?.(`Saving ${drafts.length} songs to MakeChurchEazy library...`, 60, 100);
       const songs = await importSmartSongs(drafts, {
         sourceName: "EasyWorship Library Import",
         saveBatch: saveSongsBatch,

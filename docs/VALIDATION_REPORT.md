@@ -1,4 +1,4 @@
-# MakeChurchEasy — Full System Validation & Acceptance Testing Report
+# MakeChurchEazy — Full System Validation & Acceptance Testing Report
 
 **Date:** 2025-07-18
 **Scope:** Tauri v2 Desktop App + Next.js API + Next.js Web Dashboard
@@ -378,7 +378,7 @@ The system is **architecturally sound** and **functionally complete** across all
 
 ### Summary
 
-The MakeChurchEasy platform demonstrates **strong security architecture** with:
+The MakeChurchEazy platform demonstrates **strong security architecture** with:
 - Ed25519-signed subscription payloads
 - Backend-as-source-of-truth for credits
 - Progressive offline grace periods (14→21→28 days)
@@ -393,4 +393,4 @@ The MakeChurchEasy platform demonstrates **strong security architecture** with:
 
 ---
 
-*Report generated 2025-07-18 by full static analysis of the MakeChurchEasy codebase.*
+*Report generated 2025-07-18 by full static analysis of the MakeChurchEazy codebase.*

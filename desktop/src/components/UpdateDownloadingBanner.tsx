@@ -39,7 +39,7 @@ export default function UpdateDownloadingBanner() {
               type="button"
               className="update-downloading-banner__btn update-downloading-banner__btn--primary"
               onClick={() => void updateDownloadManager.installNow()}
-              title="Install the update and restart MakeChurchEasy"
+              title="Install the update and restart MakeChurchEazy"
             >
               <RotateCw size={14} />
               <span>Restart Now</span>
@@ -48,7 +48,7 @@ export default function UpdateDownloadingBanner() {
               type="button"
               className="update-downloading-banner__btn"
               onClick={() => updateDownloadManager.dismissReadyBanner()}
-              title="Install when I close MakeChurchEasy"
+              title="Install when I close MakeChurchEazy"
             >
               <span>Later</span>
             </button>
@@ -91,7 +91,7 @@ export default function UpdateDownloadingBanner() {
                 </>
               )}
               {isInstalling && <>Installing update...</>}
-              {isRelaunching && <>Restarting MakeChurchEasy...</>}
+              {isRelaunching && <>Restarting MakeChurchEazy...</>}
             </span>
             {isDownloading && progress.contentLength > 0 && (
               <span className="update-downloading-banner__bytes">

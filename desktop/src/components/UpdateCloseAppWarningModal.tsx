@@ -44,7 +44,7 @@ export default function UpdateCloseAppWarningModal() {
         <div className="update-modal-body">
           <h3 id="close-warning-title">Download is still in progress</h3>
           <p>
-            MakeChurchEasy is currently downloading the latest update {version ? `(v${version})` : ""}.
+            MakeChurchEazy is currently downloading the latest update {version ? `(v${version})` : ""}.
             If you close the application now, the download will be interrupted and you will need to restart it later.
           </p>
 

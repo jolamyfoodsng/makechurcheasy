@@ -73,7 +73,7 @@ export async function sendTelegramUserErrorAlert(
     }
 
     const lines: string[] = [
-      "🚨 <b>MakeChurchEasy User Error Alert</b>",
+      "🚨 <b>MakeChurchEazy User Error Alert</b>",
       "",
       `<b>👤 User:</b> ${escapeTelegramHtml(event.userName || "Unknown")} (${escapeTelegramHtml(event.userEmail || "Unauthenticated")})`,
     ];

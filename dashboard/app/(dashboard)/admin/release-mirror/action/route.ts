@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const DEFAULT_SOURCE_REPO = "jolamyfoodsng/makechurcheasy";
+const DEFAULT_SOURCE_REPO = "jolamyfoodsng/makechurcheasy-v2";
 const DEFAULT_TARGET_REPO = "jolamyfoodsng/makechurcheasy-releases";
 const REPO_PATTERN = /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/;
 
@@ -299,7 +299,7 @@ async function createOrUpdateTargetRelease({
 
   const payload = {
     tag_name: tag,
-    name: sourceRelease.name || `MakeChurchEasy ${tag}`,
+    name: sourceRelease.name || `MakeChurchEazy ${tag}`,
     body: sourceRelease.body || "",
     draft: false,
     prerelease: false,

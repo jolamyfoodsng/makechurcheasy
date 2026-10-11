@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     }
 
     const totp = new OTPAuth.TOTP({
-      issuer: "MakeChurchEasy",
+      issuer: "MakeChurchEazy",
       label: user.email || "user",
       algorithm: "SHA1",
       digits: 6,

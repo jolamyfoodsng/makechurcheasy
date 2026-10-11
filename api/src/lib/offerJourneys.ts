@@ -55,7 +55,7 @@ const OCCUPYING: OfferStatus[] = ["issued", "seen", "clicked", "claimed"];
 const OPEN_FOR_CLAIM: OfferStatus[] = ["issued", "seen", "clicked"];
 const FREE_KINDS: OfferKind[] = ["free_period", "trial_extension"];
 
-const appUrl = () => (process.env.NEXT_PUBLIC_APP_URL || "https://makechurcheasy.com").replace(/\/$/, "");
+const appUrl = () => (process.env.NEXT_PUBLIC_APP_URL || "https://makechurcheazy.com").replace(/\/$/, "");
 const iso = (ms: number) => new Date(ms).toISOString();
 
 export class OfferError extends Error {

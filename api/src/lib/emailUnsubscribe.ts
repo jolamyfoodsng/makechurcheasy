@@ -42,6 +42,6 @@ export function verifyUnsubscribeToken(token: unknown): string | null {
 }
 
 export function buildUnsubscribeUrl(userId: string): string {
-  const base = (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_APP_URL || "https://makechurcheasy.com").replace(/\/$/, "");
+  const base = (process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_APP_URL || "https://makechurcheazy.com").replace(/\/$/, "");
   return `${base}/api/email/unsubscribe?token=${encodeURIComponent(createUnsubscribeToken(userId))}`;
 }

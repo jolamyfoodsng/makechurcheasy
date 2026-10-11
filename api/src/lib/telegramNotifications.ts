@@ -126,7 +126,7 @@ export function buildTelegramSignupMessage(
 ): string {
   const source = details.source ? `\n<b>Source:</b> ${escapeTelegramHtml(details.source)}` : "";
   return [
-    "🆕 <b>New MakeChurchEasy signup</b>",
+    "🆕 <b>New MakeChurchEazy signup</b>",
     `<b>Name:</b> ${escapeTelegramHtml(displayValue(details.name, "Unknown"))}`,
     `<b>Country:</b> ${escapeTelegramHtml(displayCountry(details.country))}`,
     `<b>Signed up:</b> ${escapeTelegramHtml(displayDate(details.createdAt, env))}${source}`,
@@ -175,7 +175,7 @@ export function buildTelegramSignupReportMessage(
   // If not in detailed mode (e.g. basic mock call without the extra metrics), preserve classic compact output
   if (!isDetailed) {
     return [
-      "📈 <b>MakeChurchEasy signup report</b>",
+      "📈 <b>MakeChurchEazy signup report</b>",
       `<b>Date:</b> ${escapeTelegramHtml(details.dateLabel)}`,
       `<b>Timezone:</b> ${escapeTelegramHtml(details.timezone)}`,
       `<b>Today:</b> ${escapeTelegramHtml(formatSignupCount(details.dailySignups))}`,
@@ -186,7 +186,7 @@ export function buildTelegramSignupReportMessage(
 
   // Full descriptive executive report
   const lines: string[] = [
-    "📊 <b>MakeChurchEasy Daily Executive Report</b>",
+    "📊 <b>MakeChurchEazy Daily Executive Report</b>",
     `<b>Date:</b> ${escapeTelegramHtml(details.dateLabel)}`,
     `<b>Timezone:</b> ${escapeTelegramHtml(details.timezone)} (11:00 PM update)`,
     "",

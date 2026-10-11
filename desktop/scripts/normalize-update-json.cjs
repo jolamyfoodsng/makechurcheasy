@@ -5,15 +5,17 @@
  *
  * Tauri's release action emits updater-only aliases like `*-app` / `*-msi` and
  * points URLs at the repository that ran the workflow. MCE publishes downloads
- * through jolamyfoodsng/makechurcheasy-releases and keeps dashboard download
+ * through the source release repository and keeps dashboard download
  * aliases (`*-dmg`, `*-exe`) in the same manifest.
  */
 
 const fs = require("fs");
 const path = require("path");
 
-const DEFAULT_SOURCE_REPO = "jolamyfoodsng/makechurcheasy";
-const DEFAULT_TARGET_REPO = "jolamyfoodsng/makechurcheasy-releases";
+const DEFAULT_SOURCE_REPO = "jolamyfoodsng/makechurcheasy-v2";
+// Releases built before the move to makechurcheasy-v2 point here; keep rewriting them.
+const LEGACY_SOURCE_REPO = "jolamyfoodsng/makechurcheasy";
+const DEFAULT_TARGET_REPO = "jolamyfoodsng/makechurcheasy-v2";
 
 const args = process.argv.slice(2);
 if (args.length < 1) {
@@ -62,7 +64,9 @@ function rewriteUrl(url) {
     .replaceAll(`https://github.com/${sourceRepo}/releases/download/${tag}/`, targetBase)
     .replaceAll(`https://github.com/${sourceRepo}/releases/latest/download/`, `https://github.com/${targetRepo}/releases/latest/download/`)
     .replaceAll(`https://github.com/${DEFAULT_SOURCE_REPO}/releases/download/${tag}/`, targetBase)
-    .replaceAll(`https://github.com/${DEFAULT_SOURCE_REPO}/releases/latest/download/`, `https://github.com/${targetRepo}/releases/latest/download/`);
+    .replaceAll(`https://github.com/${DEFAULT_SOURCE_REPO}/releases/latest/download/`, `https://github.com/${targetRepo}/releases/latest/download/`)
+    .replaceAll(`https://github.com/${LEGACY_SOURCE_REPO}/releases/download/${tag}/`, targetBase)
+    .replaceAll(`https://github.com/${LEGACY_SOURCE_REPO}/releases/latest/download/`, `https://github.com/${targetRepo}/releases/latest/download/`);
 }
 
 function firstEntry(keys) {

@@ -218,7 +218,7 @@ export async function POST(req: NextRequest) {
       { $set: { redeemed: true, redeemedAt: new Date() } },
     );
 
-    const resolvedDeviceName = clientDeviceName || pairing.deviceName || "MakeChurchEasy";
+    const resolvedDeviceName = clientDeviceName || pairing.deviceName || "MakeChurchEazy";
     const { appVersion, appPlatform } = extractDeviceInfo(req);
     let registeredDevice: { deviceId: string; deviceSecret: string };
 

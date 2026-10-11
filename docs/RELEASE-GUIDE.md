@@ -44,7 +44,7 @@ Secrets go only in GitHub Environments — never in committed files.
 | Variable | develop | main |
 |----------|---------|------|
 | `APP_ENV` | `development` | `production` |
-| Desktop name | Test MCE | MakeChurchEasy |
+| Desktop name | Test MCE | MakeChurchEazy |
 | Desktop ID | com.makechurcheasy.desktop.test | com.makechurcheasy.desktop |
 | Frontend URL | test.makechurcheazy.com | makechurcheazy.com |
 | API URL | api.creatorstudioslabs.stream | api.creatorstudioslabs.stream |

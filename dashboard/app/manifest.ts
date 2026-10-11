@@ -3,9 +3,9 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/admin",
-    name: "MakeChurchEasy Admin Dashboard",
+    name: "MakeChurchEazy Admin Dashboard",
     short_name: "MCE Admin",
-    description: "Manage your MakeChurchEasy account and church platform.",
+    description: "Manage your MakeChurchEazy account and church platform.",
     start_url: "/admin",
     scope: "/admin",
     display: "standalone",

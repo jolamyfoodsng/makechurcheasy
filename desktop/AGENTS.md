@@ -143,7 +143,7 @@ When asked to build a UI:
 | Branch | Environment | App Name | Identifier |
 |--------|------------|----------|------------|
 | `develop` | `development` | Test MCE | `com.makechurcheasy.desktop.test` |
-| `main` | `production` | MakeChurchEasy | `com.makechurcheasy.desktop` |
+| `main` | `production` | MakeChurchEazy | `com.makechurcheasy.desktop` |
 
 ## GitHub Environments
 
@@ -188,7 +188,7 @@ Each project has:
 Before building, `scripts/build-env-config.mjs` rewrites `tauri.conf.json`:
 - Uses `com.makechurcheasy.desktop.test` identifier for dev builds
 - Uses `com.makechurcheasy.desktop` identifier for prod builds
-- Updates app display name to "Test MCE" or "MakeChurchEasy"
+- Updates app display name to "Test MCE" or "MakeChurchEazy"
 
 ## Secrets
 

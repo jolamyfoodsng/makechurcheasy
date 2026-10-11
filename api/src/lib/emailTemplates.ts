@@ -19,7 +19,7 @@ import { logEmailEvent } from "./emailLog";
 // ─── Config ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_EMAIL_FROM = "noreply@notifications.makechurcheazy.com";
-const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || "MakeChurchEasy";
+const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || "MakeChurchEazy";
 const EMAIL_FROM = resolveEmailFrom(process.env.EMAIL_FROM);
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL || "https://makechurcheazy.com";
@@ -77,7 +77,7 @@ export interface SendEmailOptions {
 
 export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
   const { to, subject, html } = options;
-  const renderedHtml = await renderEmailHtml(html);
+  const renderedHtml = await renderEmailHtml(html, { recipient: to });
   console.log(`[email] To: ${to} | Subject: ${subject}`);
 
   // ── Development: route through MailDev SMTP or real provider if requested ──
@@ -159,9 +159,51 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
 }
 
 // ─── Layout & Components ────────────────────────────────────────────────────
+//
+// Email design system (follows docs/DESIGN.md):
+//   • Light content panel (#F8FAFC) with the brand mark + wordmark top-left,
+//     plain-language greeting and prose, and a "— The MakeChurchEazy Team" sign-off.
+//   • Dark footer band (#0F172A) with the white mark, social icons, a hairline
+//     divider, footer text and "This email was sent to …".
+//   • Inter type, slate neutrals, Primary Blue for links/buttons, orange used sparingly.
 
 const FONT =
-  "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+  "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+
+const C = {
+  page: "#FFFFFF",
+  panel: "#F8FAFC",
+  surface: "#FFFFFF",
+  border: "#E2E8F0",
+  text: "#0F172A",
+  body: "#334155",
+  muted: "#64748B",
+  footerBg: "#0F172A",
+  footerRule: "#334155",
+  footerText: "#94A3B8",
+} as const;
+
+const EMAIL_ASSET_BASE = `${APP_URL.replace(/\/+$/, "")}/email`;
+
+function socialIcon(urlVar: string, icon: string, label: string): string {
+  return `{{#if social.${urlVar}}}<td style="padding:0 18px 0 0;"><a href="{{social.${urlVar}}}" target="_blank" style="display:inline-block;text-decoration:none;"><img src="${EMAIL_ASSET_BASE}/social-${icon}.png" width="22" height="22" alt="${label}" style="display:block;width:22px;height:22px;border:0;outline:none;"></a></td>{{/if}}`;
+}
+
+function wordmark(markVar: string, color: string, size: number): string {
+  const markH = Math.round(size * 1.15);
+  const markW = Math.round((markH * 77) / 96);
+  return `
+    <a href="{{brand.websiteUrl}}" target="_blank" style="text-decoration:none;display:inline-block;">
+      <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+        <tr>
+          <td style="vertical-align:middle;padding:0 10px 0 0;">
+            <img src="{{brand.${markVar}}}" width="${markW}" height="${markH}" alt="" style="display:block;width:${markW}px;height:${markH}px;border:0;outline:none;">
+          </td>
+          <td style="vertical-align:middle;font-family:${FONT};font-size:${size}px;font-weight:700;letter-spacing:-0.02em;color:${color};line-height:1;">{{brand.appName}}</td>
+        </tr>
+      </table>
+    </a>`;
+}
 
 function wrap(title: string, body: string): string {
   return `
@@ -171,69 +213,67 @@ function wrap(title: string, body: string): string {
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="x-apple-disable-message-reformatting">
+        <meta name="color-scheme" content="light">
+        <meta name="supported-color-schemes" content="light">
         <title>${title}</title>
+        <style>
+          @media only screen and (max-width:620px) {
+            .mce-pad { padding-left:24px !important; padding-right:24px !important; }
+            .mce-btn a { display:block !important; text-align:center !important; }
+          }
+        </style>
       </head>
-      <body style="margin:0;padding:0;background:#ffffff;font-family:${FONT};-webkit-font-smoothing:antialiased;">
+      <body style="margin:0;padding:0;background:${C.page};font-family:${FONT};-webkit-font-smoothing:antialiased;">
         <div style="display:none;max-height:0;overflow:hidden;color:transparent;opacity:0;">
           {{brand.appName}} - ${title}
         </div>
 
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border-collapse:collapse;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.page};border-collapse:collapse;">
           <tr>
-            <td align="center" style="padding:32px 16px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;border-collapse:collapse;">
+            <td align="center" style="padding:24px 0;">
+              <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;border-collapse:collapse;">
+
+                <!-- Content panel -->
                 <tr>
-                  <td style="padding:0 0 24px;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                  <td class="mce-pad" style="background:${C.panel};padding:36px 40px 44px;">
+                    ${wordmark("markUrl", C.text, 22)}
+                    <div style="height:40px;line-height:40px;font-size:0;">&nbsp;</div>
+                    <div style="font-family:${FONT};font-size:16px;line-height:1.75;color:${C.body};">
+                      ${body}
+                      <p style="margin:28px 0 0;font-size:16px;line-height:1.75;color:${C.text};">&mdash; The {{brand.appName}} Team</p>
+                    </div>
+                  </td>
+                </tr>
+
+                <!-- Footer band -->
+                <tr>
+                  <td class="mce-pad" style="background:${C.footerBg};padding:36px 44px 40px;">
+                    ${wordmark("markLightUrl", "#FFFFFF", 24)}
+                    <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:26px 0 0;">
                       <tr>
-                        <td align="left" style="vertical-align:middle;">
-                          <a href="{{brand.websiteUrl}}" target="_blank" style="display:inline-block;text-decoration:none;">
-                            <img src="{{brand.logoUrl}}" width="154" alt="{{brand.logoAlt}}" style="display:block;width:154px;max-width:154px;height:auto;border:0;outline:none;text-decoration:none;">
-                          </a>
-                        </td>
-                        <td align="right" style="vertical-align:middle;">
-                          <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-                            <tr>
-                              {{#if social.twitterUrl}}<td style="padding-left:8px;"><a href="{{social.twitterUrl}}" target="_blank" style="display:inline-block;min-width:30px;padding:8px 10px;border-radius:999px;background:#f1f5f9;color:#0f172a;text-decoration:none;font-size:11px;font-weight:800;line-height:1;">X</a></td>{{/if}}
-                              {{#if social.facebookUrl}}<td style="padding-left:8px;"><a href="{{social.facebookUrl}}" target="_blank" style="display:inline-block;min-width:30px;padding:8px 10px;border-radius:999px;background:#f1f5f9;color:#0f172a;text-decoration:none;font-size:11px;font-weight:800;line-height:1;">FB</a></td>{{/if}}
-                              {{#if social.instagramUrl}}<td style="padding-left:8px;"><a href="{{social.instagramUrl}}" target="_blank" style="display:inline-block;min-width:30px;padding:8px 10px;border-radius:999px;background:#f1f5f9;color:#0f172a;text-decoration:none;font-size:11px;font-weight:800;line-height:1;">IG</a></td>{{/if}}
-                              {{#if social.linkedinUrl}}<td style="padding-left:8px;"><a href="{{social.linkedinUrl}}" target="_blank" style="display:inline-block;min-width:30px;padding:8px 10px;border-radius:999px;background:#f1f5f9;color:#0f172a;text-decoration:none;font-size:11px;font-weight:800;line-height:1;">IN</a></td>{{/if}}
-                              {{#if social.youtubeUrl}}<td style="padding-left:8px;"><a href="{{social.youtubeUrl}}" target="_blank" style="display:inline-block;min-width:30px;padding:8px 12px;border-radius:999px;background:#f1f5f9;color:#0f172a;text-decoration:none;font-size:11px;font-weight:800;line-height:1;">YouTube</a></td>{{/if}}
-                              {{#if social.whatsappUrl}}<td style="padding-left:8px;"><a href="{{social.whatsappUrl}}" target="_blank" style="display:inline-block;min-width:30px;padding:8px 12px;border-radius:999px;background:#f1f5f9;color:#0f172a;text-decoration:none;font-size:11px;font-weight:800;line-height:1;">WhatsApp</a></td>{{/if}}
-                              {{#if social.tiktokUrl}}<td style="padding-left:8px;"><a href="{{social.tiktokUrl}}" target="_blank" style="display:inline-block;min-width:30px;padding:8px 10px;border-radius:999px;background:#f1f5f9;color:#0f172a;text-decoration:none;font-size:11px;font-weight:800;line-height:1;">TT</a></td>{{/if}}
-                            </tr>
-                          </table>
-                        </td>
+                        ${socialIcon("youtubeUrl", "youtube", "YouTube")}
+                        ${socialIcon("whatsappUrl", "whatsapp", "WhatsApp")}
+                        ${socialIcon("facebookUrl", "facebook", "Facebook")}
+                        ${socialIcon("instagramUrl", "instagram", "Instagram")}
+                        ${socialIcon("twitterUrl", "x", "X")}
+                        ${socialIcon("linkedinUrl", "linkedin", "LinkedIn")}
+                        ${socialIcon("tiktokUrl", "tiktok", "TikTok")}
                       </tr>
                     </table>
+                    <div style="border-top:1px solid ${C.footerRule};margin:26px 0 20px;height:0;line-height:0;font-size:0;">&nbsp;</div>
+                    <p style="margin:0 0 12px;font-family:${FONT};font-size:12px;line-height:1.7;color:${C.footerText};">{{brand.footerText}}</p>
+                    <p style="margin:0 0 12px;font-family:${FONT};font-size:12px;line-height:1.7;color:${C.footerText};">
+                      <a href="mailto:{{brand.supportEmail}}" style="color:${C.footerText};text-decoration:underline;">{{brand.supportEmail}}</a>
+                      &nbsp;&middot;&nbsp;
+                      <a href="{{brand.preferencesUrl}}" target="_blank" style="color:${C.footerText};text-decoration:underline;">Email preferences</a>
+                      &nbsp;&middot;&nbsp;
+                      <a href="{{brand.websiteUrl}}" target="_blank" style="color:${C.footerText};text-decoration:underline;">Website</a>
+                    </p>
+                    {{#if recipient}}<p style="margin:0 0 12px;font-family:${FONT};font-size:12px;line-height:1.7;color:${C.footerText};">This email was sent to <span style="color:${C.footerText};text-decoration:none;">{{recipient}}</span>.</p>{{/if}}
+                    <p style="margin:0;font-family:${FONT};font-size:12px;line-height:1.7;color:${C.footerText};">&copy; {{year}} {{brand.appName}}. All rights reserved.</p>
                   </td>
                 </tr>
 
-                <tr>
-                  <td style="border:1px solid #e2e8f0;border-radius:20px;background:#ffffff;padding:38px 38px 34px;box-shadow:0 22px 70px rgba(15,23,42,0.08);">
-                    <div style="width:48px;height:4px;border-radius:999px;background:{{brand.accentColor}};margin:0 0 18px;"></div>
-                    <p style="margin:0 0 18px;font-size:12px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:{{brand.primaryColor}};">{{brand.appName}}</p>
-                    ${body}
-                  </td>
-                </tr>
-
-                <tr>
-                  <td style="padding:26px 8px 0;text-align:center;">
-                    <p style="margin:0 auto 14px;max-width:500px;font-size:12px;color:#64748b;line-height:1.7;">
-                      {{brand.footerText}}
-                    </p>
-                    <p style="margin:0;font-size:12px;color:#94a3b8;line-height:1.8;">
-                      <a href="mailto:{{brand.supportEmail}}" style="color:#64748b;text-decoration:underline;">{{brand.supportEmail}}</a>
-                      &nbsp;|&nbsp;
-                      <a href="{{brand.preferencesUrl}}" target="_blank" style="color:#64748b;text-decoration:underline;">Email preferences</a>
-                      &nbsp;|&nbsp;
-                      <a href="{{brand.websiteUrl}}" target="_blank" style="color:#64748b;text-decoration:underline;">Website</a>
-                    </p>
-                    <p style="margin:16px 0 0;font-size:11px;color:#94a3b8;line-height:1.6;">
-                      &copy; {{year}} {{brand.appName}}. All rights reserved.
-                    </p>
-                  </td>
-                </tr>
               </table>
             </td>
           </tr>
@@ -244,13 +284,19 @@ function wrap(title: string, body: string): string {
 }
 
 function heading(text: string): string {
-  return `<h1 style="margin:0 0 12px;font-size:28px;font-weight:800;color:#0f172a;line-height:1.2;letter-spacing:0;">${text}</h1>`;
+  return `<h1 style="margin:0 0 16px;font-family:${FONT};font-size:22px;font-weight:600;color:${C.text};line-height:1.3;letter-spacing:-0.01em;">${text}</h1>`;
 }
 
+// Older templates pass the pre-redesign light grey (#94a3b8) for secondary copy.
+// It fails contrast on the light panel, so map it to the design-system muted text.
+const LEGACY_MUTED = new Set(["#94a3b8", "#94A3B8"]);
+
 function paragraph(text: string, opts?: { color?: string; mt?: number }): string {
-  const color = opts?.color || "#475569";
+  const requested = opts?.color;
+  const color = !requested ? C.body : LEGACY_MUTED.has(requested) ? C.muted : requested;
+  const size = color === C.muted ? 14 : 16;
   const mt = opts?.mt ?? 0;
-  return `<p style="margin:${mt}px 0 0;font-size:15px;color:${color};line-height:1.7;">${text}</p>`;
+  return `<p style="margin:${mt}px 0 16px;font-family:${FONT};font-size:${size}px;color:${color};line-height:1.75;">${text}</p>`;
 }
 
 function escapeEmailText(value: string): string {
@@ -264,34 +310,62 @@ function escapeEmailText(value: string): string {
 
 function button(href: string, label: string): string {
   return `
-    <div style="margin:28px 0;">
-      <a href="${href}" style="display:inline-block;padding:13px 28px;background:{{brand.primaryColor}};color:#ffffff;text-decoration:none;border-radius:999px;font-weight:800;font-size:14px;box-shadow:0 14px 28px rgba(29,78,216,0.24);">${label}</a>
-    </div>
+    <table role="presentation" cellpadding="0" cellspacing="0" class="mce-btn" style="border-collapse:collapse;margin:8px 0 24px;">
+      <tr>
+        <td style="border-radius:8px;background:{{brand.primaryColor}};">
+          <a href="${href}" target="_blank" style="display:inline-block;padding:13px 24px;font-family:${FONT};font-size:15px;font-weight:600;line-height:1;color:#FFFFFF;text-decoration:none;border-radius:8px;">${label}</a>
+        </td>
+      </tr>
+    </table>
   `;
 }
 
 function card(rows: [label: string, value: string][]): string {
   const cells = rows
     .map(
-      ([label, value]) => `
+      ([label, value], i) => `
         <tr>
-          <td style="padding:0 0 12px;">
-            <p style="margin:0;font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.03em;">${label}</p>
-            <p style="margin:4px 0 0;font-size:14px;color:#0f172a;font-weight:600;">${value}</p>
+          <td style="padding:${i === 0 ? 0 : 12}px 0 0;">
+            <p style="margin:0;font-family:${FONT};font-size:12px;font-weight:500;color:${C.muted};text-transform:uppercase;letter-spacing:0.06em;">${label}</p>
+            <p style="margin:3px 0 0;font-family:${FONT};font-size:15px;color:${C.text};font-weight:600;">${value}</p>
           </td>
         </tr>`
     )
     .join("");
 
   return `
-    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:18px;margin:22px 0;">
-      ${cells}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;margin:8px 0 24px;">
+      <tr>
+        <td style="background:${C.surface};border:1px solid ${C.border};border-left:3px solid {{brand.primaryColor}};border-radius:8px;padding:18px 20px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+            ${cells}
+          </table>
+        </td>
+      </tr>
+    </table>
+  `;
+}
+
+/** One-time code block (login / verification). */
+function codeBlock(code: string): string {
+  return `
+    <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:separate;margin:8px 0 24px;">
+      <tr>
+        <td style="background:${C.surface};border:1px solid ${C.border};border-radius:8px;padding:16px 28px;">
+          <span style="font-size:30px;font-weight:700;color:${C.text};letter-spacing:0.18em;font-family:monospace;">${code}</span>
+        </td>
+      </tr>
     </table>
   `;
 }
 
 function divider(): string {
-  return `<hr style="border:none;border-top:1px solid #e2e8f0;margin:26px 0;">`;
+  return `<div style="border-top:1px solid ${C.border};margin:28px 0;height:0;line-height:0;font-size:0;">&nbsp;</div>`;
+}
+
+/** Footer line for marketing email: one click to stop offers and promotional email. */
+function unsubscribeFooter(url: string): string {
+  return `<p style="margin:24px 0 0;font-family:${FONT};font-size:13px;color:${C.muted};line-height:1.6;">Don't want offers like this? <a href="${url}" style="color:${C.muted};text-decoration:underline;">Unsubscribe</a>. Account, security and billing emails will still reach you.</p>`;
 }
 
 /** Footer line for marketing email: one click to stop offers and promotional email. */
@@ -304,15 +378,13 @@ function unsubscribeFooter(url: string): string {
 export function loginCodeEmail(code: string): SendEmailOptions {
   return {
     to: "", // set by caller
-    subject: "Your MakeChurchEasy Login Code",
+    subject: "Your MakeChurchEazy Login Code",
     html: wrap(
       "Login verification",
       `
         ${heading("Your login code")}
-        ${paragraph("Enter the code below to sign in to your MakeChurchEasy account. It expires in 1 minute.")}
-        <div style="margin:28px 0;text-align:center;">
-          <span style="display:inline-block;padding:14px 32px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:28px;font-weight:700;color:#0f172a;letter-spacing:0.08em;font-family:monospace;">${code}</span>
-        </div>
+        ${paragraph("Enter the code below to sign in to your MakeChurchEazy account. It expires in 1 minute.")}
+        ${codeBlock(code)}
         ${paragraph("If you didn't request this, you can safely ignore this email.", { color: "#94a3b8", mt: 8 })}
       `
     ),
@@ -322,12 +394,12 @@ export function loginCodeEmail(code: string): SendEmailOptions {
 export function verificationEmail(actionUrl: string): SendEmailOptions {
   return {
     to: "",
-    subject: "Verify your email address — MakeChurchEasy",
+    subject: "Verify your email address — MakeChurchEazy",
     html: wrap(
       "Email verification",
       `
         ${heading("Verify your email")}
-        ${paragraph("Click the button below to verify your email address and continue setting up your MakeChurchEasy account.")}
+        ${paragraph("Click the button below to verify your email address and continue setting up your MakeChurchEazy account.")}
         ${button(actionUrl, "Verify Email Address")}
         ${paragraph("If you didn't create an account, you can safely ignore this email.", { color: "#94a3b8" })}
       `
@@ -338,15 +410,13 @@ export function verificationEmail(actionUrl: string): SendEmailOptions {
 export function verificationCodeEmail(code: string): SendEmailOptions {
   return {
     to: "",
-    subject: "Your MakeChurchEasy Verification Code",
+    subject: "Your MakeChurchEazy Verification Code",
     html: wrap(
       "Email verification",
       `
         ${heading("Verify your email")}
         ${paragraph("Enter the code below to verify your email address. It expires in 10 minutes.")}
-        <div style="margin:28px 0;text-align:center;">
-          <span style="display:inline-block;padding:14px 32px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:28px;font-weight:700;color:#0f172a;letter-spacing:0.08em;font-family:monospace;">${code}</span>
-        </div>
+        ${codeBlock(code)}
         ${paragraph("If you didn't create an account, you can safely ignore this email.", { color: "#94a3b8", mt: 8 })}
       `
     ),
@@ -368,22 +438,22 @@ export function welcomeEmail(params: {
 
   return {
     to: userEmail,
-    subject: "Welcome to MakeChurchEasy! 🎉",
+    subject: "Welcome to MakeChurchEazy! 🎉",
     html: wrap(
       "Welcome",
       `
-        ${heading("Welcome to MakeChurchEasy!")}
-        ${paragraph(`Hi ${userName}, your email is verified and your account is ready. MakeChurchEasy helps your church deliver powerful presentations, go live to several platforms at once, translate services in real time, and transcribe sermons — all from one app.`)}
+        ${heading("Welcome to MakeChurchEazy!")}
+        ${paragraph(`Hi ${userName}, your email is verified and your account is ready. MakeChurchEazy helps your church deliver powerful presentations, go live to several platforms at once, translate services in real time, and transcribe sermons — all from one app.`)}
         ${card([
         ["Trial", `${trialDays} days of full access`],
         ["Expires", endDate],
       ])}
         ${paragraph("<strong style=\"color:#0f172a;\">Here's what you can do:</strong>")}
         ${paragraph("• <strong>Multi-stream</strong> — Go live to YouTube, Facebook and more at the same time, straight from the app. Your trial includes 20 hours of multi-streaming a month<br>• <strong>Lower Thirds &amp; Tickers</strong> — Show names, titles, scriptures and announcements over your live stream<br>• <strong>Bible Presentations</strong> — Display scriptures beautifully on screen<br>• <strong>Live Translation</strong> — Translate your service into 50+ languages<br>• <strong>Speech-to-Scripture</strong> — Transcribe sermons and auto-display verses<br>• <strong>AI Summaries</strong> — Auto-generate sermon notes and bulletins")}
-        ${paragraph("<strong style=\"color:#0f172a;\">Try multi-stream this Sunday:</strong> add your YouTube and Facebook stream keys under your speaker profile, switch on two or more destinations, and press Go Live. MakeChurchEasy sends your service to every platform for you — no extra software needed.", { mt: 14 })}
+        ${paragraph("<strong style=\"color:#0f172a;\">Try multi-stream this Sunday:</strong> add your YouTube and Facebook stream keys under your speaker profile, switch on two or more destinations, and press Go Live. MakeChurchEazy sends your service to every platform for you — no extra software needed.", { mt: 14 })}
         ${button(APP_URL + "/dashboard", "Go to Dashboard")}
         ${paragraph(`<strong style="color:#0f172a;\">Download the desktop app:</strong>`)}
-        ${paragraph(`<a href="${APP_URL}/downloads" style="color:{{brand.primaryColor}};font-weight:600;">Download MakeChurchEasy →</a>`)}
+        ${paragraph(`<a href="${APP_URL}/downloads" style="color:{{brand.primaryColor}};font-weight:600;">Download MakeChurchEazy →</a>`)}
         ${paragraph(`Need help getting started? Join our <a href="${COMMUNITY_URL}" style="color:{{brand.primaryColor}};">community</a> for guides and support.`, { color: "#94a3b8", mt: 12 })}
       `
     ),
@@ -393,12 +463,12 @@ export function welcomeEmail(params: {
 export function passwordResetEmail(actionUrl: string): SendEmailOptions {
   return {
     to: "",
-    subject: "Reset your password — MakeChurchEasy",
+    subject: "Reset your password — MakeChurchEazy",
     html: wrap(
       "Password reset",
       `
         ${heading("Reset your password")}
-        ${paragraph("We received a request to reset the password for your MakeChurchEasy account. Click the button below to set a new password.")}
+        ${paragraph("We received a request to reset the password for your MakeChurchEazy account. Click the button below to set a new password.")}
         ${button(actionUrl, "Reset Password")}
         ${paragraph("If you didn't request a password reset, you can safely ignore this email. Your password will remain unchanged.", { color: "#94a3b8" })}
       `
@@ -409,12 +479,12 @@ export function passwordResetEmail(actionUrl: string): SendEmailOptions {
 export function migrationEmail(actionUrl: string): SendEmailOptions {
   return {
     to: "",
-    subject: "Set your password — MakeChurchEasy",
+    subject: "Set your password — MakeChurchEazy",
     html: wrap(
       "Set your password",
       `
         ${heading("Set your password")}
-        ${paragraph("You previously signed in to MakeChurchEasy using Google. To continue using your account, please set a password by clicking the button below.")}
+        ${paragraph("You previously signed in to MakeChurchEazy using Google. To continue using your account, please set a password by clicking the button below.")}
         ${button(actionUrl, "Set Password")}
         ${paragraph("If you didn't request this, you can safely ignore this email.", { color: "#94a3b8" })}
       `
@@ -437,7 +507,7 @@ export function passwordChangedEmail(params: {
 
   return {
     to: userEmail,
-    subject: "Your password has been changed — MakeChurchEasy",
+    subject: "Your password has been changed — MakeChurchEazy",
     html: wrap(
       "Password changed",
       `
@@ -461,12 +531,12 @@ export function emailChangeVerificationEmail(
   const confirmUrl = `${APP_URL}/settings/email/confirm?token=${token}`;
   return {
     to: newEmail,
-    subject: "Verify your new email address — MakeChurchEasy",
+    subject: "Verify your new email address — MakeChurchEazy",
     html: wrap(
       "Email change",
       `
         ${heading("Verify your new email")}
-        ${paragraph(`You requested to change your MakeChurchEasy account email to <strong style="color:#0f172a;">${newEmail}</strong>.`)}
+        ${paragraph(`You requested to change your MakeChurchEazy account email to <strong style="color:#0f172a;">${newEmail}</strong>.`)}
         ${paragraph("Click the button below to confirm this change. This link expires in 24 hours.")}
         ${button(confirmUrl, "Verify Email Address")}
         ${paragraph("If you didn't request this change, you can safely ignore this email. Your current email will remain active.", { color: "#94a3b8" })}
@@ -482,12 +552,12 @@ export function emailChangeNotificationEmail(
 ): SendEmailOptions {
   return {
     to: oldEmail,
-    subject: "Your MakeChurchEasy email was changed",
+    subject: "Your MakeChurchEazy email was changed",
     html: wrap(
       "Email changed",
       `
         ${heading("Email address changed")}
-        ${paragraph(`Your MakeChurchEasy account email has been changed from <strong style="color:#0f172a;">${oldEmail}</strong> to <strong style="color:#0f172a;">${newEmail}</strong>.`)}
+        ${paragraph(`Your MakeChurchEazy account email has been changed from <strong style="color:#0f172a;">${oldEmail}</strong> to <strong style="color:#0f172a;">${newEmail}</strong>.`)}
         ${paragraph(`If you did not make this change, please contact support immediately at <a href="mailto:${SUPPORT_EMAIL}" style="color:{{brand.primaryColor}};">${SUPPORT_EMAIL}</a>.`)}
       `
     ),
@@ -499,12 +569,12 @@ export function emailChangeConfirmedEmail(
 ): SendEmailOptions {
   return {
     to: newEmail,
-    subject: "Your MakeChurchEasy email has been updated",
+    subject: "Your MakeChurchEazy email has been updated",
     html: wrap(
       "Email updated",
       `
         ${heading("Email address verified")}
-        ${paragraph(`Your MakeChurchEasy account email has been successfully updated to <strong style="color:#0f172a;">${newEmail}</strong>.`)}
+        ${paragraph(`Your MakeChurchEazy account email has been successfully updated to <strong style="color:#0f172a;">${newEmail}</strong>.`)}
         ${paragraph("All future notifications and account communications will be sent to this address.")}
         ${paragraph("For security, you can only change your email once every 30 days.", { color: "#94a3b8", mt: 4 })}
       `
@@ -567,16 +637,16 @@ export function subscriptionActivatedEmail(
       ? `
         <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;">
           <tr><td>
-            <p style="margin:0 0 12px;font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.03em;font-weight:600;">What you've unlocked</p>
+            <p style="margin:0 0 12px;font-size:12px;color:${C.muted};text-transform:uppercase;letter-spacing:0.06em;font-weight:600;">What you've unlocked</p>
             ${features
         .map(
           (f) => `
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td width="20" valign="top" style="padding:0 8px 8px 0;">
-                    <span style="display:inline-block;width:18px;height:18px;background:#ecfdf5;border-radius:50%;text-align:center;line-height:18px;font-size:11px;color:#059669;">✓</span>
+                    <span style="display:inline-block;width:18px;height:18px;background:#DCFCE7;border-radius:50%;text-align:center;line-height:18px;font-size:11px;color:#15803D;">✓</span>
                   </td>
-                  <td style="padding:0 0 8px;font-size:14px;color:#334155;line-height:1.5;">${f}</td>
+                  <td style="padding:0 0 8px;font-size:15px;color:${C.body};line-height:1.6;">${f}</td>
                 </tr>
               </table>`
         )
@@ -588,7 +658,7 @@ export function subscriptionActivatedEmail(
 
   return {
     to: userEmail,
-    subject: `Your ${planName} subscription is active — MakeChurchEasy`,
+    subject: `Your ${planName} subscription is active — MakeChurchEazy`,
     html: wrap(
       "Subscription active",
       `
@@ -630,7 +700,7 @@ export function subscriptionRenewedEmail(
 
   return {
     to: userEmail,
-    subject: `Your ${planName} subscription has renewed — MakeChurchEasy`,
+    subject: `Your ${planName} subscription has renewed — MakeChurchEazy`,
     html: wrap(
       "Subscription renewed",
       `
@@ -666,13 +736,13 @@ export function adminManagedSubscriptionEmail(params: {
 
   return {
     to: userEmail,
-    subject: `Your ${planName} subscription has ${isRenewal ? "renewed" : "started"} — MakeChurchEasy`,
+    subject: `Your ${planName} subscription has ${isRenewal ? "renewed" : "started"} — MakeChurchEazy`,
     html: wrap(
       isRenewal ? "Subscription renewed" : "Subscription started",
       `
         ${heading(isRenewal ? "Subscription renewed" : "Subscription started")}
         ${paragraph(`Hi ${userName}, your <strong style="color:#0f172a;">${planName}</strong> subscription has been ${isRenewal ? "renewed" : "started"}.`)}
-        ${paragraph("Your payment was confirmed by the MakeChurchEasy admin team, so your access is active immediately.")}
+        ${paragraph("Your payment was confirmed by the MakeChurchEazy admin team, so your access is active immediately.")}
         ${card([
         ["Plan", `${planName} (${billingCycle})`],
         ...(amountPaid ? [["Amount paid", amountPaid] as [string, string]] : []),
@@ -703,7 +773,7 @@ export function subscriptionCancelledEmail(
 
   return {
     to: userEmail,
-    subject: `Your ${planName} subscription has been cancelled — MakeChurchEasy`,
+    subject: `Your ${planName} subscription has been cancelled — MakeChurchEazy`,
     html: wrap(
       "Subscription cancelled",
       `
@@ -733,7 +803,7 @@ export function subscriptionExpiredEmail(
 
   return {
     to: userEmail,
-    subject: `Your ${planName} subscription has expired — MakeChurchEasy`,
+    subject: `Your ${planName} subscription has expired — MakeChurchEazy`,
     html: wrap(
       "Subscription expired",
       `
@@ -765,7 +835,7 @@ export function paymentFailedEmail(
     : null;
   return {
     to: userEmail,
-    subject: `Payment failed for your ${planName} subscription — MakeChurchEasy`,
+    subject: `Payment failed for your ${planName} subscription — MakeChurchEazy`,
     html: wrap(
       "Payment failed",
       `
@@ -803,16 +873,16 @@ export function subscriptionGracePeriodReminderEmail(
   let message = "";
 
   if (dayNumber === 1) {
-    subject = `Action Required: Your ${planName} subscription has expired (7-Day Grace Period Active) — MakeChurchEasy`;
+    subject = `Action Required: Your ${planName} subscription has expired (7-Day Grace Period Active) — MakeChurchEazy`;
     title = `Your 7-day grace period is active`;
     message = `Hi ${userName}, your <strong style="color:#0f172a;">${planName}</strong> subscription has passed its renewal date. To ensure your church presentations and services continue without interruption, we have placed your account in a <strong>7-day grace period</strong> until <strong style="color:#0f172a;">${graceDate}</strong>. All paid features remain active during this period. Please renew before this date to maintain uninterrupted access.`;
   } else if (dayNumber === 2) {
-    subject = `Reminder: 5 days left in your ${planName} grace period — MakeChurchEasy`;
+    subject = `Reminder: 5 days left in your ${planName} grace period — MakeChurchEazy`;
     title = `5 days left in your grace period`;
     message = `Hi ${userName}, this is a reminder that you have <strong>5 days remaining</strong> in your <strong style="color:#0f172a;">${planName}</strong> grace period. On <strong style="color:#0f172a;">${graceDate}</strong>, your subscription will be downgraded to the Free plan. Renew now to avoid any disruptions during your church services.`;
   } else {
     // Day 5
-    subject = `Urgent: 2 days left to keep your ${planName} subscription — MakeChurchEasy`;
+    subject = `Urgent: 2 days left to keep your ${planName} subscription — MakeChurchEazy`;
     title = `Final Notice: 2 days remaining`;
     message = `Hi ${userName}, your 7-day grace period will end in <strong>2 days</strong> on <strong style="color:#0f172a;">${graceDate}</strong>. After this date, your account will return to the Free plan. Renew today to keep your offline projection, team access, and AI features active.`;
   }
@@ -851,7 +921,7 @@ export function trialActivatedEmail(params: TrialEmailParams): SendEmailOptions 
 
   return {
     to: userEmail,
-    subject: `Your ${trialDays}-day Growth Trial is live! — MakeChurchEasy`,
+    subject: `Your ${trialDays}-day Growth Trial is live! — MakeChurchEazy`,
     html: wrap(
       "Trial activated",
       `
@@ -863,7 +933,7 @@ export function trialActivatedEmail(params: TrialEmailParams): SendEmailOptions 
         ["Features", "Translation, Speech-to-Scripture, AI, and more"],
       ])}
         ${paragraph("<strong style=\"color:#0f172a;\">Quick setup checklist:</strong>")}
-        ${paragraph("1. Download MakeChurchEasy<br>2. Pair your first device<br>3. Connect OBS<br>4. Run your first presentation")}
+        ${paragraph("1. Download MakeChurchEazy<br>2. Pair your first device<br>3. Connect OBS<br>4. Run your first presentation")}
         ${button(`${APP_URL}/dashboard`, "View Dashboard")}
         ${paragraph("Upgrade anytime to keep your access after the trial. No charge until you decide.", { color: "#94a3b8" })}
       `
@@ -880,14 +950,14 @@ export function activationRequiredWelcomeEmail(params: {
   const { userName, userEmail, trialDays = 7 } = params;
   return {
     to: userEmail,
-    subject: "Your first MakeChurchEasy setup starts here",
+    subject: "Your first MakeChurchEazy setup starts here",
     html: wrap(
       "First setup",
       `
         ${heading("Let's get your first presentation running")}
-        ${paragraph(`Hi ${userName}, your MakeChurchEasy account is ready. Your Growth access starts when you connect OBS, so your trial time is reserved for when you can actually use the product.`)}
+        ${paragraph(`Hi ${userName}, your MakeChurchEazy account is ready. Your Growth access starts when you connect OBS, so your trial time is reserved for when you can actually use the product.`)}
         ${card([
-          ["First step", "Open MakeChurchEasy Desktop"],
+          ["First step", "Open MakeChurchEazy Desktop"],
           ["Then", "Connect OBS and present one verse"],
           ["Trial", `${trialDays} days after activation`],
         ])}
@@ -911,7 +981,7 @@ export function trialDay1ActivationEmail(params: TrialEmailParams): SendEmailOpt
 
   return {
     to: userEmail,
-    subject: "Get your first presentation running — MakeChurchEasy",
+    subject: "Get your first presentation running — MakeChurchEazy",
     html: wrap(
       "Activation",
       `
@@ -922,7 +992,7 @@ export function trialDay1ActivationEmail(params: TrialEmailParams): SendEmailOpt
         ["Trial ends", endDate],
       ])}
         ${paragraph("<strong style=\"color:#0f172a;\">Quick setup checklist:</strong>")}
-        ${paragraph("✓ Download MakeChurchEasy<br>✓ Pair your first device<br>✓ Connect OBS<br>✓ Run your first presentation")}
+        ${paragraph("✓ Download MakeChurchEazy<br>✓ Pair your first device<br>✓ Connect OBS<br>✓ Run your first presentation")}
         ${button(`${APP_URL}/dashboard`, "Complete Setup")}
         ${paragraph("Need help? Visit our community for guides and support.", { color: "#94a3b8" })}
   `
@@ -939,13 +1009,13 @@ export function activationNudgeEmail(params: {
   const { userName, userEmail, trialDays, activationRequired = false } = params;
   return {
     to: userEmail,
-    subject: "Need a hand getting MakeChurchEasy ready?",
+    subject: "Need a hand getting MakeChurchEazy ready?",
     html: wrap(
       "Activation reminder",
       `
         ${heading("Let's get your first result")}
-        ${paragraph(`Hi ${userName}, the fastest way to see MakeChurchEasy's value is to connect OBS and present one Bible verse. ${activationRequired ? `Your ${trialDays}-day trial starts after that first activation, so you have the full window to test it.` : "Your trial is already running, so this is a good time to try it."}`)}
-        ${paragraph("1. Open MakeChurchEasy Desktop<br>2. Connect OBS<br>3. Open Bible and push one verse to OBS")}
+        ${paragraph(`Hi ${userName}, the fastest way to see MakeChurchEazy's value is to connect OBS and present one Bible verse. ${activationRequired ? `Your ${trialDays}-day trial starts after that first activation, so you have the full window to test it.` : "Your trial is already running, so this is a good time to try it."}`)}
+        ${paragraph("1. Open MakeChurchEazy Desktop<br>2. Connect OBS<br>3. Open Bible and push one verse to OBS")}
         ${button(`${APP_URL}/dashboard`, "Continue Setup")}
         ${paragraph(`If something stopped you, <a href="${APP_URL}/dashboard?activationSurvey=1" style="color:{{brand.primaryColor}};font-weight:600;">tell us what happened</a>.`, { color: "#94a3b8" })}
       `,
@@ -963,7 +1033,7 @@ export function trialDay3FeatureDiscoveryEmail(params: TrialEmailParams): SendEm
 
   return {
     to: userEmail,
-    subject: "Have you tried Speech-to-Scripture yet? — MakeChurchEasy",
+    subject: "Have you tried Speech-to-Scripture yet? — MakeChurchEazy",
     html: wrap(
       "Feature discovery",
       `
@@ -993,7 +1063,7 @@ export function trialDay5FeatureDrivingEmail(params: TrialEmailParams): SendEmai
 
   return {
     to: userEmail,
-    subject: "Most churches start here — MakeChurchEasy",
+    subject: "Most churches start here — MakeChurchEazy",
     html: wrap(
       "Feature driving",
       `
@@ -1023,7 +1093,7 @@ export function trialEndingSoonEmail(params: TrialEmailParams): SendEmailOptions
 
   return {
     to: userEmail,
-    subject: `Your trial ends in ${trialDays} day${trialDays === 1 ? "" : "s"} — MakeChurchEasy`,
+    subject: `Your trial ends in ${trialDays} day${trialDays === 1 ? "" : "s"} — MakeChurchEazy`,
     html: wrap(
       "Trial ending soon",
       `
@@ -1046,7 +1116,7 @@ export function trial1DayRemainingEmail(params: TrialEmailParams): SendEmailOpti
 
   return {
     to: userEmail,
-    subject: "Your trial ends tomorrow — MakeChurchEasy",
+    subject: "Your trial ends tomorrow — MakeChurchEazy",
     html: wrap(
       "Trial ending",
       `
@@ -1076,7 +1146,7 @@ export function trialExpiredEmail(
   const { userName, userEmail, freeCredits = 25 } = params;
   return {
     to: userEmail,
-    subject: "Your trial has ended — MakeChurchEasy",
+    subject: "Your trial has ended — MakeChurchEazy",
     html: wrap(
       "Trial ended",
       `
@@ -1105,13 +1175,13 @@ export function reEngagementEmail(
   const { userName, userEmail, unsubscribeUrl } = params;
   return {
     to: userEmail,
-    subject: "We miss you at MakeChurchEasy",
+    subject: "We miss you at MakeChurchEazy",
     html: wrap(
       "We miss you",
       `
         ${heading("We miss you!")}
         ${paragraph(`Hi ${escapeEmailText(userName)}, it's been a week since your free trial ended. Your church community is waiting, and we'd love to have you back.`)}
-        ${paragraph("While you were away, here's what churches using MakeChurchEasy have been doing:")}
+        ${paragraph("While you were away, here's what churches using MakeChurchEazy have been doing:")}
         ${paragraph("• <strong>Delivered 1,000+ presentations</strong> across congregations<br>• <strong>Translated services</strong> for multilingual communities<br>• <strong>Transcribed sermons</strong> with Speech-to-Scripture<br>• <strong>Generated sermon notes</strong> with AI Summaries")}
         ${button(`${APP_URL}/subscription/plans`, "See plans")}
         ${paragraph(`Questions? Reply to this email or reach us at <a href="mailto:${SUPPORT_EMAIL}" style="color:{{brand.primaryColor}};">${SUPPORT_EMAIL}</a>.`, { color: "#94a3b8", mt: 8 })}
@@ -1135,12 +1205,12 @@ export function newDeviceLoginEmail(
   const { userName, userEmail, deviceName, deviceOs, loginTime } = params;
   return {
     to: userEmail,
-    subject: "New device connected to your MakeChurchEasy account",
+    subject: "New device connected to your MakeChurchEazy account",
     html: wrap(
       "New device login",
       `
         ${heading("New device connected")}
-        ${paragraph(`Hi ${userName}, a new device was connected to your MakeChurchEasy account:`)}
+        ${paragraph(`Hi ${userName}, a new device was connected to your MakeChurchEazy account:`)}
         ${card([
         ["Device", `${deviceName} (${deviceOs})`],
         ["Login time", loginTime],
@@ -1243,7 +1313,7 @@ export function planUpgradeEmail(
                   <td width="20" valign="top" style="padding:0 8px 8px 0;">
                     <span style="display:inline-block;width:18px;height:18px;border-radius:50%;background:#fff7ed;color:{{brand.accentColor}};font-size:12px;font-weight:800;line-height:18px;text-align:center;">•</span>
                   </td>
-                  <td style="padding:0 0 8px;font-size:14px;color:#475569;line-height:1.6;">
+                  <td style="padding:0 0 8px;font-size:15px;color:${C.body};line-height:1.6;">
                     ${escapeEmailText(feature)}
                   </td>
                 </tr>`
@@ -1286,12 +1356,12 @@ export function adminTemporaryPlanGrantedEmail(params: {
 
   return {
     to: userEmail,
-    subject: `Temporary ${newPlan} access is active — MakeChurchEasy`,
+    subject: `Temporary ${newPlan} access is active — MakeChurchEazy`,
     html: wrap(
       "Temporary plan access",
       `
         ${heading("Temporary access updated")}
-        ${paragraph(`Hi ${userName}, your MakeChurchEasy plan has been changed from <strong style="color:#0f172a;">${previousPlan}</strong> to <strong style="color:#0f172a;">${newPlan}</strong>.`)}
+        ${paragraph(`Hi ${userName}, your MakeChurchEazy plan has been changed from <strong style="color:#0f172a;">${previousPlan}</strong> to <strong style="color:#0f172a;">${newPlan}</strong>.`)}
         ${card([
         ["Current plan", newPlan],
         ["Access ends", endDate],
@@ -1316,7 +1386,7 @@ export function adminTemporaryPlanEndedEmail(params: {
 
   return {
     to: userEmail,
-    subject: "Your temporary MakeChurchEasy access has ended",
+    subject: "Your temporary MakeChurchEazy access has ended",
     html: wrap(
       "Temporary access ended",
       `
@@ -1341,20 +1411,20 @@ export function ambassadorWelcomeEmail(params: {
   const { name, credits, expiresAt } = params;
   return {
     to: "",
-    subject: "Welcome to the MakeChurchEasy Ambassador Program",
+    subject: "Welcome to the MakeChurchEazy Ambassador Program",
     html: wrap(
       "Ambassador Program",
       `
         ${heading("Congratulations!")}
         ${paragraph(`Hi ${name},`)}
-        ${paragraph("You have been selected as a <strong style=\"color:#1D4ED8;\">MakeChurchEasy Ambassador</strong>. Your account has been upgraded to Ambassador status.")}
+        ${paragraph("You have been selected as a <strong style=\"color:#1D4ED8;\">MakeChurchEazy Ambassador</strong>. Your account has been upgraded to Ambassador status.")}
         ${paragraph("<strong>Your Ambassador Benefits:</strong>")}
         ${card([
         ["Plan", "Growth (Full Access)"],
         ["Credits", `${credits.toLocaleString()} credits`],
         ["Access Until", expiresAt],
       ])}
-        ${paragraph("Thank you for helping churches discover MakeChurchEasy. As an Ambassador, you have full access to Growth features to share with your community.")}
+        ${paragraph("Thank you for helping churches discover MakeChurchEazy. As an Ambassador, you have full access to Growth features to share with your community.")}
         ${button(`${APP_URL}/dashboard`, "Go to Dashboard")}
         ${paragraph("If you have any questions, reply to this email or contact our support team.", { color: "#94a3b8" })}
       `
@@ -1399,7 +1469,7 @@ export function discountOfferEmail(params: DiscountOfferEmailParams): SendEmailO
   } = params;
 
   const recipientLabel = churchName || name || "Church Leader";
-  const subject = headline || (discountPercent ? `Special Offer: ${discountPercent}% off MakeChurchEasy` : "Special Offer from MakeChurchEasy");
+  const subject = headline || (discountPercent ? `Special Offer: ${discountPercent}% off MakeChurchEazy` : "Special Offer from MakeChurchEazy");
 
   let offerSummary = "";
   if (discountPercent) {
@@ -1416,18 +1486,18 @@ export function discountOfferEmail(params: DiscountOfferEmailParams): SendEmailO
 
   const promoBox = promoCode
     ? `
-      <div style="background:#f8fafc;border:2px dashed #6366f1;border-radius:16px;padding:24px;text-align:center;margin:24px 0;">
-        <p style="margin:0 0 6px;font-size:11px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;">YOUR PROMO CODE</p>
-        <div style="font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:26px;font-weight:900;letter-spacing:0.1em;color:#4338ca;background:#ffffff;padding:12px 24px;border-radius:10px;display:inline-block;border:1px solid #e0e7ff;box-shadow:0 2px 8px rgba(99,102,241,0.08);">${promoCode}</div>
-        <p style="margin:12px 0 0;font-size:14px;font-weight:700;color:#1e293b;">${offerSummary}</p>
+      <div style="background:${C.surface};border:1px dashed {{brand.primaryColor}};border-radius:8px;padding:22px;text-align:center;margin:8px 0 24px;">
+        <p style="margin:0 0 8px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:${C.muted};">Your promo code</p>
+        <div style="font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:26px;font-weight:700;letter-spacing:0.12em;color:{{brand.primaryColor}};">${promoCode}</div>
+        <p style="margin:10px 0 0;font-size:15px;font-weight:600;color:${C.text};">${offerSummary}</p>
       </div>
     `
     : trialExtensionDays
       ? `
-      <div style="background:#f0fdf4;border:2px dashed #10b981;border-radius:16px;padding:24px;text-align:center;margin:24px 0;">
-        <p style="margin:0 0 6px;font-size:11px;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:#059669;">TRIAL EXTENDED</p>
-        <div style="font-size:26px;font-weight:900;letter-spacing:0.04em;color:#047857;">+${trialExtensionDays} DAYS FREE</div>
-        <p style="margin:12px 0 0;font-size:14px;font-weight:700;color:#1e293b;">Your trial has been extended! Continue using all features without interruption.</p>
+      <div style="background:${C.surface};border:1px dashed #22C55E;border-radius:8px;padding:22px;text-align:center;margin:8px 0 24px;">
+        <p style="margin:0 0 8px;font-size:12px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#15803D;">Trial extended</p>
+        <div style="font-size:26px;font-weight:700;color:#15803D;">+${trialExtensionDays} days free</div>
+        <p style="margin:10px 0 0;font-size:15px;font-weight:600;color:${C.text};">Your trial has been extended! Continue using all features without interruption.</p>
       </div>
     `
       : "";
@@ -1435,16 +1505,14 @@ export function discountOfferEmail(params: DiscountOfferEmailParams): SendEmailO
   const html = wrap(
     "Special Discount",
     `
-      <div style="display:inline-block;padding:5px 14px;border-radius:999px;background:#eef2ff;color:#4f46e5;font-size:11px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:14px;">EXCLUSIVE MINISTRY OFFER</div>
-      ${heading(headline || (discountPercent ? `Get ${discountPercent}% Off MakeChurchEasy` : "Special Discount For Your Ministry"))}
+      <p style="margin:0 0 10px;font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:{{brand.accentColor}};">Exclusive ministry offer</p>
+      ${heading(headline || (discountPercent ? `Get ${discountPercent}% Off MakeChurchEazy` : "Special Discount For Your Ministry"))}
       ${paragraph(`Dear ${escapeEmailText(recipientLabel)},`)}
       ${paragraph(customNote || "We want to help your church present scripture, worship songs, and church media with complete excellence and zero stress. We've unlocked a special discount tailored for your ministry:")}
       ${promoBox}
       ${cardRows.length > 0 ? card(cardRows) : ""}
-      <div style="margin:28px 0;text-align:center;">
-        <a href="${claimUrl}" style="display:inline-block;padding:15px 36px;background:#4f46e5;color:#ffffff;text-decoration:none;border-radius:999px;font-weight:800;font-size:15px;box-shadow:0 14px 28px rgba(79,70,229,0.32);">Claim Discount Now &rarr;</a>
-      </div>
-      <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6;text-align:center;">
+      ${button(claimUrl, "Claim discount &rarr;")}
+      <p style="margin:0;font-size:14px;color:${C.muted};line-height:1.6;">
         Clicking the button will automatically apply your discount at checkout. You can also enter the promo code <strong>${promoCode || ""}</strong> on the plans page.
       </p>
       ${paragraph("If you have any questions or need setup assistance for your service, just reply directly to this email.", { color: "#94a3b8", mt: 24 })}

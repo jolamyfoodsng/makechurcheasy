@@ -147,7 +147,7 @@ export async function POST(req: NextRequest) {
         email,
         name: String((authUser.mongoUser as any).name || "").trim() || undefined,
         redirectUrl: `${appUrl}/billing/success?type=flutterwave`,
-        description: `MakeChurchEasy ${plan} ${billingCycle} access`,
+        description: `MakeChurchEazy ${plan} ${billingCycle} access`,
         metadata,
       });
       const paymentUrl = String(payment.data?.link || "").trim();

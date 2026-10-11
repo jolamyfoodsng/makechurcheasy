@@ -1,7 +1,7 @@
 {
   "name": "makechurcheasy",
   "private": true,
-  "version": "4.1.3",
+  "version": "4.1.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,9 +19,9 @@
     "version:patch": "npm version patch --no-git-tag-version && node scripts/sync-version.cjs",
     "version:minor": " npm run build  && npm version minor --no-git-tag-version &&  node scripts/sync-version.cjs",
     "version:major": "npm run build  && npm version major --no-git-tag-version && node scripts/sync-version.cjs",
-    "release:patch": "node scripts/create-release.cjs patch",
-    "release:minor": "node scripts/create-release.cjs minor",
-    "release:major": "node scripts/create-release.cjs major",
+    "release:patch": "node scripts/release.cjs patch",
+    "release:minor": "node scripts/release.cjs minor",
+    "release:major": "node scripts/release.cjs major",
     "latest": " node scripts/generate-update-json.cjs"
   },
   "dependencies": {

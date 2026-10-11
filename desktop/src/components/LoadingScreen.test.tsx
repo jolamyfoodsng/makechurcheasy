@@ -14,11 +14,11 @@ describe("LoadingScreen component", () => {
   it("renders custom label and sublabel", () => {
     const html = renderToStaticMarkup(
       <LoadingScreen
-        label="Connecting to MakeChurchEasy…"
+        label="Connecting to MakeChurchEazy…"
         sublabel="Please wait a moment"
       />
     );
-    expect(html).toContain("Connecting to MakeChurchEasy…");
+    expect(html).toContain("Connecting to MakeChurchEazy…");
     expect(html).toContain("Please wait a moment");
   });
 

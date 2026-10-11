@@ -1,5 +1,5 @@
 /**
- * Authentication service for MakeChurchEasy Desktop App.
+ * Authentication service for MakeChurchEazy Desktop App.
  *
  * Uses device pairing flow (like Discord TV / Spotify device login).
  * The user authorizes the desktop app through the browser.
@@ -773,9 +773,9 @@ export async function getDeviceInfo(): Promise<string> {
   try {
     const { invoke } = await import("@tauri-apps/api/core");
     const info = await invoke<{ hostname: string; os: string }>("get_device_info");
-    return info.hostname || "MakeChurchEasy";
+    return info.hostname || "MakeChurchEazy";
   } catch {
-    return "MakeChurchEasy";
+    return "MakeChurchEazy";
   }
 }
 

@@ -5,7 +5,7 @@ import { AlertTriangle, Download, LogOut, Timer } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
 /**
- * Tells a signed-in user that their MakeChurchEasy desktop app must be updated.
+ * Tells a signed-in user that their MakeChurchEazy desktop app must be updated.
  *
  * It only appears when the admin has forced updates on AND one of the user's
  * registered computers reports a version below the minimum, so up-to-date users
@@ -221,7 +221,7 @@ export function AppUpdateNotice() {
               </p>
               <p className="mt-3 text-[13px] text-slate-500">
                 {expired
-                  ? "The old version has been switched off. Download the new version to keep using MakeChurchEasy."
+                  ? "The old version has been switched off. Download the new version to keep using MakeChurchEazy."
                   : "After the countdown ends the old version stops working. Download the new version now."}
               </p>
               <div className="mt-5 flex flex-wrap items-center gap-3">

@@ -92,7 +92,7 @@ export function useForcedUpdate(): UseForcedUpdateReturn {
             lockAt,
             updateMessage:
               settings?.updateMessage ||
-              `A new version of MakeChurchEasy is required. Your version is v${floorResult.currentVersion}. Update to v${floorResult.minimumVersion} or later to continue.`,
+              `A new version of MakeChurchEazy is required. Your version is v${floorResult.currentVersion}. Update to v${floorResult.minimumVersion} or later to continue.`,
             currentVersion: floorResult.currentVersion,
             downloadUrl: settings ? getDownloadUrlForCurrentPlatform(settings) : "",
             releaseNotesUrl: settings?.releaseNotesUrl || "",

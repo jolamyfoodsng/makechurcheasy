@@ -106,7 +106,7 @@ export function EmailShell({
                             marginBottom: 12,
                           }}
                         >
-                          MakeChurchEasy
+                          MakeChurchEazy
                         </div>
                         {eyebrow ? (
                           <div
@@ -162,7 +162,7 @@ export function EmailShell({
                             color: colors.muted,
                           }}
                         >
-                          {footerText || "MakeChurchEasy helps churches run presentations, lyrics, Bible, and livestream workflows from one platform."}
+                          {footerText || "MakeChurchEazy helps churches run presentations, lyrics, Bible, and livestream workflows from one platform."}
                         </div>
                       </td>
                     </tr>

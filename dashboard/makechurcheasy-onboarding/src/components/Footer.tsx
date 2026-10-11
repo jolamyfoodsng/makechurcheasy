@@ -6,7 +6,7 @@ export default function Footer() {
       <div className="flex flex-col md:flex-row justify-between items-center w-full px-6 md:px-8 max-w-6xl mx-auto text-gray-400 text-xs md:text-sm gap-4">
         {/* Copyright notice */}
         <div className="font-medium text-center md:text-left text-gray-500">
-          © {currentYear} MakeChurchEasy. All rights reserved.
+          © {currentYear} MakeChurchEazy. All rights reserved.
         </div>
 
         {/* Action Links */}
@@ -26,7 +26,7 @@ export default function Footer() {
             className="hover:text-primary-brand transition-colors font-medium focus:underline focus:outline-none"
             onClick={(e) => {
               e.preventDefault();
-              alert("Displaying Terms of Service summary: by utilizing and setting up MakeChurchEasy, you consent to standard user guidelines.");
+              alert("Displaying Terms of Service summary: by utilizing and setting up MakeChurchEazy, you consent to standard user guidelines.");
             }}
           >
             Terms of Service
@@ -36,7 +36,7 @@ export default function Footer() {
             className="hover:text-primary-brand transition-colors font-medium focus:underline focus:outline-none"
             onClick={(e) => {
               e.preventDefault();
-              alert("Contact us: team@makechurcheasy.org");
+              alert("Contact us: team@makechurcheazy.com");
             }}
           >
             Contact

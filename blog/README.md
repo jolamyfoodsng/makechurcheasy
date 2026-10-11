@@ -1,8 +1,8 @@
-# MakeChurchEasy Blog
+# MakeChurchEazy Blog
 
-This is the MakeChurchEasy version of Vercel's Next.js `blog-starter` example. The public pages keep the starter's layout and reading experience, while the content and branding are specific to MakeChurchEasy.
+This is the MakeChurchEazy version of Vercel's Next.js `blog-starter` example. The public pages keep the starter's layout and reading experience, while the content and branding are specific to MakeChurchEazy.
 
-The app lives at `blog/` inside the main MakeChurchEasy repository. It remains a self-contained Next.js app so its Markdown content, content API, and Vercel deployment can evolve independently from the desktop app.
+The app lives at `blog/` inside the main MakeChurchEazy repository. It remains a self-contained Next.js app so its Markdown content, content API, and Vercel deployment can evolve independently from the desktop app.
 
 ## Run locally
 
@@ -12,7 +12,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-From the MakeChurchEasy repository root, use `npm --prefix blog run dev`.
+From the MakeChurchEazy repository root, use `npm --prefix blog run dev`.
 
 Posts in `_posts` are Markdown files with front matter. They are the source used to generate the public pages.
 
@@ -59,4 +59,4 @@ The project includes:
 
 ## Deployment shape
 
-Deploy this as its own Vercel project with `blog/` as the project root and connect `blog.makechurcheazy.com` to it. A `/blog` path on the main MakeChurchEasy site can be added later with a rewrite, but the subdomain keeps the blog deployment, SEO URLs, and content automation independent.
+Deploy this as its own Vercel project with `blog/` as the project root and connect `blog.makechurcheazy.com` to it. A `/blog` path on the main MakeChurchEazy site can be added later with a rewrite, but the subdomain keeps the blog deployment, SEO URLs, and content automation independent.

@@ -1,5 +1,5 @@
 /**
- * dockUploadService.ts — Shared upload utilities for the MakeChurchEasy Dock.
+ * dockUploadService.ts — Shared upload utilities for the MakeChurchEazy Dock.
  *
  * The dock runs as a standalone browser page in OBS and cannot use Tauri's
  * invoke directly. This service handles the Tauri-first-with-HTTP-fallback

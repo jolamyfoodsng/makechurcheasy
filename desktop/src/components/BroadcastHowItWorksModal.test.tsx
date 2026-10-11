@@ -56,5 +56,6 @@ describe("BroadcastHowItWorksModal", () => {
       />
     );
     expect(html).toContain("20 hours based on your Growth Plan");
+    expect(html.toLowerCase()).not.toContain("sanctuary");
   });
 });

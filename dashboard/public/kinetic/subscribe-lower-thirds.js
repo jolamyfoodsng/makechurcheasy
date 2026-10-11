@@ -1,5 +1,5 @@
 /*
- * Make Church Easy — "Subscribe" lower thirds (5 straps), registered into the
+ * Make Church Eazy — "Subscribe" lower thirds (5 straps), registered into the
  * Motion engine (kinetic-lower-thirds.js must load first).
  *
  * Built from the subscribe-lower-thirds test bench: each strap was designed on a

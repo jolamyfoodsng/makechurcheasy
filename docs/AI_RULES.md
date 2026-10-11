@@ -632,7 +632,7 @@ Add this requirement to OpenCode:
 
 Interactive Tutorial & Onboarding Requirement
 
-Every major page/module in MakeChurchEasy must have an interactive guided walkthrough. No user should ever be left wondering how a feature works.
+Every major page/module in MakeChurchEazy must have an interactive guided walkthrough. No user should ever be left wondering how a feature works.
 
 Full specification: docs/TUTORIAL_SYSTEM.md
 

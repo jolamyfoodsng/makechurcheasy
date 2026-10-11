@@ -171,7 +171,7 @@ export const DEFAULT_LIVE_TOOL_TEMPLATES: LiveToolTemplate[] = [
     moment: "emergency",
     kind: "safety-action",
     label: "Hide Overlays",
-    description: "Hide MakeChurchEasy overlays from the selected output.",
+    description: "Hide MakeChurchEazy overlays from the selected output.",
     icon: "visibility_off",
     title: "Hide Overlays",
     action: "hide-overlays",

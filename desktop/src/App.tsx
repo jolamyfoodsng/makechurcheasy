@@ -1,5 +1,5 @@
 /**
- * App.tsx — MakeChurchEasy
+ * App.tsx — MakeChurchEazy
  *
  * Root component with React Router.
  *
@@ -112,7 +112,6 @@ import "./bible/bible.css";
 import "./lowerthirds/lowerthirds.css";
 import "./App.css";
 import "./NewDashboard.css";
-import "./compat-mode.css";
 import "./accessibility.css";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import { safeLazy } from "./utils/safeLazy";
@@ -163,7 +162,7 @@ function AppRouteFallback() {
   return (
     <LoadingScreen
       variant="page"
-      label="Loading MakeChurchEasy…"
+      label="Loading MakeChurchEazy…"
       className="app-route-loading"
     />
   );
@@ -406,7 +405,7 @@ function App() {
         ? undefined
         : !mobileRemoteSwitchOn
           ? ADMIN_FEATURE_OFF_MESSAGES.mobileRemote
-          : `${entitlement.reason ?? "Mobile control is not available on this plan."} Open MakeChurchEasy on your desktop to upgrade.`,
+          : `${entitlement.reason ?? "Mobile control is not available on this plan."} Open MakeChurchEazy on your desktop to upgrade.`,
     }).catch((error) => {
       console.warn("[MobileRemote] Could not sync access policy:", error);
     });
@@ -432,7 +431,7 @@ function App() {
         try {
           const { ask } = await import("@tauri-apps/plugin-dialog");
           confirmed = await ask(
-            "Verse AI is currently listening and transcribing. Are you sure you want to close MakeChurchEasy?",
+            "Verse AI is currently listening and transcribing. Are you sure you want to close MakeChurchEazy?",
             {
               title: "Verse AI is Active",
               kind: "warning",
@@ -442,7 +441,7 @@ function App() {
           );
         } catch {
           confirmed = window.confirm(
-            "Verse AI is currently listening and transcribing. Are you sure you want to close MakeChurchEasy?"
+            "Verse AI is currently listening and transcribing. Are you sure you want to close MakeChurchEazy?"
           );
         }
 
@@ -1206,6 +1205,11 @@ function App() {
       if (connected && !prevConnected) {
         trackObsConnected();
         trackObsConnectedBackend();
+        // Wake any MCE browser source that loaded before the overlay server was ready.
+        // Skipped automatically while OBS is streaming or recording.
+        void import("./services/obsBrowserSourceRefresh")
+          .then((m) => m.scheduleMceBrowserSourceRefresh((type, data) => obsService.call(type, data), "main-app"))
+          .catch(() => { /* best effort */ });
       } else if (!connected && prevConnected) {
         trackObsDisconnected();
       }

@@ -1778,7 +1778,7 @@ export default function BroadcastPage() {
                 <div className="broadcast-cloud-info-box__text">
                   <span className="broadcast-cloud-info-box__title">No extra plugins needed</span>
                   <span className="broadcast-cloud-info-box__desc">
-                    Make Church Easy uses a built-in cloud broadcasting engine. Send a single stream from OBS, and we&apos;ll duplicate it to your destinations without extra CPU or upload bandwidth strain on your church PC.
+                    Make Church Eazy uses a built-in cloud broadcasting engine. Send a single stream from OBS, and we&apos;ll duplicate it to your destinations without extra CPU or upload bandwidth strain on your church PC.
                   </span>
                 </div>
               </div>
@@ -2031,7 +2031,7 @@ export default function BroadcastPage() {
 
             <div className="broadcast-modal-card__body">
               <p style={{ margin: "0 0 14px", fontSize: "13.5px", color: "#a1a1aa", lineHeight: 1.5 }}>
-                Make Church Easy connects to OBS Studio using the built-in OBS WebSocket Server to synchronize stream keys automatically.
+                Make Church Eazy connects to OBS Studio using the built-in OBS WebSocket Server to synchronize stream keys automatically.
               </p>
 
               <div className="broadcast-form-group">

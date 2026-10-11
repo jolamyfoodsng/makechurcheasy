@@ -586,7 +586,7 @@ export default function ComparePlansPage() {
                       <div className="mt-4 flex flex-wrap items-center gap-3 text-xs font-medium text-slate-500">
                         <span>{PLAN_NAMES[offer.plan]} access</span>
                         {offer.accountAgeDays != null && (
-                          <span>{Math.floor(offer.accountAgeDays / 30)} months with MakeChurchEasy</span>
+                          <span>{Math.floor(offer.accountAgeDays / 30)} months with MakeChurchEazy</span>
                         )}
                         {offer.endsAt && (
                           <span className="inline-flex items-center gap-1">

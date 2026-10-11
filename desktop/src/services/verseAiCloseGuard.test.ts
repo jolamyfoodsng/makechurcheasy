@@ -34,7 +34,7 @@ describe("Verse AI App Close Guard", () => {
     if (isVerseAiBusy) {
       fakeEvent.preventDefault();
       const confirmed = await askMock(
-        "Verse AI is currently listening and transcribing. Are you sure you want to close MakeChurchEasy?",
+        "Verse AI is currently listening and transcribing. Are you sure you want to close MakeChurchEazy?",
         {
           title: "Verse AI is Active",
           kind: "warning",
@@ -70,7 +70,7 @@ describe("Verse AI App Close Guard", () => {
     if (isVerseAiBusy) {
       fakeEvent.preventDefault();
       const confirmed = await askMock(
-        "Verse AI is currently listening and transcribing. Are you sure you want to close MakeChurchEasy?",
+        "Verse AI is currently listening and transcribing. Are you sure you want to close MakeChurchEazy?",
         {
           title: "Verse AI is Active",
           kind: "warning",

@@ -1,16 +1,28 @@
 import type { Metadata } from "next";
-import { socialPreview } from "@/lib/social-preview";
 import { MarketingFooter, MarketingHeader } from "../marketing-shell";
 import shared from "../homepage.module.css";
 import PricingContent from "./PricingContent";
 
-const description = "Compare MakeChurchEazy Free, Basic, Growth, and Pro plans. See monthly pricing for Nigeria, Africa, and global churches, plus Bible, OBS, speech-to-scripture, and multi-campus features.";
+const title = "Pricing — Simple plans for every church media team | MakeChurchEazy";
+const description = "Compare MakeChurchEazy Free, Basic, Growth, and Pro plans. See monthly pricing for Nigeria in NGN, African countries in local currency/USD, and global markets in USD.";
 
 export const metadata: Metadata = {
-  title: "Pricing — plans for every church media team",
+  title: { absolute: title },
   description,
   alternates: { canonical: "/pricing" },
-  openGraph: { images: [socialPreview], title: "MakeChurchEazy pricing", description, url: "/pricing" },
+  openGraph: {
+    title,
+    description,
+    type: "website",
+    url: "/pricing",
+    images: [{ url: "/og-image.jpg", width: 1376, height: 768, alt: "MakeChurchEazy Pricing Plans" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title,
+    description,
+    images: ["/og-image.jpg"],
+  },
 };
 
 export default function PricingPage() {

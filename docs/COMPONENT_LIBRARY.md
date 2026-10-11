@@ -1,4 +1,4 @@
-# MakeChurchEasy Component Library
+# MakeChurchEazy Component Library
 
 Version: 1.0
 Last Updated: June 2026

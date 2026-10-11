@@ -354,7 +354,7 @@ export default function TutorialsPage() {
           <>
             <header className="app-page__header tutorials-page__header">
               <div className="app-page__header-copy tutorials-page__header-copy">
-                <p className="app-page__eyebrow">LEARN MAKECHURCHEASY</p>
+                <p className="app-page__eyebrow">LEARN MAKECHURCHEAZY</p>
                 <h1 className="app-page__title">Tutorials</h1>
                 <p className="app-page__subtitle">Step-by-step training for your service team. Newly published detailed videos appear here automatically.</p>
               </div>
@@ -414,7 +414,7 @@ export default function TutorialsPage() {
                           <span><ListVideo size={14} aria-hidden="true" /> {videos.length}</span>
                         </div>
                         <h2>{playlist.title}</h2>
-                        <p>{playlist.description || "A guided MakeChurchEasy training playlist."}</p>
+                        <p>{playlist.description || "A guided MakeChurchEazy training playlist."}</p>
                         <div className="tutorial-card__progress">
                           <span>{progressLabel(summary.completed, summary.total)}</span>
                           <span className="tutorial-card__progress-track" aria-hidden="true"><i style={{ width: `${summary.total ? (summary.completed / summary.total) * 100 : 0}%` }} /></span>

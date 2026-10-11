@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Starter Ticker · Make Church Easy</title>
+<!--
+  A Make Church Easy ticker (format mce-ticker@1).
+  Edit the three blocks below, then upload this file in Admin → Broadcast Graphics → Tickers.
+  Open the file in a browser to see a preview. The preview script at the bottom is not uploaded.
+
+  The app fills these placeholders:
+    {{badge}}       the heading the user types (default: "badge" below)
+    {{tickerText}}  the user's messages joined with dividers — put it twice in .ticker-move for a seamless loop
+    {{speed}}       scroll duration, e.g. 24s
+    {{state}}       "in" / "out"
+  Class names the app understands: .ticker-shell (bar colours), .ticker-badge (heading colours),
+  .ticker-move (the moving strip), .pos-full-bottom (moved to the top when the user picks Top).
+-->
+<script type="application/json" id="mce-ticker">
+{
+  "format": "mce-ticker@1",
+  "id": "starter-sunrise-ticker",
+  "name": "Sunrise Ticker",
+  "description": "Warm gradient bar with a pill heading and a soft glow.",
+  "color": "#F97316",
+  "badge": "This Week",
+  "tickerText": "Sunday Service 9:00 AM • Midweek Prayer Wednesday 6:30 PM • Youth Night Friday 7:00 PM • Welcome home",
+  "speed": "26s",
+  "fontImports": ["https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800&display=swap"],
+  "variables": []
+}
+</script>
+
+<style id="mce-ticker-css">
+body { font-family: "Montserrat", sans-serif; }
+
+@keyframes tickerMove { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes tickerIn { from { transform: translateY(120%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(249,115,22,.55); } 50% { box-shadow: 0 0 0 8px rgba(249,115,22,0); } }
+
+.pos-full-bottom { position: fixed; left: 0; right: 0; bottom: 0; padding: 0 24px 18px; }
+.pos-full-bottom[data-state="in"] .ticker-shell { animation: tickerIn .6s cubic-bezier(.2,.8,.2,1) both; }
+.pos-full-bottom[data-state="out"] .ticker-shell { animation: tickerIn .4s ease-in reverse both; }
+
+.ticker-shell {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  color: #fff;
+  background: linear-gradient(90deg, #7C2D12 0%, #C2410C 45%, #F97316 100%);
+  box-shadow: 0 14px 32px rgba(0,0,0,.35);
+}
+
+.ticker-badge {
+  flex: none;
+  height: 46px;
+  padding: 0 22px;
+  display: flex;
+  align-items: center;
+  border-radius: 999px;
+  background: #FFF7ED;
+  color: #9A3412;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  animation: glow 2.4s ease-in-out infinite;
+}
+
+.ticker-track { flex: 1; min-width: 0; overflow: hidden; mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent); }
+.ticker-move {
+  display: inline-flex;
+  gap: 60px;
+  white-space: nowrap;
+  font-size: 24px;
+  font-weight: 600;
+  animation: tickerMove var(--speed, 26s) linear infinite;
+}
+</style>
+
+<template id="mce-ticker-html">
+<div class="lt pos-full-bottom" data-state="{{state}}">
+  <div class="ticker-shell">
+    <div class="ticker-badge">{{badge}}</div>
+    <div class="ticker-track">
+      <div class="ticker-move" style="--speed:{{speed}};">
+        <span>{{tickerText}}</span>
+        <span>{{tickerText}}</span>
+      </div>
+    </div>
+  </div>
+</div>
+</template>
+
+<!-- Preview only (not uploaded): renders the ticker with its sample text when you open this file. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800&display=swap">
+<style>html, body { margin: 0; height: 100%; background: #4a5260; overflow: hidden; }</style>
+</head>
+<body>
+<div id="preview"></div>
+<script>
+(function () {
+  var meta = JSON.parse(document.getElementById("mce-ticker").textContent);
+  var values = { badge: meta.badge, tickerText: meta.tickerText, speed: meta.speed, state: "in" };
+  var esc = function (v) { return String(v == null ? "" : v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); };
+  document.getElementById("preview").innerHTML = document.getElementById("mce-ticker-html").innerHTML
+    .replace(/\{\{\s*([^}]+?)\s*\}\}/g, function (_m, k) { return esc(values[k]); });
+})();
+</script>
+</body>
+</html>

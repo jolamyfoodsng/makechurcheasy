@@ -175,7 +175,7 @@ export function newRung(index: number): OfferRung {
     plans: ["basic"],
     billingCycle: "monthly",
     emailEnabled: true,
-    emailSubject: "A new offer from MakeChurchEasy",
+    emailSubject: "A new offer from MakeChurchEazy",
     title: "A special offer for your church",
     message: "We'd love to have your church back. Here's an offer to make it easy.",
     ctaLabel: "See the offer",

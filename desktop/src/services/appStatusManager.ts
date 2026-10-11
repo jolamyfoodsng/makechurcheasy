@@ -18,12 +18,17 @@ import { obsService } from "./obsService";
 import { lmDockService } from "./lmDockService";
 
 // ── Icon filenames ──────────────────────────────────────────────────────────
+//
+// These are set at runtime with NSApplication.setApplicationIconImage, and macOS
+// does NOT round or mask an image given that way (unlike the bundled .icns).
+// They must be PNGs with transparent rounded corners. A JPEG has no transparency,
+// so the Dock showed a plain square.
 
 const ICON_GENERAL = "app_icon_general.png";
-const ICON_OBS_NOT_CONNECTED = "app_icon_obs_not_connected.jpeg";
-const ICON_OBS_CONNECTED = "app_icon_obs_connected.jpeg";
-const ICON_MIC_NO_OBS = "app_icon_mic_connected_but_obs_not_connected.jpeg";
-const ICON_MIC_AND_OBS = "app_icon_mic_connected_and_obs_connected.jpeg";
+const ICON_OBS_NOT_CONNECTED = "app_icon_obs_not_connected.png";
+const ICON_OBS_CONNECTED = "app_icon_obs_connected.png";
+const ICON_MIC_NO_OBS = "app_icon_mic_connected_but_obs_not_connected.png";
+const ICON_MIC_AND_OBS = "app_icon_mic_connected_and_obs_connected.png";
 
 // ── Internal state ──────────────────────────────────────────────────────────
 

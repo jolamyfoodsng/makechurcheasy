@@ -53,7 +53,7 @@ export default function LoadingScreen({
           <div className="mce-loading-screen__logo" aria-hidden="true">
             <img
               src="/logo_icon.png"
-              alt="MakeChurchEasy"
+              alt="MakeChurchEazy"
               className="mce-loading-screen__logo-img"
               onError={(e) => {
                 e.currentTarget.style.display = "none";

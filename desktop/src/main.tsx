@@ -15,6 +15,29 @@ import { migrateStorageKeys } from "./services/storageMigration";
 // Migrate old storage keys before anything else reads them
 migrateStorageKeys();
 
+// In the desktop app, window.open() does nothing (Tauri has no new-window
+// handler), so announcement buttons, "download the update" fallbacks and other
+// external links silently failed. Send web links to the system browser.
+if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+  const nativeOpen = window.open.bind(window);
+  window.open = ((url?: string | URL, target?: string, features?: string) => {
+    const href = url ? String(url) : "";
+    let absolute = "";
+    try {
+      absolute = new URL(href, window.location.href).toString();
+    } catch {
+      absolute = "";
+    }
+    if (/^(https?:|mailto:|tel:)/i.test(absolute)) {
+      void import("@tauri-apps/plugin-opener")
+        .then(({ openUrl }) => openUrl(absolute))
+        .catch((error) => console.warn("[window.open] Could not open in browser:", error));
+      return null;
+    }
+    return nativeOpen(url as string, target, features);
+  }) as typeof window.open;
+}
+
 // Detect OS platform (Windows vs macOS) for native typography & metrics
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/i.test(navigator.platform ?? navigator.userAgent);
 if (typeof document !== "undefined") {

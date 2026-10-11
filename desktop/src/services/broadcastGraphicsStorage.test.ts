@@ -36,7 +36,7 @@ describe("broadcastGraphicsStorage", () => {
 
   it("saves a new graphic and returns it with generated id and timestamps", () => {
     const saved = saveBroadcastGraphic({
-      name: "Pastor Henry — Speaker Intro",
+      name: "Sunday Speaker Intro",
       templateId: "lt-kx-01-word-rise",
       category: "speaker",
       displayType: "lower-third",
@@ -49,7 +49,7 @@ describe("broadcastGraphicsStorage", () => {
     });
 
     expect(saved.id).toBeDefined();
-    expect(saved.name).toBe("Pastor Henry — Speaker Intro");
+    expect(saved.name).toBe("Sunday Speaker Intro");
     expect(saved.variables.firstName).toBe("HENRY");
 
     const list = loadSavedBroadcastGraphics();

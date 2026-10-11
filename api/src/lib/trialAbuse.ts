@@ -115,7 +115,7 @@ export type ClientTrialEligibility = {
 export const TRIAL_USED_ON_DEVICE_MESSAGE =
   "The free trial has already been used on this computer. You're on the Free plan.";
 export const TRIAL_DESKTOP_REQUIRED_MESSAGE =
-  "Your free trial starts when you sign in on the MakeChurchEasy desktop app.";
+  "Your free trial starts when you sign in on the MakeChurchEazy desktop app.";
 
 function toClientTrialEligibility(status: unknown): ClientTrialEligibility | null {
   if (status === "used_on_device") {

@@ -59,7 +59,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
 }
 
-const REPO_URL = "https://github.com/jolamyfoodsng/makechurcheasy-releases/releases";
+const REPO_URL = "https://github.com/jolamyfoodsng/makechurcheasy-v2/releases";
 
 function getPlatformKey(filename: string): PlatformKey | null {
   const lower = filename.toLowerCase();
@@ -198,7 +198,7 @@ export default function DownloadPage() {
       ? `Download for Mac${detected.arch === "arm64" ? " (Apple Silicon)" : " (Intel)"}`
       : detected.os === "windows"
       ? "Download for Windows"
-      : "Download MakeChurchEasy";
+      : "Download MakeChurchEazy";
 
   return (
     <div className={`${styles.home} min-h-screen flex flex-col bg-[#F8FAFC]`}>
@@ -213,7 +213,7 @@ export default function DownloadPage() {
               <span>Native OBS Studio Dock · Free Download</span>
             </span>
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-[#0F172A] tracking-tight leading-[1.1] mb-5">
-              Download MakeChurchEasy
+              Download MakeChurchEazy
             </h1>
             <p className="text-lg sm:text-xl text-[#475569] leading-relaxed">
               Bible presentation, worship lyrics, live media, and AI scripture detection — all unified directly inside OBS Studio. No account required to download.
@@ -406,7 +406,7 @@ export default function DownloadPage() {
                       <div>
                         <p className="font-semibold text-[#0F172A]">Drag to Applications</p>
                         <p className="text-xs text-[#64748B] mt-0.5">
-                          Drag the MakeChurchEasy icon into your macOS Applications folder.
+                          Drag the MakeChurchEazy icon into your macOS Applications folder.
                         </p>
                       </div>
                     </li>
@@ -428,7 +428,7 @@ export default function DownloadPage() {
                       <div>
                         <p className="font-semibold text-[#0F172A]">Launch &amp; connect to OBS</p>
                         <p className="text-xs text-[#64748B] mt-0.5">
-                          Launch MakeChurchEasy. It will detect OBS Studio and configure the presentation dock automatically.
+                          Launch MakeChurchEazy. It will detect OBS Studio and configure the presentation dock automatically.
                         </p>
                       </div>
                     </li>
@@ -464,7 +464,7 @@ export default function DownloadPage() {
                       <div>
                         <p className="font-semibold text-[#0F172A]">Complete installation</p>
                         <p className="text-xs text-[#64748B] mt-0.5">
-                          Follow the setup wizard. MakeChurchEasy will place a shortcut on your desktop and Start Menu.
+                          Follow the setup wizard. MakeChurchEazy will place a shortcut on your desktop and Start Menu.
                         </p>
                       </div>
                     </li>
@@ -475,7 +475,7 @@ export default function DownloadPage() {
                       <div>
                         <p className="font-semibold text-[#0F172A]">Launch &amp; connect to OBS</p>
                         <p className="text-xs text-[#64748B] mt-0.5">
-                          Start MakeChurchEasy alongside OBS Studio to start projecting Bible passages and worship setlists.
+                          Start MakeChurchEazy alongside OBS Studio to start projecting Bible passages and worship setlists.
                         </p>
                       </div>
                     </li>
@@ -509,9 +509,9 @@ export default function DownloadPage() {
                   </div>
 
                   <div className="border-b border-[#F1F5F9] pb-4">
-                    <h4 className="font-bold text-[#0F172A] mb-1">Can I use MakeChurchEasy on multiple computers?</h4>
+                    <h4 className="font-bold text-[#0F172A] mb-1">Can I use MakeChurchEazy on multiple computers?</h4>
                     <p className="text-xs sm:text-sm text-[#64748B] leading-relaxed">
-                      Yes! You can install MakeChurchEasy on your media booth Mac, backup Windows laptop, and home preparation computer with cloud sync.
+                      Yes! You can install MakeChurchEazy on your media booth Mac, backup Windows laptop, and home preparation computer with cloud sync.
                     </p>
                   </div>
 
@@ -605,7 +605,7 @@ export default function DownloadPage() {
                   Need OBS Studio?
                 </h4>
                 <p className="text-xs text-[#64748B] leading-relaxed mb-4">
-                  MakeChurchEasy integrates directly into OBS Studio. If your media computer doesn’t have OBS installed yet, get it free from the official project.
+                  MakeChurchEazy integrates directly into OBS Studio. If your media computer doesn’t have OBS installed yet, get it free from the official project.
                 </p>
                 <a
                   href="https://obsproject.com"

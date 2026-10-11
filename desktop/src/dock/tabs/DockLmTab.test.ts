@@ -7,7 +7,9 @@ import {
   claimNextLmAutoPushCandidate,
   getLmCandidateKey,
   getSelectedTranscriptEntries,
+  isFreshForLmAutoPush,
   isLmAutoPushSuppressed,
+  LM_AUTO_PUSH_MAX_AGE_MS,
   isLmCompactHeight,
   LM_COMPACT_HEIGHT_PX,
   mergeRetainedLmQueue,
@@ -236,5 +238,24 @@ describe("DockLmTab settings helpers", () => {
     expect(speechToScripturePageSource).toContain("const canStopListening = isListening || isConnecting;");
     expect(speechToScripturePageSource).toContain("onClick={canStopListening ? handleStop : handleStart}");
     expect(speechToScripturePageSource).toContain("disabled={checkingAccess || (!canStopListening && !hasCredits)}");
+  });
+});
+
+describe("LM auto-push freshness", () => {
+  const now = 1_000_000;
+  it("auto-pushes only verses detected moments ago", () => {
+    expect(isFreshForLmAutoPush(now - 2_000, now)).toBe(true);
+    expect(isFreshForLmAutoPush(now - LM_AUTO_PUSH_MAX_AGE_MS, now)).toBe(true);
+  });
+  it("never auto-pushes an old detection, even if it shows up again later", () => {
+    expect(isFreshForLmAutoPush(now - LM_AUTO_PUSH_MAX_AGE_MS - 1, now)).toBe(false);
+    expect(isFreshForLmAutoPush(now - 60 * 60_000, now)).toBe(false);
+  });
+  it("treats a detection with no time as not fresh", () => {
+    expect(isFreshForLmAutoPush(undefined, now)).toBe(false);
+  });
+  it("does not forget pushed detections just because they left the list", () => {
+    expect(dockLmTabSource).not.toContain("visibleAutoPushKeys");
+    expect(dockLmTabSource).toContain("if (!isListening) return;");
   });
 });

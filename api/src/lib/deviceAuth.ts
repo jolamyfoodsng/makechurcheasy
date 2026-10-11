@@ -70,7 +70,7 @@ export async function verifyDeviceSecret(
         error: NextResponse.json(
           {
             error: "device_disconnected_by_another_computer",
-            message: "This computer was disconnected because your MakeChurchEasy account was opened on another computer.",
+            message: "This computer was disconnected because your MakeChurchEazy account was opened on another computer.",
           },
           { status: 401, headers: CORS_HEADERS }
         ),

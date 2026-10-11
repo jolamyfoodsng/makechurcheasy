@@ -447,7 +447,7 @@ export function isMceLowerThirdSourceName(sourceName: string): boolean {
 export function getMcePresentationVisibilityKeepSet(
   primarySourceName: string,
   items: ReadonlyArray<{ sourceName: string; sceneItemIndex?: number }>,
-  lowerThirdSourceVisibility: "overlay" | "active-only" | "keep-first" = "active-only",
+  lowerThirdSourceVisibility: "overlay" | "active-only" = "active-only",
   preserveAudio: boolean = true,
 ): Set<string> {
   const primary = primarySourceName.trim();
@@ -468,13 +468,6 @@ export function getMcePresentationVisibilityKeepSet(
         keepSet.add(item.sourceName);
       }
     }
-  } else if (lowerThirdSourceVisibility === "keep-first") {
-    // Legacy mode remains understood for older callers; saved preferences now
-    // migrate to the recommended overlay behavior.
-    const firstMceSource = [...items]
-      .filter((item) => isMcePresentationManagedSource(item.sourceName) && item.sourceName !== primary && (!preserveAudio || !isMceAudioSource(item.sourceName)))
-      .sort((first, second) => (first.sceneItemIndex ?? 0) - (second.sceneItemIndex ?? 0))[0];
-    if (firstMceSource) keepSet.add(firstMceSource.sourceName);
   }
 
   return keepSet;

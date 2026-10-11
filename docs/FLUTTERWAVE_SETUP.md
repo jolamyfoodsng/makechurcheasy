@@ -1,6 +1,6 @@
 # Flutterwave Standard checkout
 
-MakeChurchEasy uses Flutterwave's hosted Standard checkout. The API creates a
+MakeChurchEazy uses Flutterwave's hosted Standard checkout. The API creates a
 server-side payment link, stores the checkout intent, and verifies the returned
 transaction before activating a plan.
 

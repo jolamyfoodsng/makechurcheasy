@@ -107,16 +107,49 @@ export async function GET(req: NextRequest) {
     // Query device counts and latest lastSeen per user
     const deviceCountMap = new Map<string, number>();
     const deviceLastSeenMap = new Map<string, string>();
+    const deviceAppMap = new Map<string, {
+      appVersion: string;
+      appPlatform: string;
+      appVersions: string[];
+      appPlatforms: string[];
+    }>();
     try {
       const deviceAgg = await db
         .collection("devices")
-        .aggregate<{ _id: string; count: number; latestSeen?: string | Date }>([
+        .aggregate<{
+          _id: string;
+          count: number;
+          latestSeen?: string | Date;
+          latestVersion?: string | null;
+          latestPlatform?: string | null;
+          versions?: Array<string | null>;
+          platforms?: Array<string | null>;
+        }>([
           { $match: { userId: { $in: userIds }, $or: [{ status: "active" }, { status: { $exists: false } }] } },
-          { $group: { _id: "$userId", count: { $sum: 1 }, latestSeen: { $max: "$lastSeen" } } },
+          { $sort: { lastSeen: -1 } },
+          {
+            $group: {
+              _id: "$userId",
+              count: { $sum: 1 },
+              latestSeen: { $max: "$lastSeen" },
+              latestVersion: { $first: "$appVersion" },
+              latestPlatform: { $first: "$appPlatform" },
+              versions: { $addToSet: "$appVersion" },
+              platforms: { $addToSet: "$appPlatform" },
+            },
+          },
         ])
         .toArray();
       for (const d of deviceAgg) {
         if (d._id) {
+          const clean = (list?: Array<string | null>) =>
+            Array.from(new Set((list || []).map((v) => String(v || "").trim()).filter(Boolean)));
+          deviceAppMap.set(String(d._id), {
+            appVersion: String(d.latestVersion || "").trim(),
+            appPlatform: String(d.latestPlatform || "").trim(),
+            appVersions: clean(d.versions),
+            appPlatforms: clean(d.platforms),
+          });
           deviceCountMap.set(String(d._id), d.count);
           if (d.latestSeen) {
             deviceLastSeenMap.set(String(d._id), new Date(d.latestSeen).toISOString());
@@ -318,6 +351,12 @@ export async function GET(req: NextRequest) {
         lastLogin: lastLoginRaw,
         lastActive: effectiveLastActive,
         appId: u.appId || "",
+        // Desktop app details from the user's devices (latest device first).
+        deviceCount: deviceCountMap.get(id) ?? 0,
+        appVersion: deviceAppMap.get(id)?.appVersion || u.appVersion || "",
+        appPlatform: deviceAppMap.get(id)?.appPlatform || u.appPlatform || "",
+        appVersions: deviceAppMap.get(id)?.appVersions ?? (u.appVersion ? [String(u.appVersion)] : []),
+        appPlatforms: deviceAppMap.get(id)?.appPlatforms ?? (u.appPlatform ? [String(u.appPlatform)] : []),
         isActive: effectiveLastActive
           ? new Date(effectiveLastActive).getTime() > Date.now() - 30 * 24 * 60 * 60 * 1000
           : false,

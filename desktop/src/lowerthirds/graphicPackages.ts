@@ -120,7 +120,7 @@ export function packageToTheme(pkg: GraphicPackage, extra: { tags?: string[] } =
   return {
     id: packageThemeId(id),
     name: pkg.name,
-    description: pkg.description || "Broadcast graphic from Make Church Easy.",
+    description: pkg.description || "Broadcast graphic from Make Church Eazy.",
     category: category === "speaker" ? "speaker" : "general",
     graphicCategory: category,
     icon: "campaign",

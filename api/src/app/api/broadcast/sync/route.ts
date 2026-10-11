@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
     const auth = await getAuthUserFromRequest(req);
     const user = auth?.mongoUser;
     if (!user?._id) {
-      return NextResponse.json({ success: false, error: "NOT_SIGNED_IN", message: "Sign in to Make Church Easy to multi-stream." }, { status: 401 });
+      return NextResponse.json({ success: false, error: "NOT_SIGNED_IN", message: "Sign in to Make Church Eazy to multi-stream." }, { status: 401 });
     }
     if (user.isActive === false) {
       return NextResponse.json({ success: false, error: "NOT_SIGNED_IN", message: "This account is not active." }, { status: 403 });

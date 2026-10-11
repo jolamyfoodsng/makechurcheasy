@@ -1,5 +1,5 @@
 /**
- * OnboardingPage — Desktop onboarding wizard for MakeChurchEasy.
+ * OnboardingPage — Desktop onboarding wizard for MakeChurchEazy.
  *
  * Flow: Welcome → Connect OBS → Install Dock → Run Diagnostics → Ready
  *
@@ -74,15 +74,15 @@ type OnboardingTutorial = {
  */
 const ONBOARDING_TUTORIALS: Record<number, OnboardingTutorial> = {
   2: {
-    title: "Connect MakeChurchEasy to OBS",
+    title: "Connect MakeChurchEazy to OBS",
     description: "Follow the OBS connection setup before moving on.",
     videoId: "i-WnFFnuCMA",
     watchUrl: "https://youtu.be/i-WnFFnuCMA?si=bnyZ0huirCa_oIaZ&t=16",
     startAt: 16,
   },
   3: {
-    title: "Install MakeChurchEasy Dock",
-    description: "Learn how to add the MakeChurchEasy Dock to OBS.",
+    title: "Install MakeChurchEazy Dock",
+    description: "Learn how to add the MakeChurchEazy Dock to OBS.",
     videoId: "i-WnFFnuCMA",
     watchUrl: "https://youtu.be/i-WnFFnuCMA?si=LwLanAr5wZmXxVyR&t=83",
     startAt: 83,
@@ -402,7 +402,7 @@ export default function OnboardingPage() {
             <Church size={14} />
           </div>
           <div className="ob-brand-info">
-            <span className="ob-brand-name">MakeChurchEasy</span>
+            <span className="ob-brand-name">MakeChurchEazy</span>
             <span className="ob-brand-sub">Setup Guide</span>
           </div>
         </div>
@@ -569,7 +569,7 @@ function StepWelcome({
           <div className="ob-preview-card-header">
             <div className="ob-preview-card-label">
               <Tv size={13} />
-              <span>OBS Studio • MakeChurchEasy</span>
+              <span>OBS Studio • MakeChurchEazy</span>
             </div>
             <span className="ob-showcase-tag">Live Output</span>
           </div>
@@ -577,7 +577,7 @@ function StepWelcome({
           <div className="ob-preview-card-body">
             <img
               src="/obs-studio-preview.png"
-              alt="MakeChurchEasy inside OBS Studio"
+              alt="MakeChurchEazy inside OBS Studio"
               className="ob-preview-card-img"
             />
           </div>
@@ -862,7 +862,7 @@ function StepReady({
         </div>
         <h1 className="ob-card-title">Setup Complete</h1>
         <p className="ob-card-subtitle">
-          MakeChurchEasy is configured and ready for live presentation.
+          MakeChurchEazy is configured and ready for live presentation.
         </p>
       </div>
 

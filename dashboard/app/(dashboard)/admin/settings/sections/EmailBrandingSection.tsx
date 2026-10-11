@@ -78,7 +78,7 @@ export function EmailBrandingSection({ data, onChange, onSave, saving }: Props) 
                 label="App name"
                 value={data.appName}
                 onChange={(e) => update({ appName: e.target.value })}
-                placeholder="MakeChurchEasy"
+                placeholder="MakeChurchEazy"
               />
               <Input
                 label="Support email"
@@ -141,7 +141,24 @@ export function EmailBrandingSection({ data, onChange, onSave, saving }: Props) 
                 label="Logo alt text"
                 value={data.logoAlt}
                 onChange={(e) => update({ logoAlt: e.target.value })}
-                placeholder="MakeChurchEasy"
+                placeholder="MakeChurchEazy"
+              />
+            </div>
+          </div>
+
+          <div className="px-6 py-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Input
+                label="Header mark URL (light background)"
+                value={data.markUrl ?? ""}
+                onChange={(e) => update({ markUrl: e.target.value })}
+                placeholder="https://.../email/mark-blue.png"
+              />
+              <Input
+                label="Footer mark URL (dark background)"
+                value={data.markLightUrl ?? ""}
+                onChange={(e) => update({ markLightUrl: e.target.value })}
+                placeholder="https://.../email/mark-white.png"
               />
             </div>
           </div>

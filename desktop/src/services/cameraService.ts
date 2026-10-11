@@ -1,5 +1,5 @@
 /**
- * Camera Service — MakeChurchEasy
+ * Camera Service — MakeChurchEazy
  *
  * Shared camera transform logic used by presets, layout engine, and repair.
  * Single source of truth for all OBS scene item positioning.

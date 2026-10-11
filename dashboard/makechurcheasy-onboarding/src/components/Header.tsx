@@ -13,7 +13,7 @@ export default function Header({ onSkipSetup, currentStep }: HeaderProps) {
         <div className="flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity">
           <Church className="text-primary-brand w-8 h-8 md:w-9 md:h-9 stroke-[2]" />
           <span className="text-xl md:text-2xl font-display font-bold text-primary-brand tracking-tight">
-            MakeChurchEasy
+            MakeChurchEazy
           </span>
         </div>
 
@@ -25,7 +25,7 @@ export default function Header({ onSkipSetup, currentStep }: HeaderProps) {
               className="text-gray-500 hover:text-primary-brand-dark transition-colors text-sm font-medium"
               onClick={(e) => {
                 e.preventDefault();
-                alert("Need help? Feel free to contact support@makechurcheasy.org");
+                alert("Need help? Feel free to contact support@makechurcheazy.com");
               }}
             >
               Help

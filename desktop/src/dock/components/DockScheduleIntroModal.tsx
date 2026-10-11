@@ -99,81 +99,62 @@ export function DockScheduleIntroModal({ open: controlledOpen, onClose: controll
 
         <div className="dock-schedule-intro__header">
           <div className="dock-schedule-intro__icon-badge">
-            <Icon name="playlist_play" size={26} />
+            <Icon name="playlist_play" size={22} />
           </div>
           <div className="dock-schedule-intro__header-text">
             <span className="dock-schedule-intro__badge">{t("schedule.intro.badge", "New Feature")}</span>
             <h2 id="dock-schedule-intro-title" className="dock-schedule-intro__title">
               {t("schedule.intro.title", "Service Schedule & History")}
             </h2>
-            <p className="dock-schedule-intro__desc">
-              {t("schedule.intro.subtitle", "Organize scriptures, songs, and media in one place, or instantly recall anything previously projected.")}
-            </p>
           </div>
         </div>
 
-        <div className="dock-schedule-intro__body">
-          <div className="dock-schedule-intro__location-banner">
-            <Icon name="pin_drop" size={16} className="dock-schedule-intro__location-icon" />
+        <p className="dock-schedule-intro__desc">
+          {t("schedule.intro.subtitle", "Queue scriptures, songs and media, or bring back anything you already projected.")}
+        </p>
+
+        <ul className="dock-schedule-intro__list">
+          <li className="dock-schedule-intro__item">
+            <span className="dock-schedule-intro__dot" aria-hidden="true" />
             <span>
               <strong>{t("schedule.intro.locationLabel", "Where to find it:")}</strong>{" "}
-              {t(
-                "schedule.intro.locationText",
-                "Located on the left edge of your Dock. Click the playlist icon (📋) on the left sidebar to open or collapse it anytime."
-              )}
+              {t("schedule.intro.locationText", "click the playlist icon on the left edge of your Dock to open or close it.")}
             </span>
-          </div>
-
-          <div className="dock-schedule-intro__cards">
-            <div className="dock-schedule-intro__card">
-              <div className="dock-schedule-intro__card-dot" />
-              <div className="dock-schedule-intro__card-content">
-                <h4 className="dock-schedule-intro__card-title">
-                  {t("schedule.intro.point1Title", "1. Schedule & History Side-by-Side")}
-                </h4>
-                <p className="dock-schedule-intro__card-detail">
-                  {t("schedule.intro.point1Detail", "Shares space next to Bible, Worship, or Notes. Switch tabs to view your queued items or past projection history.")}
-                </p>
-              </div>
-            </div>
-
-            <div className="dock-schedule-intro__card">
-              <div className="dock-schedule-intro__card-dot" />
-              <div className="dock-schedule-intro__card-content">
-                <h4 className="dock-schedule-intro__card-title">
-                  {t("schedule.intro.point2Title", "2. One-Click Live Projection")}
-                </h4>
-                <p className="dock-schedule-intro__card-detail">
-                  {t("schedule.intro.point2Detail", "Click any card in Schedule or History to instantly display it on your live screen and OBS.")}
-                </p>
-              </div>
-            </div>
-
-            <div className="dock-schedule-intro__card">
-              <div className="dock-schedule-intro__card-dot" />
-              <div className="dock-schedule-intro__card-content">
-                <h4 className="dock-schedule-intro__card-title">
-                  {t("schedule.intro.point3Title", "3. Resize & Pin")}
-                </h4>
-                <p className="dock-schedule-intro__card-detail">
-                  {t("schedule.intro.point3Detail", "Drag the right edge to adjust width, or click the Pin icon to keep it open permanently.")}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+          </li>
+          <li className="dock-schedule-intro__item">
+            <span className="dock-schedule-intro__dot" aria-hidden="true" />
+            <span>
+              <strong>{t("schedule.intro.point1Title", "Schedule & History:")}</strong>{" "}
+              {t("schedule.intro.point1Detail", "queue items for the service, or switch tabs to see what you projected earlier.")}
+            </span>
+          </li>
+          <li className="dock-schedule-intro__item">
+            <span className="dock-schedule-intro__dot" aria-hidden="true" />
+            <span>
+              <strong>{t("schedule.intro.point2Title", "One-click projection:")}</strong>{" "}
+              {t("schedule.intro.point2Detail", "click any card to show it on your live screen and OBS.")}
+            </span>
+          </li>
+          <li className="dock-schedule-intro__item">
+            <span className="dock-schedule-intro__dot" aria-hidden="true" />
+            <span>
+              <strong>{t("schedule.intro.point3Title", "Resize & pin:")}</strong>{" "}
+              {t("schedule.intro.point3Detail", "drag the right edge to resize, or pin it to keep it open.")}
+            </span>
+          </li>
+        </ul>
 
         <div className="dock-schedule-intro__footer">
           <span className="dock-schedule-intro__hint">
             <Icon name="help_outline" size={13} />
-            {t("schedule.intro.reopenHint", "You can reopen this guide anytime from the Schedule header (? icon).")}
+            {t("schedule.intro.reopenHint", "Reopen this from the ? icon in the Schedule header.")}
           </span>
           <button
             type="button"
             className="dock-btn dock-btn--primary dock-schedule-intro__get-started-btn"
             onClick={handleDismiss}
           >
-            <span>{t("schedule.intro.gotIt", "Got it, let's go")}</span>
+            <span>{t("schedule.intro.gotIt", "Got it")}</span>
             <Icon name="check" size={14} />
           </button>
         </div>

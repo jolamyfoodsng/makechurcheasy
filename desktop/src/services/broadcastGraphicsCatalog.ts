@@ -220,7 +220,7 @@ export function tickerPackageToTheme(graphicId: string, pkg: TickerPackage): Tic
   return {
     id: tickerPackageThemeId(graphicId),
     name: pkg.name,
-    description: pkg.description || "Ticker from Make Church Easy.",
+    description: pkg.description || "Ticker from Make Church Eazy.",
     accentColor: pkg.color || "#2563eb",
     badge: pkg.badge || "Announcements",
     tickerText: pkg.tickerText || "",

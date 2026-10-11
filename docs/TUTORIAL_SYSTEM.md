@@ -1,4 +1,4 @@
-# MakeChurchEasy Tutorial & Onboarding System
+# MakeChurchEazy Tutorial & Onboarding System
 
 Version: 1.0
 Last Updated: July 2026
@@ -7,7 +7,7 @@ Last Updated: July 2026
 
 # Purpose
 
-This document defines the standard for interactive guided tutorials across every page of MakeChurchEasy. Developers and AI agents must follow these standards to ensure a consistent onboarding experience.
+This document defines the standard for interactive guided tutorials across every page of MakeChurchEazy. Developers and AI agents must follow these standards to ensure a consistent onboarding experience.
 
 No user should ever be left wondering how a feature works. Every page provides immediate access to a guided walkthrough, and incomplete tutorials are clearly indicated until completed.
 

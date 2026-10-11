@@ -3,7 +3,7 @@
  *
  * Allows tying multiple social media channels (YouTube, Facebook, Kick, Twitch, etc.)
  * to a specific Person/Profile (e.g. "Senior Pastor", "Pastor Isaac (Guest)", "Youth Church")
- * with a friendly nickname for 1-click switching in Make Church Easy and OBS Studio.
+ * with a friendly nickname for 1-click switching in Make Church Eazy and OBS Studio.
  */
 
 import { readNativeDockSetting, writeNativeDockSetting } from "./localDockSettings";
@@ -30,8 +30,8 @@ export interface BroadcastChannel {
 
 export interface BroadcastPersonProfile {
   id: string;
-  name: string; // Full label e.g. "Pastor Isaac (Guest Minister)"
-  nickname: string; // Short label e.g. "Pst. Isaac"
+  name: string; // Full label e.g. "Guest Minister"
+  nickname: string; // Short label e.g. "Guest"
   color: string; // Accent color hex
   channels: BroadcastChannel[];
   activeChannelId?: string; // Currently selected active channel for direct streaming
@@ -175,13 +175,13 @@ export const DEFAULT_PROFILES: BroadcastPersonProfile[] = [
   },
   {
     id: "profile-guest-minister",
-    name: "Pastor Isaac (Guest Minister)",
-    nickname: "Pst. Isaac",
+    name: "Guest Minister",
+    nickname: "Guest",
     color: "#3B82F6",
     channels: [
       {
         id: "ch-guest-yt",
-        name: "Pastor Isaac YouTube Channel",
+        name: "Guest Minister YouTube Channel",
         platform: "youtube",
         streamKey: "",
         serverUrl: "Primary YouTube ingest server",
@@ -226,19 +226,22 @@ export const DEFAULT_BROADCAST_STATE: BroadcastStoreState = {
 // In-memory subscribers
 const subscribers = new Set<(state: BroadcastStoreState) => void>();
 
-function cleanProfileLabel(text: string): string {
+function cleanForbiddenTerminology(text: string): string {
   if (!text) return "";
-  return text.replace(/\s+/g, " ").trim();
+  return text
+    .replace(/Sunday Sanctuary/gi, "Sunday Service")
+    .replace(/Church Sanctuary/gi, "Church Main")
+    .replace(/Sanctuary/gi, "Auditorium");
 }
 
 function sanitizeProfiles(profiles: BroadcastPersonProfile[]): BroadcastPersonProfile[] {
   return profiles.map((p) => ({
     ...p,
-    name: cleanProfileLabel(p.name),
-    nickname: cleanProfileLabel(p.nickname),
+    name: cleanForbiddenTerminology(p.name),
+    nickname: cleanForbiddenTerminology(p.nickname),
     channels: p.channels.map((ch) => ({
       ...ch,
-      name: cleanProfileLabel(ch.name),
+      name: cleanForbiddenTerminology(ch.name),
     })),
   }));
 }

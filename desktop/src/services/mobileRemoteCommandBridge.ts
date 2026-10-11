@@ -1060,7 +1060,7 @@ async function resolveMobileTickerPresentation() {
   const colors: TickerThemeColors = { ...baseColors, ...settings.colors };
 
   let brandLogoUrl = resolveOverlayAssetUrl(brandingSettings.brandLogoPath);
-  let brandName = brandingSettings.churchName || "MakeChurchEasy";
+  let brandName = brandingSettings.churchName || "MakeChurchEazy";
   let brandColorOverride = brandingSettings.brandColor || "";
   try {
     const response = await fetch(`/uploads/dock-branding.json?_=${Date.now()}`, { cache: "no-store" });
@@ -1088,7 +1088,7 @@ async function resolveMobileTickerPresentation() {
     option,
     colors,
     brandLogoUrl,
-    brandName: brandName || "MakeChurchEasy",
+    brandName: brandName || "MakeChurchEazy",
     fontFamily: loadDockOutputFontFamily(),
   };
 }

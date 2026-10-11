@@ -132,10 +132,11 @@ html, body { background: ${bg} !important; }
 </style>
 <script src="/kinetic/gsap.min.js"></script>
 ${kineticFontLinks}
-<script src="/kinetic/kinetic-lower-thirds.js?v=5"></script>
+<script src="/kinetic/kinetic-lower-thirds.js?v=6"></script>
 <script src="/kinetic/subscribe-lower-thirds.js?v=1"></script>
-<script src="/kinetic/church-lower-thirds.js?v=1"></script>
+<script src="/kinetic/church-lower-thirds.js?v=3"></script>
 <script src="/kinetic/sunday-lower-thirds.js?v=1"></script>
+<script src="/kinetic/stream-lower-thirds.js?v=2"></script>
 <script src="/kinetic/mce-graphic-packages.js?v=1"></script>
 </head>
 <body>
@@ -262,6 +263,6 @@ export function buildDockTickerPreviewHtml(
     true,
     false,
     resolveOverlayAssetUrl(branding.brandLogoPath),
-    branding.churchName || "MakeChurchEasy",
+    branding.churchName || "MakeChurchEazy",
   );
 }

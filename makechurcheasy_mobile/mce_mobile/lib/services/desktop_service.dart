@@ -151,7 +151,7 @@ class DesktopService extends ChangeNotifier {
 
       return DesktopInfo(
         desktopId: _androidEmulatorHost,
-        name: json['desktop_name']?.toString() ?? 'MakeChurchEasy Desktop',
+        name: json['desktop_name']?.toString() ?? 'MakeChurchEazy Desktop',
         ip: _androidEmulatorHost,
         wsPort: (json['ws_port'] as num?)?.toInt() ?? _mobileWebSocketPort,
         apiPort: (json['api_port'] as num?)?.toInt() ?? 45678,

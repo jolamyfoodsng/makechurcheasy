@@ -116,16 +116,6 @@ const TIER_CONFIG: Record<PerformanceTier, {
   },
 };
 
-// Compatibility mode overrides — forces low-tier browser settings regardless of tier
-const COMPAT_BROWSER_SETTINGS: BrowserSourceSettings = {
-  allowAnimations: false,
-  allowBlurEffects: false,
-  allowBackdropFilter: false,
-  allowWebGL: false,
-  browserRefreshRateMs: 1000,
-  browserUpdateBudgetPerSecond: 1,
-};
-
 // ---------------------------------------------------------------------------
 // GPU detection heuristics — known weak integrated GPUs
 // ---------------------------------------------------------------------------
@@ -228,21 +218,6 @@ function emitChange(profile: DevicePerformanceProfile): void {
 export function onPerformanceTierChange(listener: Listener): () => void {
   listeners.add(listener);
   return () => { listeners.delete(listener); };
-}
-
-// ---------------------------------------------------------------------------
-// DOM compat-mode attribute
-// ---------------------------------------------------------------------------
-
-function applyCompatModeDOM(profile: DevicePerformanceProfile): void {
-  if (typeof document === "undefined") return; // SSR / CEF safety
-
-  const body = document.body;
-  if (profile.compatibilityMode) {
-    body.dataset.compatMode = "true";
-  } else {
-    delete body.dataset.compatMode;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -386,18 +361,15 @@ export async function init(): Promise<DevicePerformanceProfile> {
   const score = calculateScore(hw);
   const tier = scoreToTier(score.total);
 
-  // Check for GPU compatibility mode
-  const compatMode = isWeakGPU(hw.gpuName);
-
-  const browserSettings = compatMode
-    ? { ...COMPAT_BROWSER_SETTINGS }
-    : { ...TIER_CONFIG[tier].browser };
+  // There is no "compatibility mode" any more. The GPU name only feeds the
+  // performance score (scoreGPU), which picks the tier and the polling speed.
+  const browserSettings = { ...TIER_CONFIG[tier].browser };
 
   currentProfile = {
     hardware: hw,
     score,
     tier,
-    compatibilityMode: compatMode,
+    compatibilityMode: false,
     browser: browserSettings,
     pollingIntervalCap: TIER_CONFIG[tier].pollingCap,
     maxConcurrentRequests: TIER_CONFIG[tier].maxConcurrent,
@@ -411,7 +383,7 @@ export async function init(): Promise<DevicePerformanceProfile> {
     localStorage.setItem("ocs-perf-profile-v1", JSON.stringify({
       tier,
       score,
-      compatibilityMode: compatMode,
+      compatibilityMode: false,
       hardware: {
         cpuModel: hw.cpuModel,
         cpuCores: hw.cpuCores,
@@ -423,12 +395,9 @@ export async function init(): Promise<DevicePerformanceProfile> {
   } catch { /* non-critical */ }
 
   console.log(`[PERF] Tier: ${tier} (score ${score.total}/12) | CPU: ${score.cpu} RAM: ${score.ram} GPU: ${score.gpu}`);
-  console.log(`[PERF] GPU: ${hw.gpuName} | Compat mode: ${compatMode}`);
+  console.log(`[PERF] GPU: ${hw.gpuName}`);
   console.log(`[PERF] RAM: ${hw.totalRAMMB}MB total, ${hw.availableRAMMB}MB available`);
   console.log(`[PERF] Polling cap: ${currentProfile.pollingIntervalCap}ms | Max concurrent: ${currentProfile.maxConcurrentRequests} | RPS: ${currentProfile.requestsPerSecondBudget}`);
-
-  // Apply compat-mode attribute to <body> for global CSS overrides
-  applyCompatModeDOM(currentProfile);
 
   // Start memory monitoring (every 12s via sysinfo — more reliable than performance.memory)
   startMemoryMonitoring();
@@ -447,7 +416,8 @@ export function getDeviceProfile(): DevicePerformanceProfile | null {
     if (cached) {
       const parsed = JSON.parse(cached);
       if (parsed?.hardware && parsed?.tier) {
-        return parsed as DevicePerformanceProfile;
+        // Older versions stored compatibilityMode: true for weak GPUs. It no longer exists.
+        return { ...parsed, compatibilityMode: false } as DevicePerformanceProfile;
       }
     }
   } catch { /* ignore */ }
@@ -502,10 +472,11 @@ export function getBrowserSourceSettings(): BrowserSourceSettings {
 }
 
 /**
- * Whether compatibility mode is active (weak GPU detected).
+ * Compatibility mode was removed: a weak GPU only lowers the performance tier.
+ * Kept so existing callers keep working; always false.
  */
 export function isCompatibilityMode(): boolean {
-  return currentProfile?.compatibilityMode ?? false;
+  return false;
 }
 
 /**
@@ -534,49 +505,14 @@ export function isEffectAllowed(effect: "animations" | "blur" | "backdropFilter"
 // ---------------------------------------------------------------------------
 
 /**
- * Remove GPU-heavy CSS properties from a CSS string when compat mode is active.
- * This targets inline theme CSS that will be rendered in OBS browser sources (CEF),
- * which are separate HTML documents NOT covered by the main app's compat-mode.css.
+ * Compatibility mode was removed, so theme CSS for OBS browser sources is no
+ * longer rewritten. Kept so existing callers keep working; returns the CSS as is.
  *
- * Strips: backdrop-filter, animation/animation-*, filter,
- * and caps box-shadow to a small safe value.
+ * (The old version removed animations but left elements that start hidden and
+ * fade in stuck invisible. Do not bring back "animation: none" style stripping.)
  */
 export function stripCompatModeCSS(css: string): string {
-  if (!isCompatibilityMode()) return css;
-
-  let out = css;
-
-  // Remove backdrop-filter and -webkit-backdrop-filter declarations
-  out = out.replace(/-webkit-backdrop-filter\s*:[^;]+;?\s*/gi, "");
-  out = out.replace(/backdrop-filter\s*:[^;]+;?\s*/gi, "");
-
-  // Remove all animation-* properties and animation shorthand
-  out = out.replace(/animation-name\s*:[^;]+;?\s*/gi, "");
-  out = out.replace(/animation-duration\s*:[^;]+;?\s*/gi, "");
-  out = out.replace(/animation-delay\s*:[^;]+;?\s*/gi, "");
-  out = out.replace(/animation-fill-mode\s*:[^;]+;?\s*/gi, "");
-  out = out.replace(/animation-iteration-count\s*:[^;]+;?\s*/gi, "");
-  out = out.replace(/animation-timing-function\s*:[^;]+;?\s*/gi, "");
-  out = out.replace(/animation-play-state\s*:[^;]+;?\s*/gi, "");
-  out = out.replace(/animation\s*:[^;]+;?\s*/gi, "");
-
-  // Remove filter declarations
-  out = out.replace(/filter\s*:[^;]+;?\s*/gi, "");
-
-  // Cap box-shadow: replace large shadows with a small safe one
-  // Matches any box-shadow value that has a blur-radius > 8px
-  out = out.replace(
-    /box-shadow\s*:[^;]+;?\s*/gi,
-    "box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12) !important;\n"
-  );
-
-  // Strip `opacity: 0` and `visibility: hidden` so content is visible
-  // when animations are removed. Many themes start invisible then animate in.
-  // Use lookahead to avoid matching `opacity: 0.5` or `visibility: visible`.
-  out = out.replace(/opacity\s*:\s*0(?=\s|;|!|})/gi, "");
-  out = out.replace(/visibility\s*:\s*hidden(?=\s|;|!|})/gi, "");
-
-  return out;
+  return css;
 }
 
 /**
@@ -596,9 +532,7 @@ export function setTierOverride(tier: PerformanceTier | null): void {
   currentProfile.maxConcurrentRequests = TIER_CONFIG[tier].maxConcurrent;
   currentProfile.requestsPerSecondBudget = TIER_CONFIG[tier].requestsPerSecond;
 
-  if (!currentProfile.compatibilityMode) {
-    currentProfile.browser = { ...TIER_CONFIG[tier].browser };
-  }
+  currentProfile.browser = { ...TIER_CONFIG[tier].browser };
 
   emitChange(currentProfile);
   console.log(`[PERF] Tier override → ${tier}`);
@@ -630,9 +564,7 @@ function startMemoryMonitoring(): void {
         currentProfile.maxConcurrentRequests = TIER_CONFIG[newTier].maxConcurrent;
         currentProfile.requestsPerSecondBudget = TIER_CONFIG[newTier].requestsPerSecond;
 
-        if (!currentProfile.compatibilityMode) {
-          currentProfile.browser = { ...TIER_CONFIG[newTier].browser };
-        }
+        currentProfile.browser = { ...TIER_CONFIG[newTier].browser };
 
         console.log(`[PERF] Memory-based tier ${downgraded ? "downgrade" : "restore"} → ${newTier} (${(mem.availableFraction * 100).toFixed(1)}% RAM available)`);
         emitChange(currentProfile);

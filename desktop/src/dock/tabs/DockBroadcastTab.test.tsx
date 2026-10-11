@@ -20,7 +20,7 @@ describe("DockBroadcastTab UI & Visual Leading", () => {
 
   it("renders with Step 1 (Profile), Step 2 (Channels), and Step 3 (Broadcast action)", () => {
     const html = renderToStaticMarkup(<DockBroadcastTab />);
-
+    
     // Step 1: Profile section
     expect(html).toContain("Profile");
     expect(html).toContain("New Profile");
@@ -37,6 +37,10 @@ describe("DockBroadcastTab UI & Visual Leading", () => {
     expect(html).toContain("Enter Stream Key to Start");
   });
 
+  it("strictly enforces zero occurrences of the forbidden word", () => {
+    const html = renderToStaticMarkup(<DockBroadcastTab />);
+    expect(html.toLowerCase()).not.toContain("sanctuary");
+  });
 
   it("renders sleek multi-streaming quota badge in header instead of bulky card", () => {
     const html = renderToStaticMarkup(<DockBroadcastTab />);

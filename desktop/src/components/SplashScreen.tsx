@@ -34,7 +34,7 @@ export default function SplashScreen({ ready, onDone }: SplashScreenProps) {
     <div className={`splash-screen${fading ? " splash-fade-out" : ""}${isTest ? " splash-screen--test" : ""}`}>
       <img
         src={getSplashImageSrc()}
-        alt="MakeChurchEasy"
+        alt="MakeChurchEazy"
         className="splash-image"
         draggable={false}
       />

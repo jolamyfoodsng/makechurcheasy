@@ -1,5 +1,5 @@
 /**
- * DockEventTab.tsx — Event tab for the MakeChurchEasy Dock
+ * DockEventTab.tsx — Event tab for the MakeChurchEazy Dock
  *
  * Lets the user create and select events, edit details,
  * and stage event graphics for display on OBS.

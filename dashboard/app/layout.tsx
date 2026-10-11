@@ -18,11 +18,11 @@ export const metadata: Metadata = {
     title: "MCE Admin",
   },
   title: {
-    default: "MakeChurchEasy | Church Presentation Software for OBS",
-    template: "%s | MakeChurchEasy",
+    default: "MakeChurchEazy | Church Presentation Software for OBS",
+    template: "%s | MakeChurchEazy",
   },
   description:
-    "MakeChurchEasy is an all-in-one church presentation and OBS software for displaying Bible verses, worship lyrics, media, lower thirds, announcements, AI tools, and livestream graphics.",
+    "MakeChurchEazy is an all-in-one church presentation and OBS software for displaying Bible verses, worship lyrics, media, lower thirds, announcements, AI tools, and livestream graphics.",
   keywords: [
     "church presentation software",
     "OBS Studio church",
@@ -37,24 +37,33 @@ export const metadata: Metadata = {
     "OBS plugin church",
     "church announcements display",
   ],
-  authors: [{ name: "MakeChurchEasy" }],
-  creator: "MakeChurchEasy",
-  publisher: "MakeChurchEasy",
+  authors: [{ name: "MakeChurchEazy" }],
+  creator: "MakeChurchEazy",
+  publisher: "MakeChurchEazy",
   metadataBase: new URL("https://makechurcheazy.com"),
   openGraph: {
     type: "website",
     locale: "en_US",
     url: "https://makechurcheazy.com",
     siteName: "MakeChurchEazy",
-    title: socialTitle,
-    description: socialDescription,
-    images: [socialPreview],
+    title: "MakeChurchEazy | Church Presentation Software for OBS",
+    description:
+      "MakeChurchEazy is an all-in-one church presentation and OBS software for displaying Bible verses, worship lyrics, media, lower thirds, announcements, AI tools, and livestream graphics.",
+    images: [
+      {
+        url: "/og-image.jpg",
+        width: 1376,
+        height: 768,
+        alt: "MakeChurchEazy — Church Presentation Software for OBS Studio. Get Your First Month Free!",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
-    title: socialTitle,
-    description: socialDescription,
-    images: [socialPreview],
+    title: "MakeChurchEazy | Church Presentation Software for OBS",
+    description:
+      "All-in-one church presentation and OBS software for Bible verses, worship lyrics, media, lower thirds, AI tools, and livestream graphics. Get your first month free!",
+    images: ["/og-image.jpg"],
   },
   robots: {
     index: true,
@@ -108,16 +117,16 @@ const siteJsonLd = {
       "@type": "WebSite",
       "@id": "https://makechurcheazy.com/#website",
       url: "https://makechurcheazy.com",
-      name: "MakeChurchEasy",
+      name: "MakeChurchEazy",
       description:
-        "MakeChurchEasy is an all-in-one church presentation and OBS software for displaying Bible verses, worship lyrics, media, lower thirds, announcements, AI tools, and livestream graphics.",
+        "MakeChurchEazy is an all-in-one church presentation and OBS software for displaying Bible verses, worship lyrics, media, lower thirds, announcements, AI tools, and livestream graphics.",
       publisher: { "@id": "https://makechurcheazy.com/#organization" },
       inLanguage: "en",
     },
     {
       "@type": "Organization",
       "@id": "https://makechurcheazy.com/#organization",
-      name: "MakeChurchEasy",
+      name: "MakeChurchEazy",
       url: "https://makechurcheazy.com",
       logo: {
         "@type": "ImageObject",
@@ -127,7 +136,7 @@ const siteJsonLd = {
     {
       "@type": "SoftwareApplication",
       "@id": "https://makechurcheazy.com/#software",
-      name: "MakeChurchEasy",
+      name: "MakeChurchEazy",
       url: "https://makechurcheazy.com",
       description:
         "Church presentation and OBS software for Bible verses, worship lyrics, media, lower thirds, announcements, and livestream graphics.",

@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
         email,
         name: String((authUser.mongoUser as any)?.name || "").trim() || undefined,
         redirectUrl: callbackUrl,
-        description: `MakeChurchEasy ${selectedPack.hours}h (${selectedPack.credits} credits) Top-up`,
+        description: `MakeChurchEazy ${selectedPack.hours}h (${selectedPack.credits} credits) Top-up`,
         metadata: {
           type: "transcription_topup",
           userId,

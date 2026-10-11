@@ -108,9 +108,11 @@
     min-height: 100vh;
     margin-left: auto;
     margin-right: auto;
-    opacity: 0;
     padding: 0.5rem 1rem;
-    animation: fadeIn 0.5s ease-out forwards;
+    /* "both" hides the page only while the animation runs. Never rely on a base
+       opacity: 0 — compat mode (weak GPUs) turns animations off, which left
+       every page invisible on some Windows PCs. */
+    animation: fadeIn 0.5s ease-out both;
 }
 
 .app-page__inner {

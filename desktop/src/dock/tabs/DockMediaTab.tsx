@@ -1,5 +1,5 @@
 /**
- * DockMediaTab.tsx — Media tab for the MakeChurchEasy Dock
+ * DockMediaTab.tsx — Media tab for the MakeChurchEazy Dock
  *
  * Lists all sources in the current OBS scene and lets the user:
  *   • Toggle source visibility (show/hide)

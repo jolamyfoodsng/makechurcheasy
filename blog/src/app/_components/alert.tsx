@@ -19,7 +19,7 @@ const Alert = ({ preview }: Props) => {
             </>
           ) : (
             <>
-              MakeChurchEasy helps churches prepare Bible presentations,
+              MakeChurchEazy helps churches prepare Bible presentations,
               worship lyrics, media, and live streams.
             </>
           )}

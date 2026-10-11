@@ -9,15 +9,15 @@ export function ConnectionUrls() {
                 <Link className="urls-header-icon" />
                 <div>
                     <h2 className="urls-title">Dock Connection URLs</h2>
-                    <p className="urls-subtitle">Connect your apps to MakeChurchEasy Dock</p>
+                    <p className="urls-subtitle">Connect your apps to MakeChurchEazy Dock</p>
                 </div>
             </div>
 
             {/* URL 1 */}
             <div className="url-group">
                 <label className="url-label-block">
-                    <span className="url-label-text text-indigo">MakeChurchEasy Dock URL (App Connection)</span>
-                    <p className="url-label-desc">Use this URL to connect external apps (OBS, mobile apps, tools) to your MakeChurchEasy Dock.</p>
+                    <span className="url-label-text text-indigo">MakeChurchEazy Dock URL (App Connection)</span>
+                    <p className="url-label-desc">Use this URL to connect external apps (OBS, mobile apps, tools) to your MakeChurchEazy Dock.</p>
                     <div className="url-input-group">
                         <input
                             readOnly
@@ -60,7 +60,7 @@ export function ConnectionUrls() {
                     <span className="urls-info-title">What do these URLs do?</span>
                 </div>
                 <ul className="urls-info-list">
-                    <li>Dock URL: Allows other applications to send commands, receive updates, and control MakeChurchEasy features.</li>
+                    <li>Dock URL: Allows other applications to send commands, receive updates, and control MakeChurchEazy features.</li>
                     <li>LLM URL: Powers voice understanding, Bible search, verse matching, and AI responses.</li>
                 </ul>
                 <div className="urls-info-footer">

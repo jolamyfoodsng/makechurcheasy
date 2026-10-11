@@ -1,11 +1,11 @@
 {
-    "name": "MakeChurchEasy",
-    "short_name": "MakeChurchEasy",
+    "name": "MakeChurchEazy",
+    "short_name": "MakeChurchEazy",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0F172A",
     "theme_color": "#1D4ED8",
-    "description": "MakeChurchEasy mobile control for your OBS presentation.",
+    "description": "MakeChurchEazy mobile control for your OBS presentation.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

@@ -51,7 +51,7 @@ export default function LibraryPage({ songsOnly = false }: Props) {
           </h1>
           <p className="lib-subtitle">
             {songsOnly
-              ? "Manage the worship songs and lyrics that appear in the MakeChurchEasy Dock."
+              ? "Manage the worship songs and lyrics that appear in the MakeChurchEazy Dock."
               : tab === "media"
                 ? "Manage videos, images, and backgrounds for your service."
                 : "Manage your worship song database and lyrics."}

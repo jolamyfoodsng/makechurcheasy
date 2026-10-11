@@ -285,7 +285,7 @@ function BrandingPreview({ branding }: { branding: ChurchProfileType["branding"]
               TA
             </div>
             <div>
-              <p className="text-white text-xs font-bold">Tayo Akosile</p>
+              <p className="text-white text-xs font-bold">Your Pastor's Name</p>
               <p className="text-white/60 text-[10px]">Lead Pastor</p>
             </div>
           </div>

@@ -115,7 +115,7 @@ describe("Billing — plan resolution from Paystack data", () => {
   });
 
   it("resolves plan from data.plan (Paystack subscription plan name)", () => {
-    const data = { plan: "MakeChurchEasy Pro Monthly" };
+    const data = { plan: "MakeChurchEazy Pro Monthly" };
     expect(resolvePlan(data)).toBe("pro");
   });
 
@@ -135,7 +135,7 @@ describe("Billing — plan resolution from Paystack data", () => {
   });
 
   it("prefers metadata.plan over data.plan", () => {
-    const data = { metadata: { plan: "basic" }, plan: "MakeChurchEasy Pro Monthly" };
+    const data = { metadata: { plan: "basic" }, plan: "MakeChurchEazy Pro Monthly" };
     expect(resolvePlan(data)).toBe("basic");
   });
 });

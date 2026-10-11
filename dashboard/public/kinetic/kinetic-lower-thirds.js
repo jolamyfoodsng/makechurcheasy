@@ -1,5 +1,5 @@
 /*
- * Make Church Easy — Kinetic lower thirds engine.
+ * Make Church Eazy — Kinetic lower thirds engine.
  *
  * Twenty-five GSAP-driven name straps (21–25 are the "Modern" wide-italic family). The lower-third overlay renders a theme's
  * HTML (a `.kx-root` element carrying the field values as data attributes),
@@ -578,7 +578,7 @@
   ];
 
   /* Every strap ships with the same neutral sample text; churches type their own in the Dock. */
-  var SAMPLE_TEXT = { firstName: "TAYO", lastName: "AKOSILE", title: "FOUNDER & CEO", organization: "MAKECHURCHEAZY" };
+  var SAMPLE_TEXT = { firstName: "YOUR", lastName: "NAME", title: "YOUR TITLE", organization: "YOUR CHURCH" };
   T.forEach(function (t) { t.fields.forEach(function (f) { if (SAMPLE_TEXT[f[1]] != null) f[3] = SAMPLE_TEXT[f[1]]; }); });
 
   T.forEach(function (t) { if (t.mx) t.build = mxWrap(t.build); });
@@ -593,7 +593,7 @@
         // Optional per-family metadata (e.g. church-lower-thirds.js): category, tags, default hold,
         // and typed fields [builderKey, themeKey, label, default, type, options].
         category: t.category, group: t.group, tags: t.tags, hold: t.hold,
-        fields: t.fields.map(function (f) { return { key: f[1], label: f[2], defaultValue: f[3], type: f[4] || "text", options: f[5] || undefined }; })
+        fields: t.fields.map(function (f) { return { key: f[1], label: f[2], defaultValue: f[3], type: f[4] || "text", options: f[5] || undefined, multiline: (f[8] && f[8].multiline === true) || undefined }; })
       };
     });
   }

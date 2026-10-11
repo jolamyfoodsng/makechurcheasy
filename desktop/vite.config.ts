@@ -202,7 +202,7 @@ function renderBlockedHtmlPage(): string {
   <body>
     <main class="panel">
       <h1>Authentication Required</h1>
-      <p>Please open the MakeChurchEasy desktop app and log in first.</p>
+      <p>Please open the MakeChurchEazy desktop app and log in first.</p>
       <button type="button" onclick="window.location.reload()">Refresh</button>
       <p class="hint">This page will start working again after the desktop app restores the local session.</p>
     </main>

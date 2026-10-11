@@ -1,5 +1,5 @@
 /**
- * MakeChurchEasy Analytics Worker
+ * MakeChurchEazy Analytics Worker
  *
  * Lightweight analytics endpoint replacing PostHog.
  * Stores events in KV with daily rollups.
@@ -196,7 +196,7 @@ async function dashboard(env: Env): Promise<string> {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MakeChurchEasy Analytics</title>
+  <title>MakeChurchEazy Analytics</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a14; color: #e0e0e0; padding: 24px; }
@@ -217,7 +217,7 @@ async function dashboard(env: Env): Promise<string> {
   </style>
 </head>
 <body>
-  <h1>MakeChurchEasy Analytics</h1>
+  <h1>MakeChurchEazy Analytics</h1>
   <p class="subtitle">${date} &mdash; Live dashboard</p>
 
   <div class="grid">

@@ -280,7 +280,7 @@ class UpdateDownloadManager {
     }
   }
 
-  /** Install the downloaded update and restart MakeChurchEasy. */
+  /** Install the downloaded update and restart MakeChurchEazy. */
   public async installNow(): Promise<void> {
     const prepared = this.prepared;
     if (!prepared || this.isBusy()) return;

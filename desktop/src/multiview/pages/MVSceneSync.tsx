@@ -7,7 +7,7 @@
  *
  * Features:
  *  - Sync status indicator (connected/disconnected)
- *  - Managed scene list (scenes created by MakeChurchEasy)
+ *  - Managed scene list (scenes created by MakeChurchEazy)
  *  - Scene conflict detection (renamed/missing scenes)
  *  - Re-link, rename, delete managed scenes
  *  - Slot-based push workflow
@@ -347,7 +347,7 @@ export function MVSceneSync() {
           </div>
         )}
 
-        {/* Managed Scenes — scenes created by MakeChurchEasy */}
+        {/* Managed Scenes — scenes created by MakeChurchEazy */}
         {!managedLoading && managedScenes.length > 0 && (
           <div style={{
             background: "var(--surface-dark)",
@@ -358,7 +358,7 @@ export function MVSceneSync() {
           }}>
             <h3 style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
               <Icon name="verified" size={16} style={{ color: "var(--primary)" }} />
-              Managed by MakeChurchEasy
+              Managed by MakeChurchEazy
               <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text-muted)" }}>
                 ({managedScenes.length} scene{managedScenes.length !== 1 ? "s" : ""})
               </span>

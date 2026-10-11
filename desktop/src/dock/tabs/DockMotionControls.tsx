@@ -112,7 +112,7 @@ export default function DockMotionControls({
         alignItems: "end",
       }}
     >
-      {showSpeaker && (
+      {showSpeaker && speakers.length > 0 && (
       <div style={{ gridColumn: "1 / -1" }}>
         <label style={labelStyle} htmlFor="dock-motion-speaker">{t("lowerThird.speaker", "Speaker")}</label>
         {speakers.length > 0 ? (
@@ -132,11 +132,7 @@ export default function DockMotionControls({
               </option>
             ))}
           </select>
-        ) : (
-          <div style={{ ...inputStyle, lineHeight: 1.4 }}>
-            {t("lowerThird.noSpeakersMotion", "No speakers yet. Add them in Ministry Settings to pick them here.")}
-          </div>
-        )}
+        ) : null}
       </div>
       )}
       <div style={{ gridColumn: "1 / -1" }}>

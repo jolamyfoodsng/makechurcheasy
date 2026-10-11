@@ -1,5 +1,5 @@
 /**
- * AppErrorBoundary.tsx — MakeChurchEasy
+ * AppErrorBoundary.tsx — MakeChurchEazy
  *
  * Catches runtime React exceptions and dynamic module chunk loading errors,
  * rendering a clean, brand-aligned fallback UI with recovery actions instead of
@@ -50,7 +50,7 @@ export class AppErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error("[MakeChurchEasy] Unhandled application error caught by AppErrorBoundary:", error, errorInfo);
+    console.error("[MakeChurchEazy] Unhandled application error caught by AppErrorBoundary:", error, errorInfo);
     this.setState({ errorInfo });
 
     // Auto-reload on stale chunk hashes if not recently reloaded
@@ -62,7 +62,7 @@ export class AppErrorBoundary extends Component<Props, State> {
       const reloadKey = "mce_chunk_error_reload_" + Math.floor(Date.now() / 15000);
       if (!sessionStorage.getItem(reloadKey)) {
         sessionStorage.setItem(reloadKey, "1");
-        console.warn("[MakeChurchEasy] Stale chunk detected, refreshing page in 1s...");
+        console.warn("[MakeChurchEazy] Stale chunk detected, refreshing page in 1s...");
         setTimeout(() => {
           window.location.reload();
         }, 1000);
@@ -93,7 +93,7 @@ export class AppErrorBoundary extends Component<Props, State> {
   private handleCopyError = () => {
     const { error, errorInfo } = this.state;
     const text = [
-      `MakeChurchEasy Application Error Report`,
+      `MakeChurchEazy Application Error Report`,
       `Timestamp: ${new Date().toISOString()}`,
       `URL: ${window.location.href}`,
       `Error: ${error?.name ?? "Error"}: ${error?.message ?? "Unknown error"}`,
@@ -115,7 +115,7 @@ export class AppErrorBoundary extends Component<Props, State> {
     const { error, errorInfo, showDetails, copied, isChunkError } = this.state;
     const title = this.props.fallbackTitle ?? (isChunkError ? "App Update Available" : "Something Went Wrong");
     const description = isChunkError
-      ? "A new version of MakeChurchEasy or a module chunk was updated. Reloading will fetch the latest version."
+      ? "A new version of MakeChurchEazy or a module chunk was updated. Reloading will fetch the latest version."
       : "An unexpected error occurred in this view. Your saved songs, themes, and service plans remain safe.";
 
     return (
@@ -126,7 +126,7 @@ export class AppErrorBoundary extends Component<Props, State> {
               <Icon name={isChunkError ? "update" : "warning"} size={28} />
             </div>
             <div className="mce-error-boundary-brand">
-              <span className="mce-error-boundary-app-name">MakeChurchEasy</span>
+              <span className="mce-error-boundary-app-name">MakeChurchEazy</span>
               <span className="mce-error-boundary-tag">Application Recovery</span>
             </div>
           </div>

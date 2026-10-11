@@ -175,7 +175,7 @@ export function buildTelegramApiErrorMessage(
   const stack = details.stack ? `\n<b>Stack:</b>\n<pre>${escapeTelegramHtml(details.stack)}</pre>` : "";
 
   const message = [
-    `🚨 <b>MakeChurchEasy API ${details.category === "response" ? "error response" : "exception"}</b>`,
+    `🚨 <b>MakeChurchEazy API ${details.category === "response" ? "error response" : "exception"}</b>`,
     `<b>Alert ID:</b> ${escapeTelegramHtml(details.alertId)}`,
     `<b>Request ID:</b> ${escapeTelegramHtml(details.requestId)}`,
     `<b>Status:</b> ${details.statusCode}`,

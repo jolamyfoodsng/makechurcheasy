@@ -1,4 +1,4 @@
-# Credit Gating Audit Report — MakeChurchEasy
+# Credit Gating Audit Report — MakeChurchEazy
 
 **Date**: 2026-03-28  
 **Scope**: Every feature that consumes credits or is behind a plan entitlement  

@@ -1799,7 +1799,7 @@ export default function SpeechToScripturePage() {
               <button
                 className="sts3-modal-btn sts3-modal-btn--primary"
                 onClick={() => lmDockService.confirmStillUsing()}
-                title="Yes, keep listening"
+                title="Keep listening"
               >
                 Yes, keep listening
               </button>

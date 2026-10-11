@@ -507,7 +507,7 @@ export function parseDockSessionJSON(jsonString: string): DockSessionExport {
     throw new Error("The selected file is not valid JSON.");
   }
   if (!isRecord(parsed) || parsed._format !== DOCK_SESSION_FORMAT) {
-    throw new Error("This is not a MakeChurchEasy Dock session file.");
+    throw new Error("This is not a MakeChurchEazy Dock session file.");
   }
   if (parsed._version !== DOCK_SESSION_VERSION) {
     throw new Error(`Unsupported Dock session version: ${String(parsed._version ?? "unknown")}.`);

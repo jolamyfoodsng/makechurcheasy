@@ -288,7 +288,7 @@ export const STARTER_HTML = `<div style="font-family: system-ui, sans-serif; pad
   <p style="margin: 0 0 18px; font-size: 14px; line-height: 1.5; color: #4b5563;">
     A short line that explains what is new.
   </p>
-  <a href="https://makechurcheasy.com" style="display: inline-block; padding: 10px 18px; border-radius: 8px; background: #0238E9; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600;">
+  <a href="https://makechurcheazy.com" style="display: inline-block; padding: 10px 18px; border-radius: 8px; background: #0238E9; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 600;">
     Learn more
   </a>
 </div>`;
@@ -348,7 +348,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     patch: {
       layout: "standard",
       tone: "info",
-      title: "New in MakeChurchEasy",
+      title: "New in MakeChurchEazy",
       message: "Write what changed and why it helps your team on Sunday.",
       buttons: [newButton({ label: "See what's new", url: "/features" })],
       tags: "update",

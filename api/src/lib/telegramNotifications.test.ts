@@ -18,7 +18,7 @@ test("formats signup notifications with name, country, and date", () => {
     { TELEGRAM_NOTIFICATION_TIMEZONE: "UTC" },
   );
 
-  assert.match(message, /New MakeChurchEasy signup/);
+  assert.match(message, /New MakeChurchEazy signup/);
   assert.match(message, /Ada &lt;Admin&gt;/);
   assert.match(message, /Nigeria/);
   assert.match(message, /14 Aug 2026/);

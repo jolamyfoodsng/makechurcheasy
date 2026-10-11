@@ -7,7 +7,11 @@ export interface ProjectionSettings {
   presentationOnly: boolean;
   /** Hide other sources created by MCE when a presentation source is sent. */
   presentationSourceVisibility: "active-only" | "keep-visible";
-  /** Show lower thirds over existing content, or hide all other MCE content. */
+  /**
+   * What a lower third does to the rest of MCE Presentation.
+   * "overlay" (default): it sits on top of whatever is on screen and only swaps out other lower thirds.
+   * "active-only": every other MCE source is hidden while the lower third shows.
+   */
   lowerThirdSourceVisibility: "overlay" | "active-only";
   /** Decide whether background audio keeps playing when other presentation content is pushed. */
   preserveAudioOnSourceSwitch: boolean;

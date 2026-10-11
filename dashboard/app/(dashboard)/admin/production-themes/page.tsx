@@ -99,7 +99,7 @@ const DEFAULT_VARIABLES = [
     key: "title",
     label: "Title",
     type: "text",
-    defaultValue: "Pastor Tayo Akosile",
+    defaultValue: "Your Pastor's Name",
     placeholder: "Enter the main line",
     group: "Content",
     required: true,

@@ -140,7 +140,7 @@ export default function FirebaseAuthAction() {
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
           <div className="w-full max-w-[420px]">
             <div className="flex flex-col items-center mb-6">
-              <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEasy" className="h-12 w-auto mb-3" />
+              <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEazy" className="h-12 w-auto mb-3" />
             </div>
             <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
               <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -164,7 +164,7 @@ export default function FirebaseAuthAction() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="w-full max-w-[420px]">
           <div className="flex flex-col items-center mb-6">
-            <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEasy" className="h-12 w-auto mb-3" />
+            <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEazy" className="h-12 w-auto mb-3" />
           </div>
           <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
             <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -202,7 +202,7 @@ export default function FirebaseAuthAction() {
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
           <div className="w-full max-w-[420px]">
             <div className="flex flex-col items-center mb-6">
-              <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEasy" className="h-12 w-auto mb-3" />
+              <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEazy" className="h-12 w-auto mb-3" />
             </div>
             <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
               <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -227,7 +227,7 @@ export default function FirebaseAuthAction() {
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
           <div className="w-full max-w-[420px]">
             <div className="flex flex-col items-center mb-6">
-              <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEasy" className="h-12 w-auto mb-3" />
+              <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEazy" className="h-12 w-auto mb-3" />
             </div>
             <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
               <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -252,8 +252,8 @@ export default function FirebaseAuthAction() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="w-full max-w-[420px]">
           <div className="flex flex-col items-center mb-6">
-            <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEasy" className="h-12 w-auto mb-3" />
-            <h1 className="text-lg font-bold text-slate-900">MakeChurchEasy</h1>
+            <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEazy" className="h-12 w-auto mb-3" />
+            <h1 className="text-lg font-bold text-slate-900">MakeChurchEazy</h1>
             <p className="text-sm text-slate-500 mt-1">Reset your password</p>
           </div>
 
@@ -321,7 +321,7 @@ export default function FirebaseAuthAction() {
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
           <div className="w-full max-w-[420px]">
             <div className="flex flex-col items-center mb-6">
-              <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEasy" className="h-12 w-auto mb-3" />
+              <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEazy" className="h-12 w-auto mb-3" />
             </div>
             <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
               <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -346,7 +346,7 @@ export default function FirebaseAuthAction() {
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
           <div className="w-full max-w-[420px]">
             <div className="flex flex-col items-center mb-6">
-              <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEasy" className="h-12 w-auto mb-3" />
+              <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEazy" className="h-12 w-auto mb-3" />
             </div>
             <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
               <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -371,8 +371,8 @@ export default function FirebaseAuthAction() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="w-full max-w-[420px]">
           <div className="flex flex-col items-center mb-6">
-            <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEasy" className="h-12 w-auto mb-3" />
-            <h1 className="text-lg font-bold text-slate-900">MakeChurchEasy</h1>
+            <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEazy" className="h-12 w-auto mb-3" />
+            <h1 className="text-lg font-bold text-slate-900">MakeChurchEazy</h1>
             <p className="text-sm text-slate-500 mt-1">Set your new password</p>
           </div>
 
@@ -442,7 +442,7 @@ export default function FirebaseAuthAction() {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="w-full max-w-[420px]">
         <div className="flex flex-col items-center mb-6">
-          <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEasy" className="h-12 w-auto mb-3" />
+          <img src="/logos/make_church_easy_logo.png" alt="MakeChurchEazy" className="h-12 w-auto mb-3" />
         </div>
         <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center">
           <p className="text-sm text-slate-500 mb-4">This link is not valid.</p>

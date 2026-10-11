@@ -164,7 +164,7 @@ class _SplashScreenState extends State<SplashScreen>
                       ),
                     ),
                     SizedBox(height: MCESpacing.lg),
-                    Text('MakeChurchEasy', style: MCETypography.sectionTitle),
+                    Text('MakeChurchEazy', style: MCETypography.sectionTitle),
                     SizedBox(height: MCESpacing.sm),
                     Text(
                       'Church Broadcast Control',

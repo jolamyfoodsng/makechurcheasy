@@ -81,7 +81,7 @@ function OfferClaimContent() {
     }
     if (!ladderId || !rungId) {
       setLoadingOffer(false);
-      setError("This offer link is not valid. Please open the link from your MakeChurchEasy email.");
+      setError("This offer link is not valid. Please open the link from your MakeChurchEazy email.");
       return;
     }
 
@@ -146,7 +146,7 @@ function OfferClaimContent() {
             </h1>
             <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-slate-300">
               {result.kind === "trial_extension"
-                ? `You now have full access until ${formatDate(result.freeUntil)}. Open MakeChurchEasy and try it on a real service.`
+                ? `You now have full access until ${formatDate(result.freeUntil)}. Open MakeChurchEazy and try it on a real service.`
                 : `You have the Basic plan until ${formatDate(result.freeUntil)}, no card needed. If you don't subscribe, your account simply returns to the Free plan.`}
             </p>
             {result.plansUrl && result.percentOff > 0 && (
@@ -158,7 +158,7 @@ function OfferClaimContent() {
             )}
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
               <Link href="/dashboard" className="inline-flex items-center justify-center rounded-xl bg-indigo-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400">
-                Open MakeChurchEasy
+                Open MakeChurchEazy
               </Link>
               <a href="https://makechurcheazy.com/download" className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/5">
                 <Download className="h-4 w-4" /> Download the app
@@ -193,8 +193,8 @@ function OfferClaimContent() {
                   ? "This offer is already in use on your account."
                   : "It may have ended, or it may have been sent to a different account.")}
             </p>
-            <p className="mt-3 text-sm text-slate-400">Sign in with the MakeChurchEasy account that received the offer. If you think this is a mistake, reply to the email and we’ll help.</p>
-            <Link href="/dashboard" className="mt-7 inline-flex rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold text-slate-100 hover:bg-white/5">Go to MakeChurchEasy</Link>
+            <p className="mt-3 text-sm text-slate-400">Sign in with the MakeChurchEazy account that received the offer. If you think this is a mistake, reply to the email and we’ll help.</p>
+            <Link href="/dashboard" className="mt-7 inline-flex rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold text-slate-100 hover:bg-white/5">Go to MakeChurchEazy</Link>
           </div>
         )}
       </section>

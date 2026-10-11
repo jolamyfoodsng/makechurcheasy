@@ -1,48 +1,12 @@
 /**
- * compat-mode.css — Global CSS overrides for compatibility mode
+ * compat-mode.css: intentionally empty.
  *
- * When the performance manager detects a weak GPU it sets
- * `data-compat-mode="true"` on <body>. These attribute selectors
- * force-disable GPU-heavy CSS effects across the entire app.
+ * The UI "compatibility mode" was removed. It switched off every animation on
+ * weak-GPU PCs (for example Windows over Remote Desktop), which left pages that
+ * fade in from opacity 0 permanently invisible. Nothing imports this file any
+ * more and it can be deleted.
  *
- * Scope: backdrop-filter, large box-shadows (>8px), CSS animations,
- * CSS filters, and transitions.
+ * Do not use "animation: none" on elements that start hidden and rely on an
+ * animation with fill-mode forwards/both. If a similar rule is ever added, keep
+ * the end state visible.
  */
-
-/* ---- Backdrop-filter: kill everywhere ---- */
-
-[data-compat-mode="true"] * {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-
-/* ---- Box-shadow: cap at a small, safe value ---- */
-
-[data-compat-mode="true"] * {
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12) !important;
-}
-
-/* ---- Animations & transitions: disable ---- */
-
-[data-compat-mode="true"] * {
-  animation: none !important;
-  animation-duration: 0s !important;
-  animation-delay: 0s !important;
-  transition: none !important;
-}
-
-/* ---- CSS filters: disable ---- */
-
-[data-compat-mode="true"] * {
-  filter: none !important;
-}
-
-/* ---- Also respect OS-level reduced-motion preference ---- */
-
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}

@@ -4,7 +4,7 @@ excerpt: "How a church team can prepare presentation content once and use it con
 date: "2026-08-20T09:00:00.000Z"
 coverImage: "/assets/blog/preview/cover.jpg"
 author:
-  name: "MakeChurchEasy"
+  name: "MakeChurchEazy"
   picture: "/assets/blog/authors/mce.svg"
 ogImage:
   url: "/assets/blog/preview/cover.jpg"

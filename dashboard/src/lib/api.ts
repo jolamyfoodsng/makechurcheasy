@@ -1,5 +1,5 @@
 /**
- * API client for the MakeChurchEasy backend.
+ * API client for the MakeChurchEazy backend.
  *
  * All requests use relative paths so they go through Next.js rewrites
  * (proxying to the backend), keeping cookies same-origin.
@@ -648,7 +648,7 @@ export function formatPairingCodeForDisplay(raw: string): string {
 }
 
 export async function createPairingCode(
-  deviceName: string = "MakeChurchEasy",
+  deviceName: string = "MakeChurchEazy",
   ttlSeconds?: number,
 ): Promise<{ code: string; expiresAt: string }> {
   const result = await request<{ code: string; expiresAt: string }>("/api/pairing/create", {

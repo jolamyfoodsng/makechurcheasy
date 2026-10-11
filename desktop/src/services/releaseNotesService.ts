@@ -24,7 +24,7 @@ export interface ReleaseHighlight {
 
 /**
  * Built-in curated release notes for recent / upcoming versions.
- * When server notes are brief or generic (e.g. "MakeChurchEasy vX.Y.Z"),
+ * When server notes are brief or generic (e.g. "MakeChurchEazy vX.Y.Z"),
  * these ensure operators always see rich, detailed feature walkthroughs.
  */
 export const CURATED_RELEASE_NOTES: Record<string, ReleaseHighlight[]> = {
@@ -244,7 +244,7 @@ export function parseRawReleaseNotes(notes: string): ReleaseHighlight[] {
 
 /**
  * Remove the generic GitHub release template that CI used to put in
- * latest.json ("## MakeChurchEasy", the "### Downloads" table, "### Auto-Update",
+ * latest.json ("## MakeChurchEazy", the "### Downloads" table, "### Auto-Update",
  * "Built automatically from commit ..."). What is left is the real changelog,
  * or an empty string when there was none.
  */
@@ -278,13 +278,13 @@ export function stripReleaseBoilerplate(notes?: string | null): string {
 
 /**
  * Determines whether raw notes contain meaningful release descriptions
- * or are merely trivial automated strings (e.g. "MakeChurchEasy v3.19.0").
+ * or are merely trivial automated strings (e.g. "MakeChurchEazy v3.19.0").
  */
 export function isTrivialReleaseNotes(notes?: string | null): boolean {
   const cleaned = stripReleaseBoilerplate(notes);
   if (!cleaned) return true;
-  // If it's just "MakeChurchEasy vX.Y.Z" or "vX.Y.Z"
-  if (/^(?:MakeChurchEasy\s+)?v?\d+\.\d+\.\d+(?:-[a-z0-9.]+)?$/i.test(cleaned)) {
+  // If it's just "MakeChurchEazy vX.Y.Z" or "vX.Y.Z"
+  if (/^(?:MakeChurchEazy\s+)?v?\d+\.\d+\.\d+(?:-[a-z0-9.]+)?$/i.test(cleaned)) {
     return true;
   }
   return false;

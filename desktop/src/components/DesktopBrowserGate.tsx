@@ -122,7 +122,7 @@ export default function DesktopBrowserGate({ children }: { children: ReactNode }
     return (
       <LoadingScreen
         variant="fullscreen"
-        label="Connecting to MakeChurchEasy…"
+        label="Connecting to MakeChurchEazy…"
         sublabel="Waiting for the local desktop session…"
       />
     );
@@ -131,7 +131,7 @@ export default function DesktopBrowserGate({ children }: { children: ReactNode }
   return (
     <FullscreenMessage
       title="Authentication Required"
-      description="Please open the MakeChurchEasy desktop app and log in first."
+      description="Please open the MakeChurchEazy desktop app and log in first."
       actionLabel="Refresh"
       hint="This page will start working again after the desktop app restores the local session."
     />

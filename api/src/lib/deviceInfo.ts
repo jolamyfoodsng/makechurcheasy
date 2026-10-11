@@ -17,8 +17,9 @@ export interface DeviceVersionInfo {
 function detectPlatformFromUA(ua: string | null): string {
   if (!ua) return "unknown";
   const lower = ua.toLowerCase();
-  if (lower.includes("win")) return "windows";
+  // Check macOS first: "darwin" contains "win".
   if (lower.includes("mac") || lower.includes("darwin")) return "macos";
+  if (lower.includes("windows") || /\bwin(32|64|nt)\b/.test(lower)) return "windows";
   if (lower.includes("linux")) return "linux";
   return "unknown";
 }

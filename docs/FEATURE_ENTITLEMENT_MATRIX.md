@@ -1,6 +1,6 @@
 # Feature Entitlement Matrix
 
-This matrix maps plan-controlled features to the entitlement checks that must be used everywhere in MakeChurchEasy.
+This matrix maps plan-controlled features to the entitlement checks that must be used everywhere in MakeChurchEazy.
 
 | Feature | Required Plan | Source Entitlement | Frontend Check | Backend Check |
 |---|---|---|---|---|

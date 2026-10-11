@@ -562,7 +562,7 @@ function DesignStudioEditor({ templateId }: { templateId: string | null }) {
           <div className="design-studio-header__identity">
             <div className="design-studio-header__mark"><Layers3 size={18} /></div>
             <div>
-              <p>{sourceTemplate ? `${sourceTemplate.category.toUpperCase()} TEMPLATE` : "MAKECHURCHEASY"}</p>
+              <p>{sourceTemplate ? `${sourceTemplate.category.toUpperCase()} TEMPLATE` : "MAKECHURCHEAZY"}</p>
               <h1>Design Studio</h1>
             </div>
           </div>

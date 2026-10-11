@@ -169,10 +169,10 @@ export default function Overview() {
                 Ambassador Access Active · {ambassadorInfo.tenureLabel} Grant
               </div>
               <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight">
-                Welcome as a MakeChurchEasy Ambassador!
+                Welcome as a MakeChurchEazy Ambassador!
               </h2>
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                Thank you for championing MakeChurchEasy in your community. You have full <strong>Growth Plan</strong> capabilities unlocked with {ambassadorInfo.creditsGranted > 0 ? `${ambassadorInfo.creditsGranted.toLocaleString()} monthly AI credits` : "monthly AI credits"} to empower your church services.
+                Thank you for championing MakeChurchEazy in your community. You have full <strong>Growth Plan</strong> capabilities unlocked with {ambassadorInfo.creditsGranted > 0 ? `${ambassadorInfo.creditsGranted.toLocaleString()} monthly AI credits` : "monthly AI credits"} to empower your church services.
               </p>
               <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px] text-purple-200">
                 <span className="px-2.5 py-0.5 rounded-md bg-purple-900/60 border border-purple-500/30 font-medium">
@@ -364,7 +364,7 @@ export default function Overview() {
               </div>
               <div>
                 <h3 className="text-sm font-bold text-slate-900">
-                  Step 1: Download MakeChurchEasy Studio
+                  Step 1: Download MakeChurchEazy Studio
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
                   Install our desktop app on your Mac or Windows computer to project scriptures, lyric lower-thirds, and sermon AI.
@@ -466,7 +466,7 @@ export default function Overview() {
             <Monitor className="w-10 h-10 text-slate-300 mx-auto mb-2" />
             <p className="text-sm font-bold text-slate-900">No computer linked yet</p>
             <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 mb-4">
-              Open MakeChurchEasy Studio on your AV desktop and enter a 6-digit code to pair.
+              Open MakeChurchEazy Studio on your AV desktop and enter a 6-digit code to pair.
             </p>
             <Link href="/devices">
               <Button size="sm" icon={<Monitor className="w-3.5 h-3.5" />}>Pair Computer</Button>

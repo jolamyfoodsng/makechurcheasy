@@ -65,7 +65,7 @@ h1, h2, h3, .font-display {
     font-family: var(--font-display), var(--font-body), ui-sans-serif, system-ui, sans-serif;
 }
 
-/* ── MakeChurchEasy visual language ────────────────────────────────────── */
+/* ── MakeChurchEazy visual language ────────────────────────────────────── */
 .mce-dashboard-shell {
     font-family: var(--font-sans);
 }

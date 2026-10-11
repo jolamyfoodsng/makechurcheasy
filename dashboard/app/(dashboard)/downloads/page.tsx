@@ -6,7 +6,7 @@ import { getUserId } from "@/lib/userId";
 import { AlertTriangle, CheckCircle2, Command, Download, ExternalLink, Info, Loader2, Monitor, Server } from "lucide-react";
 import { useEffect, useState } from "react";
 
-const REPO = "jolamyfoodsng/makechurcheasy-releases";
+const REPO = "jolamyfoodsng/makechurcheasy-v2";
 const INSTALL_GUIDE_URL = "https://www.youtube.com/playlist?list=PLRua6gJfgC0o";
 
 interface GitHubAsset {
@@ -168,7 +168,7 @@ export default function Downloads() {
       <div className="p-6 md:p-8 max-w-6xl mx-auto w-full space-y-8 pb-16">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 mb-1">Downloads</h1>
-          <p className="text-sm text-slate-500">Download and install MakeChurchEasy on your devices.</p>
+          <p className="text-sm text-slate-500">Download and install MakeChurchEazy on your devices.</p>
         </div>
         <div className="flex items-center justify-center py-24">
           <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
@@ -182,7 +182,7 @@ export default function Downloads() {
       <div className="p-6 md:p-8 max-w-6xl mx-auto w-full space-y-8 pb-16">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 mb-1">Downloads</h1>
-          <p className="text-sm text-slate-500">Download and install MakeChurchEasy on your devices.</p>
+          <p className="text-sm text-slate-500">Download and install MakeChurchEazy on your devices.</p>
         </div>
         <Card padding="lg">
           <div className="flex flex-col items-center text-center py-8">
@@ -208,7 +208,7 @@ export default function Downloads() {
     <div className="p-6 md:p-8 max-w-6xl mx-auto w-full space-y-8 pb-16">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 mb-1">Downloads</h1>
-        <p className="text-sm text-slate-500">Download and install MakeChurchEasy on your devices.</p>
+        <p className="text-sm text-slate-500">Download and install MakeChurchEazy on your devices.</p>
       </div>
 
       {/* Release header */}
@@ -220,7 +220,7 @@ export default function Downloads() {
               <Badge variant="success" size="sm">Stable</Badge>
             </div>
             <h2 className="text-xl font-bold text-slate-900">
-              {releaseName || `MakeChurchEasy ${version}`}
+              {releaseName || `MakeChurchEazy ${version}`}
             </h2>
             <p className="text-sm text-slate-500 mt-1">
               {publishedDate && `Released ${publishedDate}`}

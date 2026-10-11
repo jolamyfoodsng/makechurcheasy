@@ -128,7 +128,7 @@ export default function DashboardPage() {
 
           <section className="dash-hero-row">
             <div className="dash-hero-copy">
-              <h1 className="dash-hero-title">MakeChurchEasy</h1>
+              <h1 className="dash-hero-title">MakeChurchEazy</h1>
               <p className="dash-hero-subtitle">
                 {t("dashboard.heroSubtitle")}
               </p>
@@ -286,7 +286,7 @@ export default function DashboardPage() {
           onClose={() => setShowUpgradeModal(false)}
           requiredPlan="basic"
           currentPlan="free"
-          message="Subscribe to unlock all premium MakeChurchEasy features."
+          message="Subscribe to unlock all premium MakeChurchEazy features."
         />
       )}
     </div>

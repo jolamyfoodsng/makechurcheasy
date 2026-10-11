@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "incremental": false, "noEmit": true },
+  "include": [
+    "next-env.d.ts",
+    "app/(dashboard)/admin/offers/**/*.ts",
+    "app/(dashboard)/admin/offers/**/*.tsx",
+    "app/offers/**/*.tsx",
+    "app/(dashboard)/subscription/plans/new_plans_page/Newplans_page.tsx",
+    "app/(dashboard)/admin/announcements/**/*.ts",
+    "app/(dashboard)/admin/announcements/**/*.tsx"
+  ]
+}

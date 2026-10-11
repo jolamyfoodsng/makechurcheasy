@@ -50,7 +50,7 @@ fn mobile_access_policy_store() -> &'static RwLock<MobileAccessPolicy> {
         RwLock::new(MobileAccessPolicy {
             allowed: false,
             plan: "free".into(),
-            reason: "Mobile control requires an eligible paid plan. Upgrade in MakeChurchEasy on your desktop.".into(),
+            reason: "Mobile control requires an eligible paid plan. Upgrade in MakeChurchEazy on your desktop.".into(),
         })
     })
 }
@@ -64,7 +64,7 @@ pub async fn set_mobile_access_policy(allowed: bool, plan: String, reason: Optio
         plan
     };
     policy.reason = reason.unwrap_or_else(|| {
-        "Mobile control requires an eligible paid plan. Upgrade in MakeChurchEasy on your desktop.".into()
+        "Mobile control requires an eligible paid plan. Upgrade in MakeChurchEazy on your desktop.".into()
     });
 }
 
@@ -713,7 +713,7 @@ async fn handle_mobile_client(
                                         ws_port: mobile_server_port(),
                                         api_port,
                                         pairing_token: pairing_token.clone(),
-                                        desktop_name: "MakeChurchEasy Desktop".into(),
+                                        desktop_name: "MakeChurchEazy Desktop".into(),
                                     })
                                     .unwrap()
                                     .into(),
@@ -884,7 +884,7 @@ async fn run_discovery_beacon(ws_port: u16, api_port: u16) {
             "service": "makechurcheasy",
             "port": ws_port,
             "apiPort": api_port,
-            "desktopName": "MakeChurchEasy Desktop",
+            "desktopName": "MakeChurchEazy Desktop",
             "pairingToken": pairing_token,
             "version": "1",
         })

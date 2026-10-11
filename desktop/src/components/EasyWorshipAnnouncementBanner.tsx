@@ -154,7 +154,7 @@ export default function EasyWorshipAnnouncementBanner() {
                   Importing in the background...
                 </strong>
                 <span className="ew-announcement-desc">
-                  Keep this running in the background while it is importing. You can continue using MakeChurchEasy. {progress.stage ? `(${progress.stage})` : ""}
+                  Keep this running in the background while it is importing. You can continue using MakeChurchEazy. {progress.stage ? `(${progress.stage})` : ""}
                 </span>
               </>
             )}

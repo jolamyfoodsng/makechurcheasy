@@ -378,7 +378,7 @@ export function AppUpdatesSection({ data, onChange, onSave, saving }: Props) {
                 label="Emergency Lock Message"
                 value={data.emergencyLockMessage}
                 onChange={(e) => update({ emergencyLockMessage: e.target.value })}
-                placeholder="MakeChurchEasy is temporarily unavailable due to emergency maintenance."
+                placeholder="MakeChurchEazy is temporarily unavailable due to emergency maintenance."
                 rows={4}
               />
               <Input

@@ -115,7 +115,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   SizedBox(height: MCESpacing.lg),
 
                   // Title
-                  Text('MakeChurchEasy', style: MCETypography.sectionTitle),
+                  Text('MakeChurchEazy', style: MCETypography.sectionTitle),
                   SizedBox(height: MCESpacing.sm),
                   Text(
                     'Sign in to control your church broadcast',

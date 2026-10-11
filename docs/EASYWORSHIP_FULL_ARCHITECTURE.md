@@ -1,6 +1,6 @@
 # EasyWorship Full Storage & Media Architecture Note
 
-This document serves as the technical reference for EasyWorship 6 & 7 media, theme, schedule, and song storage architecture for **MakeChurchEasy**.
+This document serves as the technical reference for EasyWorship 6 & 7 media, theme, schedule, and song storage architecture for **MakeChurchEazy**.
 
 ---
 
@@ -42,8 +42,8 @@ Loose media assets are stored directly on the file system:
 
 ---
 
-## 5. MakeChurchEasy Import Capabilities
+## 5. MakeChurchEazy Import Capabilities
 
 1. **Songs Import**: Direct SQLite join of `Songs.db` + `SongWords.db` with automatic RTF decoding and section splitting (`Verse 1`, `Chorus`, `Bridge`).
-2. **Media Library Import**: Scanning `Resources\Videos\` and `Resources\Images\` to index background videos and images directly into MakeChurchEasy's Worship Media Library.
+2. **Media Library Import**: Scanning `Resources\Videos\` and `Resources\Images\` to index background videos and images directly into MakeChurchEazy's Worship Media Library.
 3. **Schedule Import**: Unzipping `.ewsx` archives to extract embedded songs, slides, and background video/image assets.

@@ -1,6 +1,6 @@
 # MTN MoMo payments
 
-MakeChurchEasy uses MTN MoMo Collection `requesttopay` for one-off checkout charges. The `bc-authorize` operation from the developer portal is a consent/CIBA flow; it is not the endpoint that charges a customer.
+MakeChurchEazy uses MTN MoMo Collection `requesttopay` for one-off checkout charges. The `bc-authorize` operation from the developer portal is a consent/CIBA flow; it is not the endpoint that charges a customer.
 
 ## API configuration
 

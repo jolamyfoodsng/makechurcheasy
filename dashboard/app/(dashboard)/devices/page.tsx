@@ -168,7 +168,7 @@ export default function DevicesPage() {
               </Badge>
             </div>
             <p className="text-slate-500 text-xs sm:text-sm mt-0.5">
-              {t("devices.pageDescription") || "Manage computers running MakeChurchEasy Studio and remote stage controllers."}
+              {t("devices.pageDescription") || "Manage computers running MakeChurchEazy Studio and remote stage controllers."}
             </p>
           </div>
         </div>
@@ -231,12 +231,12 @@ export default function DevicesPage() {
                 </Badge>
               </div>
               <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                Pair MakeChurchEasy Studio in 30 Seconds
+                Pair MakeChurchEazy Studio in 30 Seconds
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs text-slate-600">
                 <div className="flex items-start gap-2 bg-white/70 p-2.5 rounded-xl border border-blue-100">
                   <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center shrink-0 text-[11px]">1</span>
-                  <span>Open MakeChurchEasy Studio on your computer</span>
+                  <span>Open MakeChurchEazy Studio on your computer</span>
                 </div>
                 <div className="flex items-start gap-2 bg-white/70 p-2.5 rounded-xl border border-blue-100">
                   <span className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center shrink-0 text-[11px]">2</span>
@@ -312,7 +312,7 @@ export default function DevicesPage() {
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto mb-6 leading-relaxed">
                   {t("devices.noDevicesConnectedDescription") ||
-                    "Pair MakeChurchEasy Studio on your laptop to unlock automated OBS sync, unlimited offline Bibles, and sermon speech-to-scripture."}
+                    "Pair MakeChurchEazy Studio on your laptop to unlock automated OBS sync, unlimited offline Bibles, and sermon speech-to-scripture."}
                 </p>
                 <div className="flex flex-wrap items-center justify-center gap-3">
                   <Button
@@ -366,7 +366,7 @@ export default function DevicesPage() {
                         <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-600 space-y-1 mb-4">
                           <div className="flex items-center justify-between">
                             <span className="text-slate-400">Node Type</span>
-                            <span className="font-medium text-slate-800">MakeChurchEasy Studio</span>
+                            <span className="font-medium text-slate-800">MakeChurchEazy Studio</span>
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-slate-400">Paired</span>

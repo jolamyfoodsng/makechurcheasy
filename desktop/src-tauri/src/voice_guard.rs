@@ -17,7 +17,6 @@
 //! stream is stopped, so the UI turns off auto-reconnect before it sees the
 //! ordinary "stopped" status.
 
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -49,73 +48,6 @@ fn now_ms() -> u64 {
 /// Record that real speech (a non-empty transcript) arrived.
 pub fn mark_activity() {
     LAST_ACTIVITY_MS.store(now_ms(), Ordering::Relaxed);
-}
-
-/// Only real, readable speech resets the native watchdog. This mirrors the
-/// desktop transcript filter so background noise cannot keep a session alive.
-pub fn mark_transcript_activity(text: &str) {
-    if !text.trim().is_empty() && !is_hallucinated_transcript(text) {
-        mark_activity();
-    }
-}
-
-fn is_hallucinated_transcript(text: &str) -> bool {
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        return false;
-    }
-
-    let non_latin_count = trimmed
-        .chars()
-        .filter(|ch| matches!(*ch as u32,
-            0x0400..=0x04FF | 0x0370..=0x03FF | 0x0600..=0x06FF | 0x0980..=0x09FF |
-            0x0E00..=0x0E7F | 0x1100..=0x11FF | 0x3040..=0x309F | 0x30A0..=0x30FF |
-            0x4E00..=0x9FFF | 0xAC00..=0xD7AF
-        ))
-        .count();
-    let latin_count = trimmed.chars().filter(|ch| ch.is_ascii_alphabetic()).count();
-    if (latin_count == 0 && non_latin_count > 0)
-        || (latin_count > 0 && non_latin_count as f64 / latin_count as f64 > 0.1)
-    {
-        return true;
-    }
-
-    let words: Vec<String> = trimmed
-        .to_lowercase()
-        .split_whitespace()
-        .map(|word| {
-            word.chars()
-                .filter(|ch| ch.is_ascii_alphanumeric() || *ch == '_')
-                .collect::<String>()
-        })
-        .filter(|word| !word.is_empty())
-        .collect();
-    if words.len() >= 4 {
-        if words.windows(4).any(|chunk| chunk.iter().all(|word| word == &chunk[0])) {
-            return true;
-        }
-        if words.len() >= 6 {
-            for start in 0..=words.len() - 6 {
-                if words[start] == words[start + 2]
-                    && words[start] == words[start + 4]
-                    && words[start + 1] == words[start + 3]
-                    && words[start + 1] == words[start + 5]
-                {
-                    return true;
-                }
-            }
-        }
-        if words.len() >= 8 {
-            let mut counts = HashMap::<&str, usize>::new();
-            for word in &words {
-                *counts.entry(word).or_default() += 1;
-            }
-            if counts.values().any(|count| *count as f64 / words.len() as f64 >= 0.7) {
-                return true;
-            }
-        }
-    }
-    false
 }
 
 /// Called by the UI when listening starts and whenever the user answers

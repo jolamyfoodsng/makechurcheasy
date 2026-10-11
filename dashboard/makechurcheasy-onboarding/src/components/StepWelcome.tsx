@@ -49,7 +49,7 @@ export default function StepWelcome({ onNext, onSkip }: StepWelcomeProps) {
         <div className="flex items-center justify-center gap-2 mb-8 mt-2">
           <Church className="text-primary-brand w-8 h-8 stroke-[2]" />
           <span className="font-display text-xl font-bold text-gray-800">
-            MakeChurchEasy
+            MakeChurchEazy
           </span>
         </div>
 
@@ -62,7 +62,7 @@ export default function StepWelcome({ onNext, onSkip }: StepWelcomeProps) {
             <img
               className="w-40 h-40 object-contain drop-shadow-xl"
               src="https://lh3.googleusercontent.com/aida-public/AB6AXuAQTWuYb67Eco8uJ4SOrZLTkvqeJwHMxnj1snEcFAXIm-MIB3cAU95LtLGcNcErQphNKp3gMmBQgaMUje0xjomA93xanhFekUcT-uvMnjihwUDUG9rDVKyaFtBjQZG11_p-xDy49f3Q-lgUJGZEkY6oput8O8G6F6nottrGxmVuLGxUpwHQ2ejGl_vx4SkR0eg5jNGFl5NXp0_xKVRtWogkxrvVV1bLhmDlpiJgs-PDmKYtbEt0iH24bodF0SqjWvO30DGQXGglE7fd"
-              alt="MakeChurchEasy Illustration"
+              alt="MakeChurchEazy Illustration"
               referrerPolicy="no-referrer"
             />
           </div> */}
@@ -89,7 +89,7 @@ export default function StepWelcome({ onNext, onSkip }: StepWelcomeProps) {
         <div className="space-y-3 mb-8">
           <h1 className="font-display text-3xl font-bold tracking-tight text-gray-900 leading-tight">
             Welcome to <br />
-            <span className="text-primary-brand">MakeChurchEasy!</span>
+            <span className="text-primary-brand">MakeChurchEazy!</span>
           </h1>
           <p className="text-gray-500 text-sm md:text-base max-w-[340px] mx-auto leading-relaxed">
             All the tools your church needs to create powerful presentations, engage your congregation, and share the message.

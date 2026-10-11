@@ -135,7 +135,7 @@ export const lt02SpeakerGeometric: LowerThirdTheme = {
   usesTailwind: true,
   fontImports: GOOGLE_FONTS,
   variables: [
-    { key: "name", label: "Speaker Name", type: "text", defaultValue: "Pastor John Doe", placeholder: "e.g. Pastor John Doe", required: true, group: "Content" },
+    { key: "name", label: "Speaker Name", type: "text", defaultValue: "Your Pastor's Name", placeholder: "e.g. Your Pastor's Name", required: true, group: "Content" },
     { key: "title", label: "Title", type: "text", defaultValue: "Senior Pastor", placeholder: "e.g. Senior Pastor", group: "Content" },
     { key: "image", label: "Speaker Image", type: "image", defaultValue: "https://lh3.googleusercontent.com/aida-public/AB6AXuBr8ZfupKjJzop_yM6_xlZblZeWuCu6oIz9rbW8bVD6Jfbs7-Ni6lMgqA24zPLotO4QVM4KsT024Wbxgos9cugIHgXVQcTDOUfoKGZdWx_SQxKLbIdERUmH6wKXzTTW54LaaK9Pe-OOIxBCx5bBs3AIW0i1gbG-mN1a9r91ZFBpMcK8agHz5Z-aUfxFBec-B7qlg8WPVuDSV816udEfzMPofgdT-Bjt74JaePtYpwgUAxPTL9YBlNkNASdqrmJQ5y5dr15HRH_xcg", group: "Content" }
   ],
@@ -190,7 +190,7 @@ export const lt04GuestMinister: LowerThirdTheme = {
   usesTailwind: true,
   fontImports: GOOGLE_FONTS,
   variables: [
-    { key: "name", label: "Minister Name", type: "text", defaultValue: "Bishop T.D. Jakes", placeholder: "e.g. Bishop T.D. Jakes", required: true, group: "Content" },
+    { key: "name", label: "Minister Name", type: "text", defaultValue: "Your Pastor's Name", placeholder: "e.g. Your Pastor's Name", required: true, group: "Content" },
     { key: "church", label: "Church/Org", type: "text", defaultValue: "The Potter's House, Dallas", placeholder: "e.g. The Potter's House", group: "Content" },
   ],
   animation: { name: "fadeInUp", duration: 600, easing: "cubic-bezier(0.16, 1, 0.3, 1)" },

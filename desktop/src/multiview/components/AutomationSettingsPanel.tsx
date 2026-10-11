@@ -77,7 +77,7 @@ export function AutomationSettingsPanel() {
         <div className="switch-row">
           <div className="switch-left">
             <span className="switch-title">Desktop automation runner</span>
-            <span className="switch-subtitle">Enabled rules watch OBS while MakeChurchEasy is running.</span>
+            <span className="switch-subtitle">Enabled rules watch OBS while MakeChurchEazy is running.</span>
           </div>
           <span className="mr-status-badge mr-status-on">Ready</span>
         </div>

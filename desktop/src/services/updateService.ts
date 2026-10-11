@@ -12,12 +12,12 @@
 
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch, exit } from "@tauri-apps/plugin-process";
-import { open } from "@tauri-apps/plugin-shell";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import { tempDir, join } from "@tauri-apps/api/path";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { getDesktopConfig, readDesktopConfigCache } from "./desktopConfig";
 import { coerce, lt } from "semver";
+import { invoke } from "@tauri-apps/api/core";
 
 // ── Private-repo auth ──
 // For private GitHub repos, a fine-grained PAT with contents:read is injected
@@ -65,7 +65,7 @@ export interface PreparedUpdate {
   version: string;
   source: "signed" | "installer";
   install: (options?: {
-    /** Restart MakeChurchEasy after installing (default true). */
+    /** Restart MakeChurchEazy after installing (default true). */
     relaunch?: boolean;
     onStatusChange?: (status: UpdateInstallStatus) => void;
   }) => Promise<void>;
@@ -249,6 +249,7 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
         }
       } catch (validationError: any) {
         console.warn("[updater] Could not validate update manifest:", validationError);
+        logUpdateEvent("check: could not validate manifest", validationError);
         return {
           available: false,
           error: validationError?.message || "Could not verify the published update.",
@@ -278,6 +279,7 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
     };
   } catch (err: any) {
     console.warn("[updater] Update check failed:", err);
+    logUpdateEvent("check failed", err);
 
     // When offline, fall back to cached data so the 21-day forced update
     // still works even without an internet connection
@@ -297,6 +299,108 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
   }
 }
 
+// ── Updater log (written to disk so failed updates can be diagnosed) ──
+
+function stringifyError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  try { return JSON.stringify(err); } catch { return String(err); }
+}
+
+export function logUpdateEvent(message: string, detail?: unknown): void {
+  const line = detail === undefined ? message : `${message} ${stringifyError(detail)}`;
+  void invoke("append_update_log", { line: `[v${APP_VERSION_FOR_LOG}] ${line}` }).catch(() => undefined);
+}
+
+const APP_VERSION_FOR_LOG = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "unknown";
+
+// ── Install location (macOS) ──
+// The signed updater replaces the app bundle with a plain rename. That cannot
+// work when the app is running from the DMG or from a translocated copy
+// (macOS runs apps opened from Downloads from a hidden read-only folder), and
+// the plugin then fails with a bare "Read-only file system" error.
+
+interface UpdateInstallLocation {
+  bundlePath: string;
+  status: "ok" | "translocated" | "disk_image" | "not_writable";
+  needsAdmin: boolean;
+}
+
+const MOVE_TO_APPLICATIONS_MESSAGE =
+  "MakeChurchEasy can't update itself from where it's running. Quit it, drag MakeChurchEasy into your Applications folder, open it from Applications, then update again.";
+
+export async function getUpdateInstallLocation(): Promise<UpdateInstallLocation | null> {
+  try {
+    return await invoke<UpdateInstallLocation>("get_update_install_location");
+  } catch (err) {
+    console.warn("[updater] Could not read install location:", err);
+    return null;
+  }
+}
+
+/** Throws a readable error when this copy of the app cannot be updated in place. */
+export async function assertCanInstallInPlace(): Promise<void> {
+  const location = await getUpdateInstallLocation();
+  if (!location) return;
+  console.info("[updater] Install location:", location);
+  logUpdateEvent(`install location ${location.status} admin=${location.needsAdmin} ${location.bundlePath}`);
+  if (location.status !== "ok") {
+    const error = new Error(MOVE_TO_APPLICATIONS_MESSAGE);
+    (error as any).code = "UPDATE_LOCATION_READ_ONLY";
+    throw error;
+  }
+}
+
+/** Tauri rejects with plain strings; turn them into Errors users can act on. */
+export function describeInstallError(err: unknown): Error {
+  const raw = err instanceof Error ? err.message : typeof err === "string" ? err : JSON.stringify(err);
+  console.error("[updater] Install failed:", raw);
+  logUpdateEvent("install failed", raw);
+  if (/read-only file system|os error 30|cross-device|os error 18/i.test(raw)) {
+    return new Error(MOVE_TO_APPLICATIONS_MESSAGE);
+  }
+  if (/failed to move the new app into place/i.test(raw)) {
+    return new Error(
+      "macOS needs an administrator password to replace MakeChurchEasy. Try again and enter your Mac password when asked.",
+    );
+  }
+  if (/operation not permitted|os error 1\b/i.test(raw)) {
+    return new Error(
+      "macOS blocked the update. Open System Settings → Privacy & Security → App Management, allow MakeChurchEasy, then try again.",
+    );
+  }
+  if (/signature/i.test(raw)) {
+    return new Error("The downloaded update failed its security check. Please try again later.");
+  }
+  return new Error(raw ? `Update failed: ${raw}` : "Update failed. Please try again.");
+}
+
+/**
+ * The updater reports every network chunk (thousands per download). Passing
+ * each one on re-rendered the update UI thousands of times and could pin the
+ * webview at 100% CPU with GBs of memory, so the install step started late or
+ * the app looked frozen. Forward at most one update per whole percent or
+ * 250 ms, plus the final 100%.
+ */
+function throttleProgress(
+  onProgress?: (progress: DownloadProgress) => void,
+): ((progress: DownloadProgress, force?: boolean) => void) | undefined {
+  if (!onProgress) return undefined;
+  let lastPercent = -1;
+  let lastAt = 0;
+  return (progress, force = false) => {
+    const percent = progress.contentLength > 0
+      ? Math.floor((progress.downloaded / progress.contentLength) * 100)
+      : -1;
+    const now = Date.now();
+    if (!force && percent === lastPercent && now - lastAt < 250) return;
+    if (!force && percent < 0 && now - lastAt < 250) return;
+    lastPercent = percent;
+    lastAt = now;
+    onProgress(progress);
+  };
+}
+
 // ── Download & Install ──
 
 /**
@@ -312,30 +416,41 @@ export async function downloadSignedUpdate(
 
   let totalContentLength = 0;
   let totalDownloaded = 0;
+  const report = throttleProgress(onProgress);
+  logUpdateEvent(`signed download start v${update.version}`);
 
   await update.download((event) => {
     switch (event.event) {
       case "Started":
         totalContentLength = event.data.contentLength ?? 0;
         totalDownloaded = 0;
-        onProgress?.({ contentLength: totalContentLength, downloaded: 0 });
+        report?.({ contentLength: totalContentLength, downloaded: 0 }, true);
         break;
       case "Progress":
         totalDownloaded += event.data.chunkLength ?? 0;
-        onProgress?.({ contentLength: totalContentLength, downloaded: totalDownloaded });
+        report?.({ contentLength: totalContentLength, downloaded: totalDownloaded });
         break;
       case "Finished":
+        report?.({ contentLength: totalContentLength || totalDownloaded, downloaded: totalDownloaded }, true);
         break;
     }
   }, headers ? { headers } : undefined);
+  logUpdateEvent(`signed download done ${totalDownloaded} bytes`);
 
   return {
     version: update.version,
     source: "signed",
     install: async ({ relaunch: shouldRelaunch = true, onStatusChange } = {}) => {
       onStatusChange?.("installing");
+      if (detectPlatform() === "macos") await assertCanInstallInPlace();
       // Windows (passive NSIS/MSI) quits this process inside install().
-      await update.install();
+      try {
+        logUpdateEvent("signed install start");
+        await update.install();
+        logUpdateEvent("signed install done");
+      } catch (err) {
+        throw describeInstallError(err);
+      }
       if (!shouldRelaunch) return;
       onStatusChange?.("relaunching");
       // Brief pause so the user sees "Restarting..."
@@ -361,8 +476,8 @@ export async function downloadAndInstallUpdate(
 
 // ── Published release source ──
 
-export const LATEST_MANIFEST_URL = "https://github.com/jolamyfoodsng/makechurcheasy-releases/releases/latest/download/latest.json";
-export const RELEASES_API = "https://api.github.com/repos/jolamyfoodsng/makechurcheasy-releases/releases/latest";
+export const LATEST_MANIFEST_URL = "https://github.com/jolamyfoodsng/makechurcheasy-v2/releases/latest/download/latest.json";
+export const RELEASES_API = "https://api.github.com/repos/jolamyfoodsng/makechurcheasy-v2/releases/latest";
 
 export interface PublishedReleaseAsset {
   name: string;
@@ -454,7 +569,7 @@ export async function fetchLatestPublishedRelease(): Promise<PublishedRelease> {
   const version = normalizeVersion(tagName);
 
   if (!version || release.draft || release.prerelease) {
-    throw new Error("No valid published MakeChurchEasy release is available");
+    throw new Error("No valid published MakeChurchEazy release is available");
   }
 
   const result: PublishedRelease = {
@@ -512,7 +627,7 @@ export async function downloadInstallerFromUrl(
   version = "",
 ): Promise<PreparedUpdate> {
   const parsedUrl = new URL(url);
-  const fallbackName = `MakeChurchEasy-${Date.now()}.installer`;
+  const fallbackName = `MakeChurchEazy-${Date.now()}.installer`;
   const filename = decodeURIComponent(parsedUrl.pathname.split("/").pop() || fallbackName)
     .replace(/[^a-zA-Z0-9._-]/g, "_") || fallbackName;
 
@@ -526,13 +641,15 @@ export async function downloadInstallerFromUrl(
   if (response.body) {
     const reader = response.body.getReader();
     const chunks: Uint8Array[] = [];
+    const report = throttleProgress(onProgress);
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       chunks.push(value);
       downloaded += value.length;
-      onProgress?.({ contentLength, downloaded });
+      report?.({ contentLength, downloaded });
     }
+    report?.({ contentLength: contentLength || downloaded, downloaded }, true);
 
     const merged = new Uint8Array(downloaded);
     let offset = 0;
@@ -556,7 +673,11 @@ export async function downloadInstallerFromUrl(
     source: "installer",
     install: async ({ onStatusChange } = {}) => {
       onStatusChange?.("installing");
-      await open(filePath);
+      // Rust opens it: the shell plugin's open scope rejects local file paths.
+      logUpdateEvent(`opening installer ${filePath}`);
+      await invoke("open_downloaded_installer", { path: filePath }).catch((err) => {
+        throw describeInstallError(err);
+      });
       onStatusChange?.("relaunching");
       await wait(800);
       // The installer replaces the app, so this process must quit either way.
@@ -624,6 +745,8 @@ export async function downloadVerifiedUpdate(
   update: Update | undefined,
   onProgress?: (progress: DownloadProgress) => void,
 ): Promise<PreparedUpdate> {
+  // Fail before a 100 MB download that could never be installed.
+  if (detectPlatform() === "macos") await assertCanInstallInPlace();
   if (update) {
     try {
       const release = await fetchLatestPublishedRelease();
@@ -632,6 +755,7 @@ export async function downloadVerifiedUpdate(
           return await downloadSignedUpdate(update, onProgress);
         } catch (error) {
           console.warn("[updater] Signed update download failed; using published installer:", error);
+          logUpdateEvent("signed download failed, using installer", error);
         }
       } else {
         console.warn(
@@ -641,6 +765,7 @@ export async function downloadVerifiedUpdate(
       await update.close().catch(() => undefined);
     } catch (error) {
       console.warn("[updater] Could not validate signed update; using published installer:", error);
+      logUpdateEvent("could not validate signed update, using installer", error);
       await update.close().catch(() => undefined);
     }
   }
@@ -649,11 +774,11 @@ export async function downloadVerifiedUpdate(
 }
 
 /**
- * Install a signed updater result only after it has been reconciled with the
- * real published release. If the manifest is stale, mismatched, or its URL is
- * broken, use the verified GitHub installer instead.
+ * Download a verified update without installing it. The signed updater is
+ * used when its manifest matches the real published release; otherwise (or
+ * when the signed download fails) the published installer is downloaded.
  */
-export async function downloadAndInstallVerifiedUpdate(
+export async function downloadVerifiedUpdate(
   update: Update | undefined,
   onProgress?: (progress: DownloadProgress) => void,
   onStatusChange?: (status: UpdateInstallStatus) => void,

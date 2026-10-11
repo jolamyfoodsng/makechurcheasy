@@ -203,7 +203,7 @@ export const DockOnboardingTour: React.FC = () => {
       {/* Tooltip Card */}
       <div
         role="dialog"
-        aria-label="MakeChurchEasy Dock Onboarding"
+        aria-label="MakeChurchEazy Dock Onboarding"
         style={{
           ...tooltipStyle,
           backgroundColor: "#131724",

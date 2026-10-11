@@ -1,5 +1,5 @@
 /**
- * db.ts — Centralized IndexedDB for MakeChurchEasy
+ * db.ts — Centralized IndexedDB for MakeChurchEazy
  *
  * ┌─────────────────────────────────────────────────────────────────────┐
  * │  ONE database: "obs-church-studio"                                 │

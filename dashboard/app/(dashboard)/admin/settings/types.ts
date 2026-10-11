@@ -84,6 +84,8 @@ export interface PlatformSettings {
     appName: string;
     logoUrl: string;
     logoAlt: string;
+    markUrl: string;
+    markLightUrl: string;
     primaryColor: string;
     accentColor: string;
     supportEmail: string;
@@ -162,7 +164,7 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
     minimumSupportedVersion: "2.0.0",
     gracePeriodHours: 48,
     updateMessage: "A new version is available. Please update to continue.",
-    emergencyLockMessage: "MakeChurchEasy is temporarily unavailable due to emergency maintenance.",
+    emergencyLockMessage: "MakeChurchEazy is temporarily unavailable due to emergency maintenance.",
     windowsDownloadUrl: "",
     macDownloadUrl: "",
     linuxDownloadUrl: "",
@@ -207,16 +209,18 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
     weeklyDigest: false,
   },
   emailBranding: {
-    appName: "MakeChurchEasy",
+    appName: "MakeChurchEazy",
     logoUrl: "https://makechurcheazy.com/logos/make_church_easy_logo.png",
-    logoAlt: "MakeChurchEasy",
+    logoAlt: "MakeChurchEazy",
+    markUrl: "https://makechurcheazy.com/email/mark-blue.png",
+    markLightUrl: "https://makechurcheazy.com/email/mark-white.png",
     primaryColor: "#1D4ED8",
     accentColor: "#F97316",
     supportEmail: "support@makechurcheazy.com",
     websiteUrl: "https://makechurcheazy.com",
     preferencesUrl: "https://makechurcheazy.com/settings",
     footerText:
-      "MakeChurchEasy helps churches run presentations, lyrics, Bible, and livestream workflows from one platform.",
+      "MakeChurchEazy helps churches run presentations, lyrics, Bible, and livestream workflows from one platform.",
     social: {
       twitterUrl: "",
       facebookUrl: "",
@@ -262,7 +266,7 @@ export const DEFAULT_SETTINGS: PlatformSettings = {
   },
   security: {
     maintenanceMode: false,
-    maintenanceMessage: "MakeChurchEasy is under scheduled maintenance. We'll be back shortly.",
+    maintenanceMessage: "MakeChurchEazy is under scheduled maintenance. We'll be back shortly.",
     internetVerificationEnabled: false,
     maxOfflineDays: 28,
     verificationIntervalHours: 6,

@@ -205,8 +205,19 @@ function qrToSvgPath(data: Uint8Array, size: number, margin: number): string {
   return path;
 }
 
+/**
+ * A scan code should open the link as the church typed it. A bare web address such as
+ * "www.mychurch.org/give" has no scheme, so phones may show it as plain text; add https://.
+ * Anything that is not a plain web address (an account number, an email, a full URL) is kept as is.
+ */
+export function normalizeQrLink(text: string): string {
+  const raw = String(text ?? "").trim();
+  if (/^(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:[/?#]\S*)?$/i.test(raw)) return `https://${raw}`;
+  return raw;
+}
+
 function buildOfflineQrDataUrl(text: string, width = 220): string {
-  const qrData = QRCode.create(text, {
+  const qrData = QRCode.create(normalizeQrLink(text), {
     errorCorrectionLevel: "M",
   });
   const qrSize = qrData.modules.size;

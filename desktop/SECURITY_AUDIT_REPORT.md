@@ -1,4 +1,4 @@
-# MakeChurchEasy Security Audit Report
+# MakeChurchEazy Security Audit Report
 
 **Date:** June 19, 2026
 **Scope:** Full codebase (Tauri desktop app, Next.js web backend, HTML overlays, Cloudflare Worker)
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-The MakeChurchEasy codebase has **critical security vulnerabilities** that need immediate attention. The most urgent issue is that **nearly every web API endpoint lacks authentication**, allowing any internet user to read, modify, or delete any user's data, credits, and subscriptions by simply guessing or enumerating user IDs. Additionally, hardcoded credentials in HTML overlay files and an unprotected .env file on disk represent active secret exposure risks.
+The MakeChurchEazy codebase has **critical security vulnerabilities** that need immediate attention. The most urgent issue is that **nearly every web API endpoint lacks authentication**, allowing any internet user to read, modify, or delete any user's data, credits, and subscriptions by simply guessing or enumerating user IDs. Additionally, hardcoded credentials in HTML overlay files and an unprotected .env file on disk represent active secret exposure risks.
 
 ---
 

@@ -8,7 +8,7 @@ import { sendEmail } from "@/lib/emailTemplates";
 import { buildUnsubscribeUrl } from "@/lib/emailUnsubscribe";
 import type { Announcement, DiscountBillingCycle, PlanTier } from "@/types/schemas";
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://makechurcheasy.com";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://makechurcheazy.com";
 const MAX_EMAIL_RECIPIENTS = 5000;
 const EMAIL_BATCH_SIZE = 25;
 /** Stops a request from walking an enormous user base when the audience needs a lookup per person. */
@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
     const claimUrl = `${APP_URL}/subscription/plans?promo=${encodeURIComponent(code)}&plan=${encodeURIComponent(plans[0] || "growth")}&billing=${encodeURIComponent(billingCycles[0] || "monthly")}`;
 
     const announcementDoc: Omit<Announcement, "_id"> = {
-      title: body.title || `${discountPercent}% Off MakeChurchEasy`,
+      title: body.title || `${discountPercent}% Off MakeChurchEazy`,
       message: body.message || `Use promo code ${code} to get ${discountPercent}% off for ${durationMonths} month(s).`,
       tone: "offer",
       status: "active",

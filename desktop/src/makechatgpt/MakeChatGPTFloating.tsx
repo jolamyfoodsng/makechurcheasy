@@ -161,8 +161,8 @@ export default function MakeChatGPTFloating() {
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        aria-label={isTranscribing ? "Open MakeChurchEasy — transcription active" : "Open MakeChurchEasy"}
-        title={isTranscribing ? "MakeChurchEasy — transcription active" : "Open MakeChurchEasy"}
+        aria-label={isTranscribing ? "Open MakeChurchEazy — transcription active" : "Open MakeChurchEazy"}
+        title={isTranscribing ? "MakeChurchEazy — transcription active" : "Open MakeChurchEazy"}
       >
         <img
           className="makechatgpt-pet__icon"
@@ -175,10 +175,10 @@ export default function MakeChatGPTFloating() {
         <div
           className="makechatgpt-context-menu"
           role="menu"
-          aria-label="MakeChurchEasy floating icon menu"
+          aria-label="MakeChurchEazy floating icon menu"
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <button type="button" role="menuitem" onClick={handleOpen}>Open MakeChurchEasy</button>
+          <button type="button" role="menuitem" onClick={handleOpen}>Open MakeChurchEazy</button>
           <button type="button" role="menuitem" onClick={handleHide}>Hide icon</button>
         </div>
       )}

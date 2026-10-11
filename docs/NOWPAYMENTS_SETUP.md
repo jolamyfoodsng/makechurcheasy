@@ -1,6 +1,6 @@
 # NOWPayments setup
 
-MakeChurchEasy uses the NOWPayments hosted invoice flow for crypto checkout. The API creates an invoice, redirects the customer to the returned hosted URL, and provisions access only after a signed `finished` notification is received or the authenticated status endpoint confirms the payment.
+MakeChurchEazy uses the NOWPayments hosted invoice flow for crypto checkout. The API creates an invoice, redirects the customer to the returned hosted URL, and provisions access only after a signed `finished` notification is received or the authenticated status endpoint confirms the payment.
 
 ## API environment
 
@@ -25,7 +25,7 @@ NOWPAYMENTS_SUPPORTED_PRICE_CURRENCIES=USD,NGN,EUR,GBP,CAD,AUD,INR,PHP,ZAR
 
 The callback URL must be public HTTPS in production. Configure the same URL in the NOWPayments dashboard under the IPN/payment settings. The value labelled “IPN URL” in a credential screen is normally the IPN secret; it is not the callback URL.
 
-The checkout amount is sent in the account’s resolved pricing currency. NOWPayments supports a defined set of fiat base currencies, so confirm the currencies used by MakeChurchEasy in the NOWPayments account before enabling crypto checkout for every country. If a local currency is not supported, add a matching supported-currency pricing rule before presenting that payment method.
+The checkout amount is sent in the account’s resolved pricing currency. NOWPayments supports a defined set of fiat base currencies, so confirm the currencies used by MakeChurchEazy in the NOWPayments account before enabling crypto checkout for every country. If a local currency is not supported, add a matching supported-currency pricing rule before presenting that payment method.
 
 ## Access and renewals
 

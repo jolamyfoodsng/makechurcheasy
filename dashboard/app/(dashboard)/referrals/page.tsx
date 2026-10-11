@@ -116,7 +116,7 @@ export default function ReferralsPage() {
   }
 
   const shareMessage = useMemo(() => {
-    return `We use MakeChurchEasy for Sunday service presentation and offline scripture display. Sign up with our church invite link: ${shareLink}`;
+    return `We use MakeChurchEazy for Sunday service presentation and offline scripture display. Sign up with our church invite link: ${shareLink}`;
   }, [shareLink]);
 
   const whatsappUrl = useMemo(() => {
@@ -124,7 +124,7 @@ export default function ReferralsPage() {
   }, [shareMessage]);
 
   const mailtoUrl = useMemo(() => {
-    return `mailto:?subject=${encodeURIComponent("Join MakeChurchEasy for Church Presentations")}&body=${encodeURIComponent(shareMessage)}`;
+    return `mailto:?subject=${encodeURIComponent("Join MakeChurchEazy for Church Presentations")}&body=${encodeURIComponent(shareMessage)}`;
   }, [shareMessage]);
 
   if (loading) {
@@ -192,7 +192,7 @@ export default function ReferralsPage() {
                 </span>
               </div>
               <p className="text-xs text-emerald-800 mt-0.5">
-                You were invited to MakeChurchEasy through a partner church referral on {formatDate(data.referredBy.appliedAt)}.
+                You were invited to MakeChurchEazy through a partner church referral on {formatDate(data.referredBy.appliedAt)}.
               </p>
             </div>
           </div>
@@ -210,7 +210,7 @@ export default function ReferralsPage() {
                 <h3 className="text-sm font-bold text-slate-900">Were you invited by another ministry?</h3>
               </div>
               <p className="text-xs text-slate-500 mt-1">
-                If a church recommended MakeChurchEasy to you, enter their 8-character referral code below to link accounts and receive bonus credits.
+                If a church recommended MakeChurchEazy to you, enter their 8-character referral code below to link accounts and receive bonus credits.
               </p>
             </div>
             <form onSubmit={handleApplyCode} className="flex items-center gap-2 w-full md:w-auto">

@@ -10,7 +10,7 @@ export function MoreStories({ posts }: Props) {
     <section>
       <div className="section-heading">
         <h2>More stories</h2>
-        <span className="text-xs font-semibold text-slate-500">From the MakeChurchEasy team</span>
+        <span className="text-xs font-semibold text-slate-500">From the MakeChurchEazy team</span>
       </div>
       <div className="stories-grid">
         {posts.map((post) => (

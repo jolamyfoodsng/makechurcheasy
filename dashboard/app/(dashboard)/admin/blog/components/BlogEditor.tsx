@@ -85,7 +85,7 @@ export function BlogEditor({ initialData, isNew = false }: BlogEditorProps) {
   const [coverImage, setCoverImage] = useState(initialData?.coverImage || "");
   const [status, setStatus] = useState<"draft" | "published" | "archived">(initialData?.status || "draft");
   const [featured, setFeatured] = useState<boolean>(Boolean(initialData?.featured));
-  const [authorName, setAuthorName] = useState(initialData?.author?.name || "MakeChurchEasy Team");
+  const [authorName, setAuthorName] = useState(initialData?.author?.name || "MakeChurchEazy Team");
   const [authorRole, setAuthorRole] = useState(initialData?.author?.role || "Editorial Team");
   const [authorAvatar, setAuthorAvatar] = useState(
     initialData?.author?.avatar || "/assets/blog/authors/mce.svg"
@@ -200,7 +200,7 @@ export function BlogEditor({ initialData, isNew = false }: BlogEditorProps) {
       status: effectiveStatus,
       featured,
       author: {
-        name: authorName.trim() || "MakeChurchEasy Team",
+        name: authorName.trim() || "MakeChurchEazy Team",
         role: authorRole.trim() || "Editorial Team",
         avatar: authorAvatar.trim() || "/assets/blog/authors/mce.svg",
       },
@@ -234,7 +234,7 @@ export function BlogEditor({ initialData, isNew = false }: BlogEditorProps) {
       setStatus(effectiveStatus);
       setSuccessMessage(
         effectiveStatus === "published"
-          ? "Story published to MakeChurchEasy Blog!"
+          ? "Story published to MakeChurchEazy Blog!"
           : "Story saved as draft."
       );
 

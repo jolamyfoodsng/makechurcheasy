@@ -1,4 +1,4 @@
-# MakeChurchEasy: Complete Project Assessment & Master Website Content Deck
+# MakeChurchEazy: Complete Project Assessment & Master Website Content Deck
 
 > **Document Type:** Full System Technical Assessment, Product Positioning, and High-Converting Website Copywriting Deck  
 > **Target Audience:** Founders, Marketing AI Agents, Frontend Developers, Copywriters, and Growth Leads  
@@ -10,7 +10,7 @@
 
 ### 1. Architectural Overview & Component Map
 
-MakeChurchEasy is an all-in-one church presentation and live-broadcast ecosystem designed specifically for church media teams, solo AV volunteers, and broadcast directors. It bridges the gap between traditional church presentation software (like ProPresenter and EasyWorship) and modern livestreaming software (OBS Studio), while offering browser-based presentation links for churches without OBS.
+MakeChurchEazy is an all-in-one church presentation and live-broadcast ecosystem designed specifically for church media teams, solo AV volunteers, and broadcast directors. It bridges the gap between traditional church presentation software (like ProPresenter and EasyWorship) and modern livestreaming software (OBS Studio), while offering browser-based presentation links for churches without OBS.
 
 ```mermaid
 graph TD
@@ -62,7 +62,7 @@ graph TD
 
 #### A. Desktop Application (`desktop/`)
 * **Core Technology:** Built on **Tauri v2**, **React 18**, **TypeScript**, and **Vite**. 
-* **Performance Profile:** Unlike Electron-based competitors that consume 2GB+ RAM, MakeChurchEasy operates at a fraction of CPU and memory usage, critical for church laptops running OBS simultaneously.
+* **Performance Profile:** Unlike Electron-based competitors that consume 2GB+ RAM, MakeChurchEazy operates at a fraction of CPU and memory usage, critical for church laptops running OBS simultaneously.
 * **OBS Studio Integration (`desktop/src/dock/dockObsClient.ts`):** Direct integration via OBS WebSocket v5. Provides one-click creation of browser sources, scene routing, preview/program workflow, and automatic reconnection.
 * **Local Presentation Server (`desktop/src/services/presentationDockBridge.ts`):** Embedded local HTTP/WebSocket server. Emits instant HTML/CSS overlays (`mce-bible-overlay.html`, `mce-worship-overlay.html`). Churches without OBS can project directly from any web browser or second display.
 * **Scripture Engine (`desktop/src/services/scriptureEngine.ts`):** 100% offline Bible database. Features sub-millisecond reference parsing, keyword search, side-by-side / line-by-line translation comparisons, and customizable broadcast-grade typography (Broadcast Bold outer strokes, drop shadows, safe-area auto-scaling).
@@ -120,22 +120,22 @@ While the current landing page is clean and functional, it underperforms in seve
 
 ```
 ================================================================================
-                    MAKECHURCHEASY MASTER COPYWRITING DECK
+                    MAKECHURCHEAZY MASTER COPYWRITING DECK
 ================================================================================
 ```
 
 ### 1. Brand Positioning & Core Hook
 
-* **Brand Name:** MakeChurchEasy
+* **Brand Name:** MakeChurchEazy
 * **Tagline:** Church presentation made effortless for OBS and the sanctuary.
-* **One-Sentence Description:** MakeChurchEasy is an all-in-one church presentation software that connects directly to OBS Studio or any browser display, letting church media teams present scriptures, worship lyrics, media, and lower thirds in seconds—even using AI to detect spoken Bible verses live.
-* **Core Value Proposition:** Stop wrestling with clunky presentation software, expensive subscriptions, and frantic scripture searching. MakeChurchEasy gives volunteers a fast, crash-proof dock that delivers broadcast-ready visuals to your church screens and livestream simultaneously.
+* **One-Sentence Description:** MakeChurchEazy is an all-in-one church presentation software that connects directly to OBS Studio or any browser display, letting church media teams present scriptures, worship lyrics, media, and lower thirds in seconds—even using AI to detect spoken Bible verses live.
+* **Core Value Proposition:** Stop wrestling with clunky presentation software, expensive subscriptions, and frantic scripture searching. MakeChurchEazy gives volunteers a fast, crash-proof dock that delivers broadcast-ready visuals to your church screens and livestream simultaneously.
 
 ---
 
 ### 2. Website Navigation Structure
 
-* **Logo:** MakeChurchEasy (with flame/cross broadcast icon)
+* **Logo:** MakeChurchEazy (with flame/cross broadcast icon)
 * **Nav Links:**
   * Features (Speech-to-Scripture, Bible Engine, Worship Lyrics, OBS Studio & Presentation Link, Ministry Graphics)
   * How It Works
@@ -170,7 +170,7 @@ While the current landing page is clean and functional, it underperforms in seve
 * ✓ **Affordable Church Pricing** — Starting at free, paid plans from just ₦3,500 / $4/mo
 
 #### Hero Visual & Caption:
-* **Visual Asset:** High-resolution mockup of MakeChurchEasy Live Dock showing a live scripture comparison (Romans 8:28 KJV vs NIV) with broadcast-bold styling, side-by-side with the live OBS preview window showing clean lower thirds over camera footage.
+* **Visual Asset:** High-resolution mockup of MakeChurchEazy Live Dock showing a live scripture comparison (Romans 8:28 KJV vs NIV) with broadcast-bold styling, side-by-side with the live OBS preview window showing clean lower thirds over camera footage.
 * **Caption:** *One click sends broadcast-ready graphics to your sanctuary projector and your online livestream.*
 
 ---
@@ -185,19 +185,19 @@ While the current landing page is clean and functional, it underperforms in seve
 
 1. **The "Frantic Scripture Search" Panic**
    * *The Nightmare:* The pastor goes off-script and quotes 1 Peter 3:15 without warning. Your media volunteer is sweating, typing furiously, searching through three dropdowns, and finally pushes the verse just as the pastor moves on.
-   * *The MakeChurchEasy Fix:* Instant keyboard search pulls up any reference in 200ms. Or better yet: our Speech-to-Scripture AI listens to the pastor's microphone and queues the scripture on your screen before you even finish typing.
+   * *The MakeChurchEazy Fix:* Instant keyboard search pulls up any reference in 200ms. Or better yet: our Speech-to-Scripture AI listens to the pastor's microphone and queues the scripture on your screen before you even finish typing.
 
 2. **The Clunky, Overpriced $400 Software Trap**
    * *The Nightmare:* Legacy church presentation tools cost hundreds of dollars per year, demand high-end gaming laptops, and crash right before praise and worship begins.
-   * *The MakeChurchEasy Fix:* Built on Tauri v2 for featherweight, native speed. Runs smoothly on modest church computers with zero bloat and reasonable plans designed for every church budget.
+   * *The MakeChurchEazy Fix:* Built on Tauri v2 for featherweight, native speed. Runs smoothly on modest church computers with zero bloat and reasonable plans designed for every church budget.
 
 3. **The OBS Browser Source Headache**
    * *The Nightmare:* Trying to hack together Bible overlays with complicated browser source plugins, broken HTML links, and misaligned text scaling that clips outside the screen.
-   * *The MakeChurchEasy Fix:* Native bidirectional OBS WebSocket connection. Push fullscreen slides, lower thirds, tickers, and countdowns into your existing OBS scenes with zero manual browser resizing.
+   * *The MakeChurchEazy Fix:* Native bidirectional OBS WebSocket connection. Push fullscreen slides, lower thirds, tickers, and countdowns into your existing OBS scenes with zero manual browser resizing.
 
 4. **Volunteer Burnout & Training Friction**
    * *The Nightmare:* Only one person in the entire church knows how to operate the presentation computer. If they get sick, the church has no lyrics on Sunday.
-   * *The MakeChurchEasy Fix:* An intuitive, distraction-free dock interface that a teenager or first-time volunteer can master in 5 minutes.
+   * *The MakeChurchEazy Fix:* An intuitive, distraction-free dock interface that a teenager or first-time volunteer can master in 5 minutes.
 
 ---
 
@@ -210,7 +210,7 @@ While the current landing page is clean and functional, it underperforms in seve
 * **Headline:** The Pastor Preaches. The Scripture Appears. Automatically.
 * **Body Copy:**
   Imagine a Sunday service where your media team never scrambles to find a scripture again. 
-  MakeChurchEasy listens to the sermon audio through your microphone feed. As soon as the pastor says, *"Let's turn together to Jeremiah 29 verse 11,"* the AI detects the reference, retrieves the exact passage from your offline Bible library, and displays it on your operator preview screen.
+  MakeChurchEazy listens to the sermon audio through your microphone feed. As soon as the pastor says, *"Let's turn together to Jeremiah 29 verse 11,"* the AI detects the reference, retrieves the exact passage from your offline Bible library, and displays it on your operator preview screen.
 * **Key Capabilities:**
   * **Operator Assist Mode:** Review detected verses on your preview monitor and tap `Send Live` with one key.
   * **Hands-Free Auto-Push:** Let the AI project verses automatically during fast-paced sermons.
@@ -249,9 +249,9 @@ While the current landing page is clean and functional, it underperforms in seve
 * **Tag:** `DUAL BROADCAST WORKFLOW`
 * **Headline:** Got OBS? Connect in 1 Click. No OBS? Project in Any Browser.
 * **Body Copy:**
-  Whether your church broadcasts with a multi-camera OBS Studio rig or simply connects an HDMI cable to a TV projector, MakeChurchEasy works out of the box.
+  Whether your church broadcasts with a multi-camera OBS Studio rig or simply connects an HDMI cable to a TV projector, MakeChurchEazy works out of the box.
 * **Key Capabilities:**
-  * **OBS Studio Dock:** Dock MakeChurchEasy directly inside OBS Studio or run it as a standalone floating application.
+  * **OBS Studio Dock:** Dock MakeChurchEazy directly inside OBS Studio or run it as a standalone floating application.
   * **Scene Routing:** Automatically route Bible verses to your Scripture Scene, lower thirds to your Camera Scene, and lyrics to your Worship Scene without touching OBS scene buttons.
   * **Browser Presentation Link:** Open a local URL (`http://192.168...`) on any laptop, tablet, or smart TV on the church Wi-Fi. What you click on the dock updates the screen with zero delay.
   * **Stage & Confidence Monitor:** Show upcoming slides and speaker countdowns to the worship team on stage.
@@ -275,7 +275,7 @@ While the current landing page is clean and functional, it underperforms in seve
 * **Tag:** `FREEDOM FROM THE MEDIA DESK`
 * **Headline:** Control the Sanctuary from the Palm of Your Hand.
 * **Body Copy:**
-  Give your pastor, worship leader, or floor director the power to advance slides from anywhere in the auditorium using the MakeChurchEasy mobile app.
+  Give your pastor, worship leader, or floor director the power to advance slides from anywhere in the auditorium using the MakeChurchEazy mobile app.
 * **Key Capabilities:**
   * **Instant QR Code Pairing:** Scan the screen with iOS or Android to connect securely—no passwords or network configurations needed.
   * **Low-Latency Switching:** Tap to trigger the next lyric, jump to a scripture, or blackout the screens.
@@ -287,7 +287,7 @@ While the current landing page is clean and functional, it underperforms in seve
 
 ```
 [ STEP 1: DOWNLOAD & LAUNCH ]
-Download MakeChurchEasy for Mac or Windows. It installs in 30 seconds with no complex database configurations.
+Download MakeChurchEazy for Mac or Windows. It installs in 30 seconds with no complex database configurations.
 
 [ STEP 2: CONNECT OUTPUT ]
 Connect to OBS Studio via WebSocket with one click, or open your local Presentation Link in any browser.
@@ -300,7 +300,7 @@ Search scriptures, trigger lyrics, launch countdowns, or let Speech-to-Scripture
 
 ### 7. Competitive Comparison Table
 
-| Feature / Capability | MakeChurchEasy | ProPresenter | EasyWorship | PowerPoint / Canva |
+| Feature / Capability | MakeChurchEazy | ProPresenter | EasyWorship | PowerPoint / Canva |
 | :--- | :---: | :---: | :---: | :---: |
 | **Price** | **Free tier / From ₦3,500 ($4)/mo** | $399+ license / $25+/mo | $18+/mo | $0 / Office sub |
 | **Speech-to-Scripture AI** | **Yes (Real-Time Voice)** | No | No | No |
@@ -320,7 +320,7 @@ Search scriptures, trigger lyrics, launch countdowns, or let Speech-to-Scripture
 #### Persona 1: The Stressed Church Volunteer (AV Operator)
 * *Profile:* Non-technical volunteer or youth church member handling media on Sunday.
 * *Key Pain:* "The pastor jumps between scriptures without warning, and if I make a mistake, 300 people in the sanctuary stare at me."
-* *Messaging:* MakeChurchEasy makes you look like a seasoned broadcast professional. Quick search, Speech-to-Scripture AI, and fail-safe blackouts mean you're always in control.
+* *Messaging:* MakeChurchEazy makes you look like a seasoned broadcast professional. Quick search, Speech-to-Scripture AI, and fail-safe blackouts mean you're always in control.
 
 #### Persona 2: The Solo Pastor / Church Planter
 * *Profile:* Pastor running a growing church without a dedicated AV team or massive tech budget.
@@ -374,20 +374,20 @@ Search scriptures, trigger lyrics, launch countdowns, or let Speech-to-Scripture
 
 ### 10. Frequently Asked Questions (FAQ)
 
-#### Q1: Does MakeChurchEasy work without OBS Studio?
-**Yes, absolutely.** While MakeChurchEasy integrates natively with OBS Studio for livestreaming, it also features a built-in **Browser Presentation Link**. You can project fullscreen scriptures and lyrics to any projector, television, or second monitor simply by opening a local browser window.
+#### Q1: Does MakeChurchEazy work without OBS Studio?
+**Yes, absolutely.** While MakeChurchEazy integrates natively with OBS Studio for livestreaming, it also features a built-in **Browser Presentation Link**. You can project fullscreen scriptures and lyrics to any projector, television, or second monitor simply by opening a local browser window.
 
 #### Q2: What happens if our church loses internet connection during service?
-**Nothing breaks.** MakeChurchEasy is built offline-first. All installed Bibles, saved worship songs, themes, background media, and OBS controls run 100% locally on your machine. Internet is only required for initial login, cloud library synchronization, and online AI transcription credits.
+**Nothing breaks.** MakeChurchEazy is built offline-first. All installed Bibles, saved worship songs, themes, background media, and OBS controls run 100% locally on your machine. Internet is only required for initial login, cloud library synchronization, and online AI transcription credits.
 
 #### Q3: How does Speech-to-Scripture AI work?
 Speech-to-Scripture captures your preacher's voice through your existing soundboard or microphone input. Utilizing speech-recognition models, it parses spoken phrases like *"First Corinthians chapter thirteen verse four"*, instantly matches them against your Bible library, and displays the verse on the operator's preview screen ready to send live.
 
 #### Q4: Can we import our songs from ProPresenter or EasyWorship?
-**Yes.** You don't have to retype your song library. MakeChurchEasy includes migration tools to import song databases, text documents, PDFs, and numbered hymnals (including CCC hymns) directly into your song bank.
+**Yes.** You don't have to retype your song library. MakeChurchEazy includes migration tools to import song databases, text documents, PDFs, and numbered hymnals (including CCC hymns) directly into your song bank.
 
 #### Q5: Can volunteers use it without technical training?
-**Yes.** Traditional presentation tools are overloaded with complex video editing features that confuse volunteers. MakeChurchEasy is designed as a streamlined, focused dock: click the Bible book, click the verse, and it's on screen. Most volunteers feel comfortable within 5 minutes.
+**Yes.** Traditional presentation tools are overloaded with complex video editing features that confuse volunteers. MakeChurchEazy is designed as a streamlined, focused dock: click the Bible book, click the verse, and it's on screen. Most volunteers feel comfortable within 5 minutes.
 
 #### Q6: Can our pastor control slides from an iPad or phone?
 **Yes.** On the Growth plan, you can pair any iOS or Android phone/tablet by scanning an on-screen QR code. Pastors or worship leaders can navigate slides wirelessly from the pulpit.
@@ -413,9 +413,9 @@ Join hundreds of churches presenting scriptures, worship lyrics, and broadcast g
 
 ### 12. SEO Metadata & Social Share Tags
 
-* **Meta Title:** MakeChurchEasy | Church Presentation Software for OBS & Sanctuaries
+* **Meta Title:** MakeChurchEazy | Church Presentation Software for OBS & Sanctuaries
 * **Meta Description:** The all-in-one church presentation software for OBS Studio and projectors. Present Bible verses, worship lyrics, lower thirds, and media with zero panic. Features Speech-to-Scripture AI. Free download.
 * **Keywords:** church presentation software, OBS church overlays, Bible verse display software, worship lyrics software, church lower thirds, speech to scripture AI, ProPresenter alternative, EasyWorship alternative, church media software
-* **OpenGraph Title:** MakeChurchEasy — Sunday Church Presentations Made Effortless
+* **OpenGraph Title:** MakeChurchEazy — Sunday Church Presentations Made Effortless
 * **OpenGraph Description:** Broadcast-ready Bible verses, worship lyrics, lower thirds, and Speech-to-Scripture AI for OBS Studio and sanctuary projectors.
 * **Canonical URL:** `https://makechurcheasy.com`

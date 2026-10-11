@@ -57,14 +57,14 @@ export default function AdminSupportPage() {
       icon: Bug,
       title: t("admin.support.reportBug"),
       description: t("admin.support.reportBugDescription"),
-      action: `mailto:${SUPPORT_EMAIL}?subject=Bug%20Report%20-%20MakeChurchEasy`,
+      action: `mailto:${SUPPORT_EMAIL}?subject=Bug%20Report%20-%20MakeChurchEazy`,
       iconColor: "bg-red-500/15 text-red-400",
     },
     {
       icon: Lightbulb,
       title: t("admin.support.featureRequest"),
       description: t("admin.support.featureRequestDescription"),
-      action: `mailto:${SUPPORT_EMAIL}?subject=Feature%20Request%20-%20MakeChurchEasy`,
+      action: `mailto:${SUPPORT_EMAIL}?subject=Feature%20Request%20-%20MakeChurchEazy`,
       iconColor: "bg-amber-500/15 text-amber-400",
     },
     {

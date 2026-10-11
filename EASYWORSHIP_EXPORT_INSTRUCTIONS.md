@@ -1,6 +1,6 @@
 # EasyWorship Database Export Instructions
 
-This guide provides step-by-step instructions for extracting `SongWords.db` (and `Songs.db`) from an EasyWorship 6 or 7 installation on a Windows laptop so it can be imported into **MakeChurchEasy**.
+This guide provides step-by-step instructions for extracting `SongWords.db` (and `Songs.db`) from an EasyWorship 6 or 7 installation on a Windows laptop so it can be imported into **MakeChurchEazy**.
 
 ---
 
@@ -66,5 +66,5 @@ Copy these two files:
 ## Next Steps
 
 Once you have `SongWords.db` from the Windows laptop:
-1. Copy `SongWords.db` into the **MakeChurchEasy** project folder (next to the existing `Songs.db`).
-2. We will run the EasyWorship parser test to verify every song, section (`Verse 1`, `Chorus`, `Bridge`), author, and slide break imports cleanly into MakeChurchEasy.
+1. Copy `SongWords.db` into the **MakeChurchEazy** project folder (next to the existing `Songs.db`).
+2. We will run the EasyWorship parser test to verify every song, section (`Verse 1`, `Chorus`, `Bridge`), author, and slide break imports cleanly into MakeChurchEazy.

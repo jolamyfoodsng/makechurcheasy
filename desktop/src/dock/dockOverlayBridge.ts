@@ -6,7 +6,7 @@
  * are published through this bridge instead of OBS WebSocket, reducing
  * latency from hundreds of milliseconds to single-digit milliseconds.
  *
- * The relay is owned by the MakeChurchEasy Rust backend and all connections
+ * The relay is owned by the MakeChurchEazy Rust backend and all connections
  * In production the relay remains loopback-only. Development LAN links may
  * connect back to the host laptop's relay address.
  */

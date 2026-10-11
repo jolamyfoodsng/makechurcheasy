@@ -1270,7 +1270,7 @@ export function MVSettings() {
     >
       {isPrintingMobileQr && mobilePairingQrDataUrl && (
         <div className="mr-qr-print-view" aria-hidden="true">
-          <h1>MakeChurchEasy</h1>
+          <h1>MakeChurchEazy</h1>
           <img src={mobilePairingQrDataUrl} alt="QR Pairing Code" />
           <p>{t("mvSettings.mobile.qrCode")} {mobilePairingInfo?.pairingToken ?? ""}</p>
         </div>
@@ -1414,9 +1414,9 @@ export function MVSettings() {
                     </div>
                     <div className="settings-card">
                       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-                        <AppLogo alt="MakeChurchEasy" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "contain" }} />
+                        <AppLogo alt="MakeChurchEazy" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "contain" }} />
                         <div>
-                          <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>MakeChurchEasy</p>
+                          <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>MakeChurchEazy</p>
                           <p style={{ margin: 0, fontSize: 12, color: "var(--text-muted)" }}>Version {typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0"}</p>
                         </div>
                       </div>
@@ -1695,7 +1695,7 @@ export function MVSettings() {
                         <span className="select-arrow"><ChevronDown size={14} /></span>
                       </div>
                       <p className="form-help-text" style={{ marginTop: "6px" }}>
-                        MakeChurchEasy listens to this microphone feed to detect spoken verses during live preaching.
+                        MakeChurchEazy listens to this microphone feed to detect spoken verses during live preaching.
                       </p>
                     </div>
 
@@ -1962,7 +1962,7 @@ export function MVSettings() {
                           <Smartphone size={18} />
                         </div>
                         <div>
-                          <h4 className="mr-pwa-title">Use MakeChurchEasy in Safari</h4>
+                          <h4 className="mr-pwa-title">Use MakeChurchEazy in Safari</h4>
                           <p className="section-desc">
                             On the same Wi-Fi, paste this local link into Safari. Then use Share → Add to Home Screen.
                           </p>
@@ -2244,7 +2244,7 @@ export function MVSettings() {
                     <div className="form-group">
                       <label className="form-label">Color theme</label>
                       <p className="form-hint" style={{ marginTop: 4, marginBottom: 10 }}>
-                        Choose the same visual language for MakeChurchEasy and the OBS Dock.
+                        Choose the same visual language for MakeChurchEazy and the OBS Dock.
                       </p>
                       <div className="app-appearance-palette-grid">
                         {APP_APPEARANCE_PALETTES.map((palette) => {

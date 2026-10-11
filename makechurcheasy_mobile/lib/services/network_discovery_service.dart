@@ -1,4 +1,4 @@
-/// Network discovery service — finds MakeChurchEasy desktops on the local WiFi.
+/// Network discovery service — finds MakeChurchEazy desktops on the local WiFi.
 ///
 /// Strategy:
 ///   1. Listen for UDP broadcast beacons from the desktop (port 9999)
@@ -80,7 +80,7 @@ class NetworkDiscoveryService {
         final server = DiscoveredServer(
           ip: datagram.address.address,
           port: (msg['port'] as num?)?.toInt() ?? _wsPort,
-          serviceName: msg['service'] as String? ?? 'MakeChurchEasy',
+          serviceName: msg['service'] as String? ?? 'MakeChurchEazy',
           discoveredAt: DateTime.now(),
         );
         _serversController.add(server);
@@ -128,7 +128,7 @@ class NetworkDiscoveryService {
               servers.add(DiscoveredServer(
                 ip: priorityIPs[i],
                 port: _wsPort,
-                serviceName: 'MakeChurchEasy',
+                serviceName: 'MakeChurchEazy',
                 discoveredAt: DateTime.now(),
               ));
             }
@@ -167,7 +167,7 @@ class NetworkDiscoveryService {
           servers.add(DiscoveredServer(
             ip: '$subnet.${batch + i}',
             port: _wsPort,
-            serviceName: 'MakeChurchEasy',
+            serviceName: 'MakeChurchEazy',
             discoveredAt: DateTime.now(),
           ));
         }

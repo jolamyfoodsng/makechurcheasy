@@ -102,7 +102,7 @@ export default function ProfileCompletionModal({ user, onComplete }: ProfileComp
           <div className="pcm-icon">👤</div>
           <h2 className="pcm-title">Complete Your Profile</h2>
           <p className="pcm-description">
-            We noticed your country information is missing. Please select your country to continue using MakeChurchEasy.
+            We noticed your country information is missing. Please select your country to continue using MakeChurchEazy.
           </p>
         </div>
 

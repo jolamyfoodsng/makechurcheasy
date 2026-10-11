@@ -6,7 +6,7 @@
  *   - Filter by type: "lower-third" or "fullscreen"
  *   - Filter by category: bible, worship, general (giving/events/speakers)
  *   - Mark themes as favorites (★)
- *   - Favorites appear first in the MakeChurchEasy Dock theme pickers
+ *   - Favorites appear first in the MakeChurchEazy Dock theme pickers
  *   - If no favorites are set, the dock shows the first 2 themes
  *
  * Data sources:
@@ -93,7 +93,7 @@ const DEFAULT_LT_PREVIEW_VALUES: Record<string, string> = {
   animMode: "stagger",
   logoUrl: FALLBACK_LOGO_DATA_URI,
   qrCodeUrl: FALLBACK_LOGO_DATA_URI,
-  name: "Pastor Daniel Carter",
+  name: "Your Pastor's Name",
   title: "Senior Pastor · Grace Church",
   label: "Sermon Point",
   heading: "This Week",

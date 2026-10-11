@@ -92,7 +92,7 @@ function withOfferParams(
     const isAbsolute = url.startsWith("http://") || url.startsWith("https://");
     const parsed = isAbsolute
       ? new URL(url)
-      : new URL(url, "https://makechurcheasy.com");
+      : new URL(url, "https://makechurcheazy.com");
     if (offerCode && !parsed.searchParams.has("promo") && !parsed.searchParams.has("code")) {
       parsed.searchParams.set("promo", offerCode);
     }

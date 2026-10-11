@@ -25,7 +25,7 @@ export async function POST() {
 
     // Generate TOTP secret
     const totp = new OTPAuth.TOTP({
-      issuer: "MakeChurchEasy",
+      issuer: "MakeChurchEazy",
       label: email,
       algorithm: "SHA1",
       digits: 6,

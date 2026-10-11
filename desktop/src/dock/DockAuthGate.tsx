@@ -252,7 +252,7 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
   if (!ready) {
     return (
       <>
-        <LoadingScreen variant="dock" label="Connecting to MakeChurchEasy…" />
+        <LoadingScreen variant="dock" label="Connecting to MakeChurchEazy…" />
         {forcedUpdateOverlay}
       </>
     );
@@ -269,7 +269,7 @@ export default function DockAuthGate({ children }: { children: ReactNode }) {
           <h2>{t('auth.title')}</h2>
           <p>
             {isTestEnv
-              ? "Please open MakeChurchEasy Test on this computer and sign in there first."
+              ? "Please open MakeChurchEazy Test on this computer and sign in there first."
               : t('auth.description')}
           </p>
           <button className="dock-auth-refresh" onClick={() => window.location.reload()} title={t('auth.refresh')}>

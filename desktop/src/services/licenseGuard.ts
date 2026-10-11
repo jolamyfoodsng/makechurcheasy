@@ -923,7 +923,7 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
         icon: "wifi_off",
         title: "Internet Connection Required",
         description:
-          "You have not connected to the internet for 3 weeks. Please connect to the internet for a few minutes so MakeChurchEasy can verify your license and synchronize.",
+          "You have not connected to the internet for 3 weeks. Please connect to the internet for a few minutes so MakeChurchEazy can verify your license and synchronize.",
         primaryAction: "retry",
         primaryLabel: "Check Connection",
       };
@@ -954,7 +954,7 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
         title: "Temporarily Unavailable",
         description:
           getLicensePayload()?.maintenanceMessage?.trim() ||
-          "MakeChurchEasy is down for maintenance. It will reopen automatically as soon as it is back.",
+          "MakeChurchEazy is down for maintenance. It will reopen automatically as soon as it is back.",
         primaryAction: "retry",
         primaryLabel: "Retry",
       };
@@ -964,7 +964,7 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
         icon: "system_update",
         title: "Update Required",
         description:
-          "A mandatory update is required to continue using MakeChurchEasy. Please update to the latest version.",
+          "A mandatory update is required to continue using MakeChurchEazy. Please update to the latest version.",
         primaryAction: "retry",
         primaryLabel: "Check for Updates",
       };
@@ -994,7 +994,7 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
         icon: "devices_other",
         title: "Logged Out on Another Computer",
         description:
-          "This computer was disconnected because your MakeChurchEasy account was opened on another computer. The Free plan allows 1 computer at a time. Sign in again to use MakeChurchEasy here, or upgrade your plan to use multiple computers together.",
+          "This computer was disconnected because your MakeChurchEazy account was opened on another computer. The Free plan allows 1 computer at a time. Sign in again to use MakeChurchEazy here, or upgrade your plan to use multiple computers together.",
         primaryAction: "reconnect",
         primaryLabel: "Sign In & Use Here",
       };
@@ -1004,7 +1004,7 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
         icon: "report",
         title: "Payment Dispute",
         description:
-          "A payment dispute has been filed for your account. Please resolve the dispute to continue using MakeChurchEasy.",
+          "A payment dispute has been filed for your account. Please resolve the dispute to continue using MakeChurchEazy.",
         primaryAction: "contact_support",
         primaryLabel: "Contact Support",
       };
@@ -1021,8 +1021,8 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
           icon: "devices",
           title: otherDeviceName ? `Active on ${otherDeviceName}` : "Active on Another Computer",
           description: otherDeviceName
-            ? `Your Free plan allows 1 computer at a time, and your account is currently active on "${otherDeviceName}". Log out the other computer to use MakeChurchEasy here, or upgrade your plan to use multiple computers together.`
-            : "Your Free plan allows 1 computer at a time. Another computer is currently active on your account. Log out the other computer to use MakeChurchEasy here, or upgrade your plan to use multiple computers together.",
+            ? `Your Free plan allows 1 computer at a time, and your account is currently active on "${otherDeviceName}". Log out the other computer to use MakeChurchEazy here, or upgrade your plan to use multiple computers together.`
+            : "Your Free plan allows 1 computer at a time. Another computer is currently active on your account. Log out the other computer to use MakeChurchEazy here, or upgrade your plan to use multiple computers together.",
           primaryAction: "disconnect_others",
           primaryLabel: "Log Out & Continue",
           otherDeviceName,
@@ -1034,7 +1034,7 @@ export function getLockScreenConfig(reason: LockReason, _payload: LicensePayload
         icon: "devices",
         title: "Device Limit Reached",
         description:
-          `Your ${_payload?.plan || "current"} plan allows ${_payload?.maxDevices || 1} active computer(s), and all slots are currently in use. Log out other devices to use MakeChurchEasy here, or upgrade your plan for more device slots.`,
+          `Your ${_payload?.plan || "current"} plan allows ${_payload?.maxDevices || 1} active computer(s), and all slots are currently in use. Log out other devices to use MakeChurchEazy here, or upgrade your plan for more device slots.`,
         primaryAction: "disconnect_others",
         primaryLabel: "Log Out & Continue",
         otherDeviceName,

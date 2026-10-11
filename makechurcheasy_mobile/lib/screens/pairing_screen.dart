@@ -199,7 +199,7 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
               ),
               const SizedBox(height: 16),
               Text(
-                'Connect to MakeChurchEasy',
+                'Connect to MakeChurchEazy',
                 style: Theme.of(context).textTheme.headlineMedium,
                 textAlign: TextAlign.center,
               ),

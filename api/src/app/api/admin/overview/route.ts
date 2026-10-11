@@ -217,7 +217,7 @@ export async function GET(req: NextRequest) {
     }
 
     const EVENT_LABELS: Record<string, string> = {
-      user_signup: "signed up for MakeChurchEasy",
+      user_signup: "signed up for MakeChurchEazy",
       user_login: "logged in",
       device_paired: "paired a device",
       bible_search: "searched the Bible",

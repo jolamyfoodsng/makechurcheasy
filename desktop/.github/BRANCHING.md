@@ -1,4 +1,4 @@
-# Git Branching Strategy — MakeChurchEasy
+# Git Branching Strategy — MakeChurchEazy
 
 ## Branch Structure
 

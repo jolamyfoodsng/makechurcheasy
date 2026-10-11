@@ -102684,7 +102684,7 @@ q=A.aXV(!0)
 n=n.c
 if(n===B.he)n=B.DA
 else n=n===B.mW?B.a1F:B.Dz
-return new A.tv(B.Xe,"MakeChurchEasy",r,q,n,!1,o)},
+return new A.tv(B.Xe,"MakeChurchEazy",r,q,n,!1,o)},
 $S:607}
 A.wO.prototype={
 iX(){var s,r=this,q=A.F(t.N,t.z)
@@ -102946,7 +102946,7 @@ a9=A.y("Show Preview monitor",b2,b2,b2,b2,b2,b2,b2)
 b0=A.aY(A.b([a3,new A.w(b2,12,b2,b2),a4,a5,a6,A.uH(b2,B.u,B.E,b5.ga99(),A.y("Show the scene queued in OBS Studio Mode.",b2,b2,b2,b2,b2,b2,b2),a9,b0)],b),B.t,B.i,B.m)
 b5=A.y("About this app",b2,b2,b2,b2,A.M(b2,b2,$.n?B.r:B.q,b2,b2,b2,b2,b2,b4,b2,b2,18,b2,b2,B.B,b2,b2,!0,b2,b2,b2,b2,b2,b2,b2,b2),b2,b2)
 a3=A.M(b2,b2,$.n?B.f:B.e,b2,b2,b2,b2,b2,b4,b2,b2,12,b2,b2,B.n,b2,b2,!0,b2,b2,b2,b2,b2,b2,b2,b2)
-return A.uk(k,q,A.id(A.b([r,new A.w(b2,4,b2,b2),j,new A.w(b2,12,b2,b2),new A.qL(i,b2),new A.w(b2,24,b2,b2),h,new A.w(b2,4,b2,b2),g,new A.w(b2,16,b2,b2),new A.qL(s,b2),new A.w(b2,12,b2,b2),new A.AL(B.r0,"Scan desktop QR code","Pair with the QR code shown in the desktop mobile connection settings.",f,b2),new A.w(b2,8,b2,b2),new A.AL(B.re,"Find desktop on this Wi-Fi","Search the local network and keep the selected pairing saved.",f,b2),new A.w(b2,8,b2,b2),new A.AL(B.ms,"Manual connection","Enter a desktop IP address and pairing code.",f,b2),new A.w(b2,24,b2,b2),b6,new A.w(b2,4,b2,b2),e,new A.w(b2,12,b2,b2),new A.qL(d,b2),new A.w(b2,24,b2,b2),c,new A.w(b2,4,b2,b2),a,new A.w(b2,12,b2,b2),new A.qL(a0,b2),new A.w(b2,24,b2,b2),a1,new A.w(b2,4,b2,b2),a2,new A.w(b2,12,b2,b2),new A.qL(b0,b2),new A.w(b2,24,b2,b2),b5,new A.w(b2,8,b2,b2),A.y("MakeChurchEasy Mobile is the Dock remote: Bible, Text, Media, Scenes, Ministry, macros, and automations are sent to the paired desktop and rendered through its OBS presentation layer. Multi-View remains desktop-only.",b2,b2,b2,b2,a3.lF($.n?B.f:B.e,1.5),b2,b2)],b),b2,B.cR,b2,b2,!1),b2,b2,b2,b2)}}
+return A.uk(k,q,A.id(A.b([r,new A.w(b2,4,b2,b2),j,new A.w(b2,12,b2,b2),new A.qL(i,b2),new A.w(b2,24,b2,b2),h,new A.w(b2,4,b2,b2),g,new A.w(b2,16,b2,b2),new A.qL(s,b2),new A.w(b2,12,b2,b2),new A.AL(B.r0,"Scan desktop QR code","Pair with the QR code shown in the desktop mobile connection settings.",f,b2),new A.w(b2,8,b2,b2),new A.AL(B.re,"Find desktop on this Wi-Fi","Search the local network and keep the selected pairing saved.",f,b2),new A.w(b2,8,b2,b2),new A.AL(B.ms,"Manual connection","Enter a desktop IP address and pairing code.",f,b2),new A.w(b2,24,b2,b2),b6,new A.w(b2,4,b2,b2),e,new A.w(b2,12,b2,b2),new A.qL(d,b2),new A.w(b2,24,b2,b2),c,new A.w(b2,4,b2,b2),a,new A.w(b2,12,b2,b2),new A.qL(a0,b2),new A.w(b2,24,b2,b2),a1,new A.w(b2,4,b2,b2),a2,new A.w(b2,12,b2,b2),new A.qL(b0,b2),new A.w(b2,24,b2,b2),b5,new A.w(b2,8,b2,b2),A.y("MakeChurchEazy Mobile is the Dock remote: Bible, Text, Media, Scenes, Ministry, macros, and automations are sent to the paired desktop and rendered through its OBS presentation layer. Multi-View remains desktop-only.",b2,b2,b2,b2,a3.lF($.n?B.f:B.e,1.5),b2,b2)],b),b2,B.cR,b2,b2,!1),b2,b2,b2,b2)}}
 A.avV.prototype={
 $1(a){var s,r,q=this.a
 if(q.c==null)return
@@ -103066,7 +103066,7 @@ r=f?B.e:B.f
 o=A.dn(g,g,g,A.am(B.iU,f?B.r:B.q,g,g),g,g,new A.aw5(i),g,g,g,h,g)
 n=A.y("OBS Dock Remote",g,g,g,g,A.M(g,g,f?B.r:B.q,g,g,g,g,g,g,g,g,16,g,g,B.X,g,g,!0,g,g,g,g,g,g,g,g),g,g)
 f=t.p
-m=A.b([A.y("MakeChurchEasy",g,g,g,g,A.M(g,g,$.n?B.f:B.e,g,g,g,g,g,g,g,g,10,g,g,B.ao,g,g,!0,g,g,g,g,g,g,g,g),g,g)],f)
+m=A.b([A.y("MakeChurchEazy",g,g,g,g,A.M(g,g,$.n?B.f:B.e,g,g,g,g,g,g,g,g,10,g,g,B.ao,g,g,!0,g,g,g,g,g,g,g,g),g,g)],f)
 if(q!=null){l=$.n
 k=A.aV(g,g,B.p,g,g,new A.aI(l?B.at:B.au,g,g,g,g,g,B.c8),g,3,g,g,g,g,3)
 j=A.ax(4)
@@ -103095,7 +103095,7 @@ l===$&&A.a()
 s=l.f}else s=!1
 l=$.n
 k=l?B.J:B.h
-j=A.y("MakeChurchEasy",n,n,n,n,A.M(n,n,l?B.r:B.q,n,n,n,n,n,m,n,n,14,n,n,B.B,n,n,!0,n,n,n,n,n,n,n,n),n,n)
+j=A.y("MakeChurchEazy",n,n,n,n,A.M(n,n,l?B.r:B.q,n,n,n,n,n,m,n,n,14,n,n,B.B,n,n,!0,n,n,n,n,n,n,n,n),n,n)
 l=t.p
 j=A.aS(A.b([new A.ts(30,n),new A.w(12,n,n,n),A.b5(A.aY(A.b([j,new A.w(n,2,n,n),A.y("Desktop control",n,n,n,n,A.M(n,n,$.n?B.f:B.e,n,n,n,n,n,m,n,n,12,n,n,B.n,n,n,!0,n,n,n,n,n,n,n,n),n,n)],l),B.M,B.i,B.m),1),A.dn(n,n,n,A.am(B.bL,n,n,n),n,n,new A.avZ(o),n,n,n,"Close menu",n)],l),B.t,B.i,B.m,0)
 j=A.b([new A.aP(B.Km,j,n),A.CR($.n?B.e:B.f,1),o.K6("Live control")],l)
@@ -109093,7 +109093,7 @@ o===$&&A.a()
 n=o.a
 n=o.b.a9(0,n.gp(n))
 o=A.aV(p,new A.aP(new A.ak(22,22,22,22),new A.ts(56,p),p),B.p,p,p,new A.aI(B.u,p,p,A.ax(12),p,p,B.z),p,100,p,p,p,p,100)
-r=A.y("MakeChurchEasy",p,p,p,p,A.M(p,p,$.n?B.r:B.q,p,p,p,p,p,"Inter",p,p,24,p,p,B.B,p,p,!0,p,p,p,p,p,p,p,p),p,p)
+r=A.y("MakeChurchEazy",p,p,p,p,A.M(p,p,$.n?B.r:B.q,p,p,p,p,p,"Inter",p,p,24,p,p,B.B,p,p,!0,p,p,p,p,p,p,p,p),p,p)
 q=A.M(p,p,$.n?B.r:B.q,p,p,p,p,p,"Inter",p,p,14,p,p,B.n,p,p,!0,p,p,p,p,p,p,p,p)
 return A.aT5(A.pD(A.aY(A.b([o,new A.w(p,16,p,p),r,new A.w(p,8,p,p),A.y("Church Broadcast Control",p,p,p,p,q.aG($.n?B.f:B.e),p,p)],t.p),B.t,B.i,B.ai),n),s)},
 $S:100}
@@ -110998,7 +110998,7 @@ return new A.cA(24,s,s,s,s,$.n?B.f:B.e,s,s,s)},
 $S:109}
 A.ts.prototype={
 G(a){var s=null,r=this.c
-return A.bl(s,s,new A.t8(A.aSE(s,s,new A.BO("assets/branding/make_church_easy_logo.png",s,s)),s,s,r,r,B.eF,B.Fh,!1,s),!1,s,s,s,!1,s,s,s,s,s,s,!0,s,s,"MakeChurchEasy",s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,B.H,s)}}
+return A.bl(s,s,new A.t8(A.aSE(s,s,new A.BO("assets/branding/make_church_easy_logo.png",s,s)),s,s,r,r,B.eF,B.Fh,!1,s),!1,s,s,s,!1,s,s,s,s,s,s,!0,s,s,"MakeChurchEazy",s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,s,B.H,s)}}
 A.ahP.prototype={
 K(){return"MCEButtonVariant."+this.b}}
 A.Sh.prototype={

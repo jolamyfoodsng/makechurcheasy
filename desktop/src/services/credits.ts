@@ -1,5 +1,5 @@
 /**
- * credits.ts — Universal credit system for MakeChurchEasy
+ * credits.ts — Universal credit system for MakeChurchEazy
  *
  * Credit costs:
  *   Voice → Transcript:  1 credit = 1 minute of processed audio

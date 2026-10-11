@@ -168,7 +168,7 @@ export const DEFAULT_DESKTOP_CONFIG: DesktopConfig = {
     emergencyLockDelay: 0,
     gracePeriodHours: 48,
     updateMessage: "A new version is available. Please update to continue.",
-    emergencyLockMessage: "MakeChurchEasy is temporarily unavailable due to emergency maintenance.",
+    emergencyLockMessage: "MakeChurchEazy is temporarily unavailable due to emergency maintenance.",
     windowsDownloadUrl: "",
     macDownloadUrl: "",
     linuxDownloadUrl: "",

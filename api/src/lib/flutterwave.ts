@@ -160,7 +160,7 @@ export async function createFlutterwavePayment(input: {
       ...(input.name ? { name: input.name } : {}),
     },
     customizations: {
-      title: "MakeChurchEasy",
+      title: "MakeChurchEazy",
       description: input.description,
     },
     meta: input.metadata,

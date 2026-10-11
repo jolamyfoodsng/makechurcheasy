@@ -384,7 +384,7 @@ async function buildEmailPreviews(): Promise<EmailPreview[]> {
   return Promise.all(
     previews.map(async (item) => ({
       ...item,
-      html: await renderEmailHtml(item.html),
+      html: await renderEmailHtml(item.html, { recipient: item.to }),
     })),
   );
 }

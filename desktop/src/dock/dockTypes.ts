@@ -1,5 +1,5 @@
 /**
- * dockTypes.ts — Types for the MakeChurchEasy Dock UI
+ * dockTypes.ts — Types for the MakeChurchEazy Dock UI
  *
  * Defines the tab structure, speaker/event/sermon data shapes,
  * and shared state types for the dock page.

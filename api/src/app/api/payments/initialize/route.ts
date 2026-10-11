@@ -427,7 +427,7 @@ export async function POST(req: NextRequest) {
           email,
           name: String((authUser.mongoUser as any).name || "").trim() || undefined,
           redirectUrl: `${appUrl}/billing/success?type=flutterwave`,
-          description: `MakeChurchEasy ${purchasePlan} ${billingCycle} access`,
+          description: `MakeChurchEazy ${purchasePlan} ${billingCycle} access`,
           metadata: {
             userId,
             plan: purchasePlan,
@@ -549,8 +549,8 @@ export async function POST(req: NextRequest) {
           countryCode: userCountry,
           phone: mtnPhone,
           externalId: providerReference,
-          payerMessage: `MakeChurchEasy ${purchasePlan} subscription`,
-          payeeNote: `MakeChurchEasy ${billingCycle} payment`,
+          payerMessage: `MakeChurchEazy ${purchasePlan} subscription`,
+          payeeNote: `MakeChurchEazy ${billingCycle} payment`,
         });
       } catch (error) {
         await intents.updateOne(
@@ -622,7 +622,7 @@ export async function POST(req: NextRequest) {
           amount: numericAmount,
           currency: paymentCurrency,
           orderId,
-          description: `MakeChurchEasy ${purchasePlan} ${billingCycle} access`,
+          description: `MakeChurchEazy ${purchasePlan} ${billingCycle} access`,
           ipnCallbackUrl: getNowPaymentsIpnCallbackUrl(),
           successUrl: `${appUrl}/billing/success?type=nowpayments&reference=${encodeURIComponent(orderId)}`,
           cancelUrl: `${appUrl}/subscription/plans?payment=cancelled`,

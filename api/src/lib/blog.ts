@@ -87,7 +87,7 @@ When preparation happens in one connected workflow, the presenter spends less ti
     category: "Bible Presentation",
     tags: ["Bible presentation", "church slides", "sermon notes"],
     author: {
-      name: "MakeChurchEasy Editorial",
+      name: "MakeChurchEazy Editorial",
       avatar: "/assets/blog/authors/mce.svg",
       role: "Worship Tech Specialist",
     },
@@ -100,10 +100,10 @@ When preparation happens in one connected workflow, the presenter spends less ti
   },
   {
     slug: "how-makechurcheasy-helps-churches-prepare-better-services",
-    title: "How MakeChurchEasy Helps Churches Prepare Better Services",
+    title: "How MakeChurchEazy Helps Churches Prepare Better Services",
     subtitle: "Unifying Bible presentation, lyrics, and streaming into one calm Sunday morning",
     excerpt: "A practical look at how one workflow brings Bible presentation, worship, media, and live streaming into one calmer preparation process.",
-    content: `Church services have enough moving parts without making the presentation workflow harder than it needs to be. MakeChurchEasy is built around a simple idea: the people preparing a service should be able to focus on the service, not fight disconnected tools.
+    content: `Church services have enough moving parts without making the presentation workflow harder than it needs to be. MakeChurchEazy is built around a simple idea: the people preparing a service should be able to focus on the service, not fight disconnected tools.
 
 ## One place for the service plan
 
@@ -115,14 +115,14 @@ The presentation can support the in-room display while also fitting into a live-
 
 ## Designed for real church teams
 
-Not every operator is a broadcast engineer, and not every church has a large media department. MakeChurchEasy aims to keep the common actions clear: find the content, prepare the slides, present confidently, and keep the service moving.
+Not every operator is a broadcast engineer, and not every church has a large media department. MakeChurchEazy aims to keep the common actions clear: find the content, prepare the slides, present confidently, and keep the service moving.
 
 The result is a calmer Sunday workflow with fewer last-minute surprises and more time for the people the service is meant to serve.`,
     coverImage: "/assets/blog/hello-world/cover.jpg",
     category: "Product & Workflow",
     tags: ["church presentation", "worship technology", "church media"],
     author: {
-      name: "MakeChurchEasy Editorial",
+      name: "MakeChurchEazy Editorial",
       avatar: "/assets/blog/authors/mce.svg",
       role: "Product Lead",
     },
@@ -157,7 +157,7 @@ With a prepared workflow, OBS and vMix become the final delivery layer instead o
     category: "Live Streaming",
     tags: ["OBS", "vMix", "live streaming", "church media"],
     author: {
-      name: "MakeChurchEasy Editorial",
+      name: "MakeChurchEazy Editorial",
       avatar: "/assets/blog/authors/mce.svg",
       role: "Broadcast Engineer",
     },
@@ -316,7 +316,7 @@ export async function createBlogPost(input: BlogPostInput, adminUserId: string):
     category: input.category?.trim() || "General",
     tags: Array.isArray(input.tags) ? input.tags.map((t) => t.trim()).filter(Boolean) : [],
     author: {
-      name: input.author?.name?.trim() || "MakeChurchEasy Team",
+      name: input.author?.name?.trim() || "MakeChurchEazy Team",
       avatar: input.author?.avatar?.trim() || "/favicon/apple-touch-icon.png",
       role: input.author?.role?.trim() || "Editorial Team",
     },
@@ -360,7 +360,7 @@ export async function updateBlogPost(id: string, input: Partial<BlogPostInput>):
 
   if (input.author) {
     updates.author = {
-      name: input.author.name?.trim() || existing.author?.name || "MakeChurchEasy Team",
+      name: input.author.name?.trim() || existing.author?.name || "MakeChurchEazy Team",
       avatar: input.author.avatar?.trim() || existing.author?.avatar || "/favicon/apple-touch-icon.png",
       role: input.author.role?.trim() || existing.author?.role || "Editorial Team",
     };

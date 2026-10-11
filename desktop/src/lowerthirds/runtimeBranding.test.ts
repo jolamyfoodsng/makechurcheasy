@@ -43,19 +43,19 @@ describe("normalizeOfflineThemeValues", () => {
         key: "url",
         label: "URL",
         type: "text",
-        defaultValue: "https://yourchurch.org/give",
+        defaultValue: "https://yourchurchname.com/give",
       },
       {
         key: "qrUrl",
         label: "QR URL",
         type: "image",
-        defaultValue: "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://yourchurch.org/give",
+        defaultValue: "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://yourchurchname.com/give",
       },
     ]);
 
     const result = normalizeOfflineThemeValues(theme, {
       url: "https://give.example.org/offline",
-      qrUrl: "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://yourchurch.org/give",
+      qrUrl: "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://yourchurchname.com/give",
     });
 
     expect(result.qrUrl.startsWith("data:image/svg+xml")).toBe(true);

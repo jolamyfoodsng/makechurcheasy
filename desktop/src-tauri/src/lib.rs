@@ -1,4 +1,4 @@
-// Tauri Rust backend — MakeChurchEasy
+// Tauri Rust backend — MakeChurchEazy
 // Commands:
 //   save_bg_image      — persist background image to disk (for OBS image_source)
 //   save_upload_file   — persist uploaded logo to disk
@@ -30,6 +30,7 @@ mod mobile_companion;
 mod obs_move_plugin;
 mod overlay_relay;
 mod presentation_remote;
+mod sandbox_migration;
 #[cfg(not(target_os = "macos"))]
 use local_llm_stub as local_llm;
 
@@ -201,7 +202,7 @@ fn dev_window_icon() -> Option<Image<'static>> {
 }
 
 // ── macOS App Nap prevention ─────────────────────────────────────────────────
-// When MakeChurchEasy is transcribing in the background, macOS may throttle the app
+// When MakeChurchEazy is transcribing in the background, macOS may throttle the app
 // via App Nap. This creates an IOKit power assertion to prevent that.
 
 #[cfg(target_os = "macos")]
@@ -234,7 +235,7 @@ mod app_nap {
 
         // Create CFString for the assertion type
         let assertion_type = cf_string_from_str(kIOPMAssertionTypePreventUserIdleSystemSleep);
-        let reason = cf_string_from_str("MakeChurchEasy — live transcription active");
+        let reason = cf_string_from_str("MakeChurchEazy — live transcription active");
         let mut id: u32 = 0;
 
         let result = unsafe {
@@ -554,7 +555,7 @@ fn local_share_device_info(host: Option<String>) -> Result<LocalShareDeviceInfo,
     };
 
     Ok(LocalShareDeviceInfo {
-        alias: format!("MakeChurchEasy · {hostname}"),
+        alias: format!("MakeChurchEazy · {hostname}"),
         version: "2.0".to_string(),
         device_model: std::env::consts::OS.to_string(),
         device_type: "desktop".to_string(),
@@ -1267,7 +1268,7 @@ fn overlay_blocked_html_page() -> &'static str {
   <body>
     <main class="panel">
       <h1>Authentication Required</h1>
-      <p>Please open the MakeChurchEasy desktop app and log in first.</p>
+      <p>Please open the MakeChurchEazy desktop app and log in first.</p>
       <button type="button" onclick="window.location.reload()">Refresh</button>
       <p class="hint">This page will start working again after the desktop app restores the local session.</p>
     </main>
@@ -1629,7 +1630,7 @@ fn probe_local_share_device(
     Some(device)
 }
 
-/// Find other MakeChurchEasy desktop instances on the current /24 LAN.
+/// Find other MakeChurchEazy desktop instances on the current /24 LAN.
 /// Discovery stays native and asynchronous so the UI never hangs.
 #[tauri::command]
 async fn discover_local_share_devices() -> Result<Vec<LocalShareDeviceInfo>, String> {
@@ -1745,7 +1746,7 @@ fn emit_local_share_progress(
     );
 }
 
-/// Stream selected files to another MakeChurchEasy desktop over the LAN.
+/// Stream selected files to another MakeChurchEazy desktop over the LAN.
 /// The receiver exposes the same metadata/upload endpoints as LocalSend's
 /// default HTTP transfer flow, while the pairing token prevents anonymous
 /// uploads from arbitrary devices on the network.
@@ -1944,7 +1945,7 @@ fn send_local_share_files(
             file_id,
             file_name,
             file_size,
-            display_path: "MakeChurchEasy Receiver".to_string(),
+            display_path: "MakeChurchEazy Receiver".to_string(),
         });
     }
 
@@ -2245,11 +2246,12 @@ fn get_dev_dock_base_url() -> Result<String, String> {
         return Err("The development Dock URL is only available in debug builds".to_string());
     }
 
-    Ok("http://127.0.0.1:45678".to_string())
+    // The Vite dev server, so the Dock hot-reloads while developing.
+    Ok("http://localhost:1420".to_string())
 }
 
 /// Prepare a local media file for remote OBS by ensuring it is served from the
-/// MakeChurchEasy uploads directory, then return its LAN URL.
+/// MakeChurchEazy uploads directory, then return its LAN URL.
 #[tauri::command]
 fn prepare_remote_media_url(
     file_path: String,
@@ -5351,7 +5353,7 @@ fn is_overlay_server_already_running(port: u16) -> bool {
             let mut response = Vec::new();
             let _ = std::io::Read::read_to_end(&mut stream, &mut response);
             let resp = String::from_utf8_lossy(&response);
-            return resp.contains("MakeChurchEasy") || resp.contains("200 OK");
+            return resp.contains("MakeChurchEazy") || resp.contains("MakeChurchEasy") || resp.contains("200 OK");
         }
     }
     false
@@ -5419,10 +5421,10 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
         },
         None => {
             // Port 45678 could not be bound directly.
-            // Check if another MakeChurchEasy instance is already running and serving port 45678.
+            // Check if another MakeChurchEazy instance is already running and serving port 45678.
             if is_overlay_server_already_running(CANONICAL_OVERLAY_PORT) {
                 println!(
-                    "[Overlay Server] Port {} is already active and serving MakeChurchEasy. Keeping canonical URLs http://127.0.0.1:{}",
+                    "[Overlay Server] Port {} is already active and serving MakeChurchEazy. Keeping canonical URLs http://127.0.0.1:{}",
                     CANONICAL_OVERLAY_PORT, CANONICAL_OVERLAY_PORT
                 );
             } else {
@@ -5456,14 +5458,14 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
             // (http://<lan-ip>:<port>/) from another laptop to verify reachability.
             if clean.is_empty() || clean == "health" {
                 let body = if clean == "health" {
-                    r#"{"ok":true,"service":"MakeChurchEasy overlay server"}"#.to_string()
+                    r#"{"ok":true,"service":"MakeChurchEazy overlay server"}"#.to_string()
                 } else {
                     format!(
                         r#"<!doctype html>
-<html><head><meta charset="utf-8"><title>MakeChurchEasy Overlay Server</title>
+<html><head><meta charset="utf-8"><title>MakeChurchEazy Overlay Server</title>
 <style>body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#0F172A;color:#F8FAFC;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}}main{{max-width:680px;padding:32px;border:1px solid #334155;border-radius:16px;background:#111827}}h1{{margin:0 0 12px;font-size:28px}}p{{margin:0 0 12px;color:#CBD5E1;line-height:1.6}}code{{display:block;margin-top:8px;padding:10px 12px;border-radius:10px;background:#1F2937;color:#93C5FD}}</style>
 </head><body><main>
-<h1>MakeChurchEasy overlay server is running</h1>
+<h1>MakeChurchEazy overlay server is running</h1>
 <p>This address is reachable. OBS browser sources should load specific overlay files from this server.</p>
 <p>Test Bible overlay:</p>
 <code>http://&lt;this-ip&gt;:{}/mce-bible-overlay.html</code>
@@ -6084,9 +6086,9 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 }
 
                 let display_path = if file.destination == "receiver" {
-                    "MakeChurchEasy Receiver".to_string()
+                    "MakeChurchEazy Receiver".to_string()
                 } else if file.destination == "mce" {
-                    "MakeChurchEasy media library".to_string()
+                    "MakeChurchEazy media library".to_string()
                 } else {
                     format!("Downloads/MakeChurchEasy/Received/{stored_name}")
                 };
@@ -6176,7 +6178,7 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                     .unwrap_or(false);
                 if !is_dock_session {
                     let resp = tiny_http::Response::from_string(
-                        r#"{"error":"Invalid MakeChurchEasy Dock session"}"#,
+                        r#"{"error":"Invalid MakeChurchEazy Dock session"}"#,
                     )
                     .with_status_code(400);
                     let _ = request.respond(resp);
@@ -7921,7 +7923,7 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="strict-origin-when-cross-origin">
-  <title>MakeChurchEasy Tutorial</title>
+  <title>MakeChurchEazy Tutorial</title>
   <style>
     html, body {{ width: 100%; height: 100%; margin: 0; background: #020617; overflow: hidden; }}
     iframe {{ display: block; width: 100%; height: 100%; border: 0; }}
@@ -7930,7 +7932,7 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
 <body>
   <iframe
     src="{}"
-    title="MakeChurchEasy tutorial"
+    title="MakeChurchEazy tutorial"
     allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
     referrerpolicy="strict-origin-when-cross-origin"
     allowfullscreen
@@ -8521,10 +8523,111 @@ fn set_update_close_guard(active: bool) {
     UPDATE_CLOSE_GUARD.store(active, std::sync::atomic::Ordering::SeqCst);
 }
 
+/// Where the running app bundle lives and whether the in-app updater can
+/// replace it. The Tauri updater swaps the bundle with a plain rename, which
+/// fails on a read-only location (opened straight from the DMG, or macOS App
+/// Translocation after launching from Downloads) without ever asking for an
+/// admin password.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateInstallLocation {
+    bundle_path: String,
+    /// "ok" | "translocated" | "disk_image" | "not_writable"
+    status: String,
+    /// The bundle belongs to another user; macOS will ask for an admin password.
+    needs_admin: bool,
+}
+
+#[tauri::command]
+fn get_update_install_location() -> Result<UpdateInstallLocation, String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let mut bundle = exe.clone();
+    if cfg!(target_os = "macos") {
+        if let Some(app) = exe.ancestors().find(|p| p.extension().map_or(false, |e| e == "app")) {
+            bundle = app.to_path_buf();
+        }
+    }
+    let bundle_path = bundle.display().to_string();
+    let mut location = UpdateInstallLocation { bundle_path: bundle_path.clone(), status: "ok".into(), needs_admin: false };
+    if !cfg!(target_os = "macos") {
+        return Ok(location);
+    }
+    if bundle_path.contains("/AppTranslocation/") {
+        location.status = "translocated".into();
+        return Ok(location);
+    }
+    if bundle_path.starts_with("/Volumes/") {
+        location.status = "disk_image".into();
+        return Ok(location);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let Some(parent) = bundle.parent() else { return Ok(location) };
+        let probe = parent.join(format!(".mce-update-probe-{}", std::process::id()));
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&probe) {
+            Ok(_) => {
+                let my_uid = std::fs::metadata(&probe).map(|m| m.uid()).ok();
+                let _ = std::fs::remove_file(&probe);
+                let owner = std::fs::metadata(&bundle).map(|m| m.uid()).ok();
+                location.needs_admin = matches!((my_uid, owner), (Some(a), Some(b)) if a != b);
+            }
+            Err(e) if e.raw_os_error() == Some(30) => location.status = "disk_image".into(), // EROFS
+            Err(_) => location.needs_admin = true,
+        }
+    }
+    Ok(location)
+}
+
+/// Opens an installer the updater downloaded into the temp folder (DMG, EXE,
+/// MSI...). The JS shell `open` cannot do this: its default scope only allows
+/// http(s)/mailto/tel, so the installer fallback always failed with
+/// "Update failed" (that is what stranded v3.33 users).
+#[tauri::command]
+fn open_downloaded_installer(path: String) -> Result<(), String> {
+    let file = std::fs::canonicalize(&path).map_err(|e| format!("Installer not found: {e}"))?;
+    let temp = std::fs::canonicalize(std::env::temp_dir()).map_err(|e| e.to_string())?;
+    if !file.starts_with(&temp) {
+        return Err("Refusing to open an installer outside the temp folder".into());
+    }
+    let ext = file.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    if !["dmg", "exe", "msi", "appimage", "deb"].contains(&ext.as_str()) {
+        return Err(format!("Unsupported installer type: .{ext}"));
+    }
+    #[cfg(target_os = "macos")]
+    let mut cmd = std::process::Command::new("open");
+    #[cfg(target_os = "windows")]
+    let mut cmd = std::process::Command::new("explorer");
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut cmd = std::process::Command::new("xdg-open");
+    cmd.arg(&file).spawn().map_err(|e| format!("Could not open the installer: {e}"))?;
+    Ok(())
+}
+
+/// Appends one line to the app's updater log so a failed update can be
+/// diagnosed on a user's machine (macOS: ~/Library/Logs/com.makechurcheasy.desktop/updater.log).
+#[tauri::command]
+fn append_update_log(app: tauri::AppHandle, line: String) -> Result<(), String> {
+    use std::io::Write;
+    let dir = app.path().app_log_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("updater.log");
+    // Keep the file small: start over past 1 MB.
+    if std::fs::metadata(&path).map(|m| m.len() > 1_000_000).unwrap_or(false) {
+        let _ = std::fs::remove_file(&path);
+    }
+    let mut file = std::fs::OpenOptions::new().create(true).append(true).open(&path).map_err(|e| e.to_string())?;
+    let line: String = line.chars().take(4000).collect();
+    writeln!(file, "{} {}", Utc::now().to_rfc3339(), line.replace('\n', " ")).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Load .env file so Rust commands can read env vars (e.g. OPENCODE_API_KEY)
     dotenvy::dotenv().ok();
+
+    // Must run before any webview is created (it moves WebView storage too).
+    sandbox_migration::migrate_from_sandbox_container("com.makechurcheasy.desktop");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
@@ -8607,7 +8710,7 @@ pub fn run() {
 
             app.manage(audio_capture::AudioCaptureState::default());
             app.manage(assemblyai_stream::AssemblyAiStreamState::default());
-            // Stops Voice AI if the screen turns off or an inactivity prompt is ignored.
+            // Stops Voice AI when the screen turns off or nobody confirms after a long silence.
             voice_guard::init(app.handle());
 
             if let Some(window) = app.get_webview_window("main") {
@@ -8683,11 +8786,11 @@ pub fn run() {
             });
             println!("[Tauri] Overlay relay starting on port 17891");
 
-            // macOS menu-bar controls for the main MakeChurchEasy window.
+            // macOS menu-bar controls for the main MakeChurchEazy window.
             let show_item = tauri::menu::MenuItem::with_id(
                 app,
                 "show-main-window",
-                "Show MakeChurchEasy",
+                "Show MakeChurchEazy",
                 true,
                 None::<&str>,
             )?;
@@ -8702,7 +8805,7 @@ pub fn run() {
             let quit_item = tauri::menu::MenuItem::with_id(
                 app,
                 "quit-makechurcheasy",
-                "Quit MakeChurchEasy",
+                "Quit MakeChurchEazy",
                 true,
                 None::<&str>,
             )?;
@@ -8713,14 +8816,14 @@ pub fn run() {
 
             #[cfg(target_os = "windows")]
             let tray_icon = Image::from_bytes(include_bytes!("../icons/16x16.png"))
-                .expect("bundled MakeChurchEasy tray icon must be valid PNG");
+                .expect("bundled MakeChurchEazy tray icon must be valid PNG");
             #[cfg(not(target_os = "windows"))]
             let tray_icon = Image::from_bytes(include_bytes!("../icons/32x32.png"))
-                .expect("bundled MakeChurchEasy tray icon must be valid PNG");
+                .expect("bundled MakeChurchEazy tray icon must be valid PNG");
             let _tray = tauri::tray::TrayIconBuilder::with_id("makechurcheasy-tray")
                 .icon(tray_icon)
                 .icon_as_template(true)
-                .tooltip("MakeChurchEasy")
+                .tooltip("MakeChurchEazy")
                 .menu(&tray_menu)
                 .show_menu_on_left_click(true)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -8844,6 +8947,9 @@ pub fn run() {
             voice_guard::voice_guard_keep_alive,
             close_app_confirmed,
             set_update_close_guard,
+            get_update_install_location,
+            open_downloaded_installer,
+            append_update_log,
             local_llm::get_local_llm_runtime_status,
             local_llm::install_local_llm_model,
             local_llm::generate_local_llm_text,

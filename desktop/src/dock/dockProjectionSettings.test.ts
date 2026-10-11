@@ -38,9 +38,15 @@ describe("dock projection settings", () => {
     expect(loadProjectionSettings().sceneMode).toBe("no-clone");
   });
 
-  it("defaults to isolating the active MCE source while preserving the lower-third first-source option", () => {
+  it("defaults to isolating the active MCE source while lower thirds sit on top of what is on screen", () => {
     expect(loadProjectionSettings().presentationSourceVisibility).toBe("active-only");
-    expect(loadProjectionSettings().lowerThirdSourceVisibility).toBe("keep-first");
+    expect(loadProjectionSettings().lowerThirdSourceVisibility).toBe("overlay");
+  });
+
+  it("migrates the old keep-first lower-third choice to overlay", () => {
+    writeNativeDockSetting(PROJECTION_SETTINGS_KEY, { lowerThirdSourceVisibility: "keep-first" });
+
+    expect(loadProjectionSettings().lowerThirdSourceVisibility).toBe("overlay");
   });
 
   it("migrates the removed Mirror Program mode to Program background on", () => {

@@ -10,7 +10,7 @@ import { logTrialAction } from "@/lib/trialAudit";
 import { getTrialForUser, updateTrialRecord, createTrialRecord } from "@/lib/trialRecords";
 import type { Announcement, DiscountBillingCycle, PlanTier } from "@/types/schemas";
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://makechurcheasy.com";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://makechurcheazy.com";
 
 interface DiscountPayload {
   preset?: "half_off_1m" | "half_off_2m" | "trial_extension_7d" | "intro_90_off_15d" | "annual_20_off" | "custom";
@@ -170,7 +170,7 @@ export async function POST(
     const expiresAt = new Date(now.getTime() + expiresInDays * 86400000).toISOString();
 
     const announcementDoc: Omit<Announcement, "_id"> = {
-      title: `${discountPercent}% Off MakeChurchEasy`,
+      title: `${discountPercent}% Off MakeChurchEazy`,
       message: `Exclusive offer: Get ${discountPercent}% off the ${plan} plan for ${durationMonths} month(s).`,
       tone: "offer",
       status: "active",
@@ -208,7 +208,7 @@ export async function POST(
           unsubscribeUrl: buildUnsubscribeUrl(id),
         name: user.name || user.firstName,
         churchName: user.churchName,
-        headline: `Special Offer: ${discountPercent}% Off MakeChurchEasy`,
+        headline: `Special Offer: ${discountPercent}% Off MakeChurchEazy`,
         discountPercent,
         durationMonths,
         promoCode: normalizedCode,

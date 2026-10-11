@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// MakeChurchEasy Design System — Dark Mode
+/// MakeChurchEazy Design System — Dark Mode
 /// Colors from STYLE_DESIGN.md, sizing from COMPONENT_LIBRARY.md.
 class AppTheme {
   AppTheme._();

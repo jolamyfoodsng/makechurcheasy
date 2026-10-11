@@ -1,8 +1,8 @@
-# i18n Groundwork Report — MakeChurchEasy
+# i18n Groundwork Report — MakeChurchEazy
 
 ## Overview
 
-Complete internationalization (i18n) groundwork for the MakeChurchEasy dashboard application. All user-facing UI strings have been extracted into a centralized English translation file (`src/locales/en.json`) and replaced with `t()` translation calls throughout the codebase. **English-only for now — no other languages added.**
+Complete internationalization (i18n) groundwork for the MakeChurchEazy dashboard application. All user-facing UI strings have been extracted into a centralized English translation file (`src/locales/en.json`) and replaced with `t()` translation calls throughout the codebase. **English-only for now — no other languages added.**
 
 ## Statistics
 

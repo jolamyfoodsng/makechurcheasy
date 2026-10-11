@@ -778,7 +778,7 @@ function LoginInner() {
               </div>
               <div className="leading-tight">
                 <span className="text-xs font-bold text-slate-900 block">Church PC or Mac?</span>
-                <span className="text-[11px] text-slate-500 block">Run services with MakeChurchEasy Studio</span>
+                <span className="text-[11px] text-slate-500 block">Run services with MakeChurchEazy Studio</span>
               </div>
             </div>
             <Link

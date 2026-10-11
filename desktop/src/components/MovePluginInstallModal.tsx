@@ -52,7 +52,7 @@ export default function MovePluginInstallModal({ onClose }: Props) {
 
   const install = async () => {
     setState("installing");
-    if (!window.confirm("Install Move Transition and the MakeChurchEasy OBS Bridge for this user?")) {
+    if (!window.confirm("Install Move Transition and the MakeChurchEazy OBS Bridge for this user?")) {
       setState(plugin?.installed && plugin.bridgeInstalled ? "installed" : "not-installed");
       return;
     }
@@ -89,7 +89,7 @@ export default function MovePluginInstallModal({ onClose }: Props) {
         </div>
         <h2 id="move-plugin-modal-title">Install OBS motion support</h2>
         <p>
-          Add optional smooth scene movement to OBS. MakeChurchEasy downloads
+          Add optional smooth scene movement to OBS. MakeChurchEazy downloads
           Move Transition and its small bridge, then places both in your user
           OBS folder. You can leave this disabled and use the built-in layout
           fallback.

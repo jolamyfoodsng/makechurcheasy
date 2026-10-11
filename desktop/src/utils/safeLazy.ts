@@ -1,5 +1,5 @@
 /**
- * safeLazy.ts — MakeChurchEasy
+ * safeLazy.ts — MakeChurchEazy
  *
  * Robust wrapper around React.lazy() that handles dynamic chunk import failures,
  * network glitches, and stale asset hashes during updates or rebuilds. Automatically
@@ -27,7 +27,7 @@ export function safeLazy<T extends ComponentType<any>>(
         lastError = err;
         if (attempt < delays.length) {
           console.warn(
-            `[MakeChurchEasy] Transient chunk import error (attempt ${attempt + 1}/${delays.length + 1}), retrying in ${delays[attempt]}ms...`,
+            `[MakeChurchEazy] Transient chunk import error (attempt ${attempt + 1}/${delays.length + 1}), retrying in ${delays[attempt]}ms...`,
             err
           );
           await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
@@ -35,7 +35,7 @@ export function safeLazy<T extends ComponentType<any>>(
       }
     }
 
-    console.error("[MakeChurchEasy] Module script import failed after retries:", lastError);
+    console.error("[MakeChurchEazy] Module script import failed after retries:", lastError);
     // Force refresh page if asset bundle hash changed on client
     const reloadKey = "mce_module_chunk_reload_" + Math.floor(Date.now() / 15000);
     if (typeof window !== "undefined" && !sessionStorage.getItem(reloadKey)) {

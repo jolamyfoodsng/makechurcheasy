@@ -1,5 +1,5 @@
 /**
- * BroadcastHome.tsx — Original MakeChurchEasy broadcast controls
+ * BroadcastHome.tsx — Original MakeChurchEazy broadcast controls
  *
  * Extracted from App.tsx so routing can live there.
  * Three conditional states:
@@ -101,7 +101,7 @@ export function BroadcastHome() {
               <div className="connect-icon-wrap">
                 <Icon name="church" size={20} className="connect-icon" />
               </div>
-              <h2 className="connect-heading">MakeChurchEasy</h2>
+              <h2 className="connect-heading">MakeChurchEazy</h2>
               <p className="connect-subheading">
                 Connect to OBS Studio to get started.
               </p>
@@ -127,10 +127,10 @@ export function BroadcastHome() {
           <header className="app-header">
             <div className="header-brand">
               <div className="header-logo">
-                <AppLogo alt="MakeChurchEasy" />
+                <AppLogo alt="MakeChurchEazy" />
               </div>
               <div>
-                <h1 className="header-title">MakeChurchEasy</h1>
+                <h1 className="header-title">MakeChurchEazy</h1>
                 <p className="header-subtitle">First-Time Setup</p>
               </div>
             </div>

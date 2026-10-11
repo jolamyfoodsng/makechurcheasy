@@ -1,5 +1,5 @@
 /**
- * i18n.ts — react-i18next configuration for the MakeChurchEasy Desktop app.
+ * i18n.ts — react-i18next configuration for the MakeChurchEazy Desktop app.
  *
  * Loaded by main.tsx (main app), dock-main.tsx and lm-dock-main.tsx (dock).
  * Merges dock + app locale files; app locale values win on key conflicts.

@@ -1,5 +1,5 @@
 /**
- * dock-main.tsx — Standalone entry point for the MakeChurchEasy Dock.
+ * dock-main.tsx — Standalone entry point for the MakeChurchEazy Dock.
  *
  * This file is the entry for dock.html, which OBS loads directly in its
  * Custom Browser Dock feature. It renders DockPage without any of the

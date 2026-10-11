@@ -40,6 +40,8 @@ export interface LTVariable {
   group?: string;
   /** Separator used to join list items (for type "list"). Defaults to " • " */
   separator?: string;
+  /** Show a taller box where each line is its own item (for example ticker messages). */
+  multiline?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -405,7 +407,7 @@ export interface LTObsSource {
   inputName: string;
   /** OBS input kind (should be "browser_source") */
   inputKind: string;
-  /** Whether it was created by MakeChurchEasy */
+  /** Whether it was created by MakeChurchEazy */
   isOcsManaged: boolean;
   /** Current theme ID if known */
   themeId?: string;
@@ -579,7 +581,7 @@ export const LT_DEFAULT_ACTIVE_STATE: LTActiveState = {
 // Constants
 // ---------------------------------------------------------------------------
 
-/** OBS source name prefix for MakeChurchEasy-managed lower-third sources */
+/** OBS source name prefix for MakeChurchEazy-managed lower-third sources */
 export const LT_SOURCE_PREFIX = "MCE_LT_";
 
 /** OBS scene name for the lower-third overlay scene */
@@ -591,11 +593,11 @@ export const MV_LT_PATTERN = /^MV_.+_LT:/;
 /** Pattern to match legacy OCS-managed lower-third sources (backward compat) */
 export const OCS_LT_PATTERN = /^OCS_LT_/;
 
-/** Pattern to match MakeChurchEasy-managed lower-third sources */
+/** Pattern to match MakeChurchEazy-managed lower-third sources */
 export const VC_LT_PATTERN = /^MCE_LT_/;
 
 /** Pattern to match legacy OCS Bible lower-third sources (backward compat) */
 export const OCS_BIBLE_LT_PATTERN = /^OCS_BibleLT_/;
 
-/** Pattern to match MakeChurchEasy Bible lower-third sources */
+/** Pattern to match MakeChurchEazy Bible lower-third sources */
 export const VC_BIBLE_LT_PATTERN = /^MCE_BibleLT_/;

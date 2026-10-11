@@ -5,10 +5,10 @@ const Header = () => {
   return (
     <header className="site-header">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 sm:px-7 lg:px-8 site-header__inner">
-        <Link href="/" className="site-brand" aria-label="MakeChurchEasy Blog home">
+        <Link href="/" className="site-brand" aria-label="MakeChurchEazy Blog home">
           <span className="site-brand__mark" aria-hidden="true">MCE</span>
           <span className="site-brand__copy">
-            MakeChurchEasy <span>/ Blog</span>
+            MakeChurchEazy <span>/ Blog</span>
           </span>
         </Link>
         <nav className="site-nav" aria-label="Primary navigation">

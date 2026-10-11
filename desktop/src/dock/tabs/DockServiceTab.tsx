@@ -1,5 +1,5 @@
 /**
- * DockServiceTab.tsx — Service Plan Checklist for the MakeChurchEasy Dock
+ * DockServiceTab.tsx — Service Plan Checklist for the MakeChurchEazy Dock
  *
  * Loads service plans from the overlay server (synced as dock-service-plans.json).
  * The user selects a plan and works through it as an ordered checklist

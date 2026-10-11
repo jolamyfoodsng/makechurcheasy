@@ -13,7 +13,7 @@ export function Footer() {
               href="https://makechurcheazy.com"
               className="button-primary"
             >
-              Visit MakeChurchEasy
+              Visit MakeChurchEazy
             </a>
             <a
               href="/feed.xml"

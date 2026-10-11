@@ -458,7 +458,7 @@ export function BroadcastHowItWorksModal({
                 Sync with OBS
               </div>
               <div style={{ fontSize: "12.5px", color: "#a1a1aa", marginTop: "3px", lineHeight: 1.4 }}>
-                Make Church Easy loads that profile&apos;s saved streaming setup into OBS automatically in one click.
+                Make Church Eazy loads that profile&apos;s saved streaming setup into OBS automatically in one click.
               </div>
             </div>
             {/* Visual illustration: Sync button with cursor */}

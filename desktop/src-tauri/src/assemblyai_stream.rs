@@ -453,7 +453,7 @@ pub async fn start_assemblyai_stream(
         let mut c = state.is_streaming.lock().map_err(|e| e.to_string())?;
         *c = true;
     }
-    // Reset the native inactivity watchdog at the start of every listening session.
+    // A new session starts with a fresh silence clock.
     crate::voice_guard::mark_activity();
 
     // ── 2. Spawn the STT task (Cloudflare HTTP or AssemblyAI) ─────────────────
@@ -606,7 +606,7 @@ fn dispatch_cloudflare_phrase(
                             let trimmed = text.trim();
                             if !trimmed.is_empty() {
                                 println!("[Cloudflare STT] Transcript: {}", trimmed);
-                                crate::voice_guard::mark_transcript_activity(trimmed);
+                                crate::voice_guard::mark_activity();
                                 let payload = TranscriptPayload {
                                     text: trimmed.to_string(),
                                     end_of_turn: true,
@@ -931,7 +931,7 @@ fn handle_realtime_message(app: &AppHandle, raw: &str) -> Result<bool, String> {
     match message.message_type.as_str() {
         "Turn" => {
             if let Some(payload) = realtime_transcript_payload(&message) {
-                crate::voice_guard::mark_transcript_activity(&payload.text);
+                crate::voice_guard::mark_activity();
                 let _ = app.emit("assemblyai-transcript", payload);
             }
         }

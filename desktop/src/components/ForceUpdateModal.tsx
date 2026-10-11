@@ -150,8 +150,8 @@ export default function ForceUpdateModal({ result, daysOld, locked }: ForceUpdat
             <>
               <p className="force-update-message">
                 {result.version
-                  ? `MakeChurchEasy v${result.version} is available. Please update to continue using the app.`
-                  : `A new version of MakeChurchEasy is available. Please update to continue using the app.`}
+                  ? `MakeChurchEazy v${result.version} is available. Please update to continue using the app.`
+                  : `A new version of MakeChurchEazy is available. Please update to continue using the app.`}
               </p>
 
               {result.version && (
@@ -204,7 +204,7 @@ export default function ForceUpdateModal({ result, daysOld, locked }: ForceUpdat
           )}
 
           {status === "relaunching" && (
-            <p className="force-update-progress-text">Restarting MakeChurchEasy...</p>
+            <p className="force-update-progress-text">Restarting MakeChurchEazy...</p>
           )}
 
           {status === "error" && (

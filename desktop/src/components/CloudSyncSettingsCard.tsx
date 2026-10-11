@@ -135,7 +135,7 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
                 <Cloud size={18} />
               </div>
               <span className="switch-title" style={{ color: "#ffffff", fontSize: "1.05rem", fontWeight: 700 }}>
-                {t("cloudSync.lockedTitle", "Make Church Easy Cloud Backup & Sync")}
+                {t("cloudSync.lockedTitle", "Make Church Eazy Cloud Backup & Sync")}
               </span>
               <span
                 style={{

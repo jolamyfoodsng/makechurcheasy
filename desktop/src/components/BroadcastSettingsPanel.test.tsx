@@ -38,4 +38,8 @@ describe("BroadcastSettingsPanel for MVSettings", () => {
     expect(html).toContain("Sync with OBS");
   });
 
+  it("strictly enforces zero occurrences of the forbidden word", () => {
+    const html = renderToStaticMarkup(<BroadcastSettingsPanel />);
+    expect(html.toLowerCase()).not.toContain("sanctuary");
+  });
 });

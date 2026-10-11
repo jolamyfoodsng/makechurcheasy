@@ -72,7 +72,7 @@ export default function VerificationModal({ daysOffline, daysUntilNextTier, onDi
         {/* Body */}
         <div className="verification-modal__body">
           <p className="verification-modal__message">
-            MakeChurchEasy needs to verify your account periodically to ensure continued access.
+            MakeChurchEazy needs to verify your account periodically to ensure continued access.
             Please connect to the internet and verify your account.
           </p>
 

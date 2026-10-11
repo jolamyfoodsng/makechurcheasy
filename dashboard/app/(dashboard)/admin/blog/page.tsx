@@ -183,7 +183,7 @@ export default function AdminBlogPage() {
                 Stories & Blog CMS
               </h1>
               <p className="text-xs text-slate-400 mt-0.5">
-                Write, publish, and manage Medium-style articles for MakeChurchEasy
+                Write, publish, and manage Medium-style articles for MakeChurchEazy
               </p>
             </div>
           </div>

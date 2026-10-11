@@ -259,6 +259,16 @@ async function refreshPlanFromOverlayServer(): Promise<void> {
   }
 }
 
+/**
+ * Re-read the plan from the overlay server right now (instead of waiting for the
+ * 60s poll) and return what the dock should treat as the current plan.
+ * Used when the user opens a locked tab, so a stale plan never keeps them locked out.
+ */
+export async function refreshDockPlanNow(): Promise<string> {
+  await refreshPlanFromOverlayServer();
+  return getDockPlan();
+}
+
 // Start periodic plan refresh when module loads
 let _refreshInterval: ReturnType<typeof setInterval> | null = null;
 export function startPlanRefresh(): void {

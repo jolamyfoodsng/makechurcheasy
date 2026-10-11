@@ -9,7 +9,7 @@
 import { isDockFreePlan } from "./dockEntitlement";
 
 export const FREE_DOCK_OBS_MUTATION_MESSAGE =
-  "You are using the Free plan. MakeChurchEasy will not create or update OBS scenes or sources, including MCE Presentation. Copy the presentation link below and add it once to OBS as a Browser Source. Bible, worship, Notes, Media, and other Dock updates will then appear through that same link. Upgrade to enable direct OBS control.";
+  "You are using the Free plan. MakeChurchEazy will not create or update OBS scenes or sources, including MCE Presentation. Copy the presentation link below and add it once to OBS as a Browser Source. Bible, worship, Notes, Media, and other Dock updates will then appear through that same link. Upgrade to enable direct OBS control.";
 
 /** OBS requests beginning with Get are read-only. Every other request used by
  * the Dock is treated as a mutation so a new OBS write cannot bypass the gate.

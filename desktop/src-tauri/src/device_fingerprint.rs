@@ -20,8 +20,8 @@ pub struct DeviceFingerprint {
 /// Platform-specific app data directory.
 ///
 /// macOS:   ~/Library/Application Support/MakeChurchEasy
-/// Windows: %APPDATA%/MakeChurchEasy
-/// Linux:   ~/.local/share/MakeChurchEasy
+/// Windows: %APPDATA%/MakeChurchEazy
+/// Linux:   ~/.local/share/MakeChurchEazy
 fn app_data_dir() -> Result<PathBuf, String> {
     let base = dirs::data_dir().ok_or("Could not determine app data directory")?;
     let dir = base.join("MakeChurchEasy");

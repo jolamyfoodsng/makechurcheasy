@@ -61,7 +61,7 @@ export default function Index() {
         <Container>
           <Intro />
           <p className="max-w-2xl pb-16 text-base leading-relaxed text-slate-600 dark:text-slate-400">
-            New MakeChurchEasy articles are on the way. Connect the content API
+            New MakeChurchEazy articles are on the way. Connect the content API
             to publish the first post.
           </p>
         </Container>

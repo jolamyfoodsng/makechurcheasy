@@ -56,7 +56,7 @@ function ReactivationClaimContent() {
 
     const requestedCampaign = searchParams.get("campaign");
     if (requestedCampaign !== CAMPAIGN_KEY) {
-      setError("This Growth month link is not valid. Please open the link from your MakeChurchEasy email.");
+      setError("This Growth month link is not valid. Please open the link from your MakeChurchEazy email.");
       return;
     }
 
@@ -99,12 +99,12 @@ function ReactivationClaimContent() {
             </h1>
             <p className="mx-auto mt-4 max-w-md text-sm leading-6 text-slate-300">
               {result.active
-                ? `You now have the Growth plan for 30 days${result.expiresAt ? `, through ${new Date(result.expiresAt).toLocaleDateString()}` : ""}. Open MakeChurchEasy and explore it with your church.`
-                : "This one-time Growth gift has already been used. You can still open MakeChurchEasy and continue with your current plan."}
+                ? `You now have the Growth plan for 30 days${result.expiresAt ? `, through ${new Date(result.expiresAt).toLocaleDateString()}` : ""}. Open MakeChurchEazy and explore it with your church.`
+                : "This one-time Growth gift has already been used. You can still open MakeChurchEazy and continue with your current plan."}
             </p>
             <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
               <Link href="/dashboard" className="inline-flex items-center justify-center rounded-xl bg-indigo-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400">
-                Open MakeChurchEasy
+                Open MakeChurchEazy
               </Link>
               <a href="https://makechurcheazy.com/download" className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold text-slate-100 transition hover:bg-white/5">
                 <Download className="h-4 w-4" /> Download the app
@@ -115,8 +115,8 @@ function ReactivationClaimContent() {
           <div className="py-6 text-center">
             <h1 className="text-2xl font-bold">We couldn’t activate this Growth month</h1>
             <p className="mt-4 text-sm leading-6 text-slate-300">{error}</p>
-            <p className="mt-3 text-sm text-slate-400">Sign in with the MakeChurchEasy account that received the email. If you think this is a mistake, reply to the email and Tayo will help.</p>
-            <Link href="/dashboard" className="mt-7 inline-flex rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold text-slate-100 hover:bg-white/5">Go to MakeChurchEasy</Link>
+            <p className="mt-3 text-sm text-slate-400">Sign in with the MakeChurchEazy account that received the email. If you think this is a mistake, reply to the email and Tayo will help.</p>
+            <Link href="/dashboard" className="mt-7 inline-flex rounded-xl border border-white/15 px-5 py-3 text-sm font-semibold text-slate-100 hover:bg-white/5">Go to MakeChurchEazy</Link>
           </div>
         ) : (
           <div className="py-10 text-center">

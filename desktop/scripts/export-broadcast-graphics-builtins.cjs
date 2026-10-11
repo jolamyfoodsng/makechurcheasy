@@ -99,7 +99,7 @@ const copyFiles = (sourceDir, targetDir, names) => {
 copyFiles(
   path.resolve(__dirname, "../public/kinetic"),
   path.resolve(__dirname, "../../dashboard/public/kinetic"),
-  ["gsap.min.js", "kinetic-lower-thirds.js", "subscribe-lower-thirds.js", "church-lower-thirds.js", "sunday-lower-thirds.js", "mce-graphic-packages.js"],
+  ["gsap.min.js", "kinetic-lower-thirds.js", "subscribe-lower-thirds.js", "church-lower-thirds.js", "sunday-lower-thirds.js", "stream-lower-thirds.js", "mce-graphic-packages.js"],
 );
 for (const fontFamily of ["archivo", "church", "sunday", "google"]) {
   const sourceDir = path.resolve(__dirname, `../public/fonts/${fontFamily}`);

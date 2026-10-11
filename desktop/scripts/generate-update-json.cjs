@@ -72,7 +72,7 @@ if (!fs.existsSync(assetsDir)) {
 
 // ── GitHub repo for download URLs ──
 
-const PUBLIC_REPO = "jolamyfoodsng/makechurcheasy-releases";
+const PUBLIC_REPO = "jolamyfoodsng/makechurcheasy-v2";
 const RELEASE_TAG = `v${version}`;
 
 function downloadUrl(filename) {

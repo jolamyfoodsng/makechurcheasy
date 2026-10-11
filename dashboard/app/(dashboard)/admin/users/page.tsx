@@ -49,6 +49,46 @@ import {
   getAdminManagedPlanCredits,
 } from "@/lib/adminManagedSubscriptionForm";
 
+type OsKey = "windows" | "macos" | "linux" | "unknown";
+const OS_LABELS: Record<OsKey | "none", string> = {
+  windows: "Windows",
+  macos: "macOS",
+  linux: "Linux",
+  unknown: "Unknown OS",
+  none: "No desktop app",
+};
+
+function normalizeOs(value?: string | null): OsKey {
+  const v = String(value || "").toLowerCase();
+  if (v.startsWith("win")) return "windows";
+  if (v.startsWith("mac") || v === "darwin" || v === "osx") return "macos";
+  if (v.startsWith("linux")) return "linux";
+  return "unknown";
+}
+
+/** Every OS the user has the desktop app on (empty = no desktop app seen). */
+function userOsList(u: { appPlatform?: string; appPlatforms?: string[]; appVersion?: string; appVersions?: string[]; deviceCount?: number }): OsKey[] {
+  const raw = (u.appPlatforms && u.appPlatforms.length > 0) ? u.appPlatforms : (u.appPlatform ? [u.appPlatform] : []);
+  const list = Array.from(new Set(raw.map(normalizeOs)));
+  if (list.length === 0 && ((u.deviceCount ?? 0) > 0 || u.appVersion || (u.appVersions?.length ?? 0) > 0)) return ["unknown"];
+  return list;
+}
+
+function userVersionList(u: { appVersion?: string; appVersions?: string[] }): string[] {
+  const raw = (u.appVersions && u.appVersions.length > 0) ? u.appVersions : (u.appVersion ? [u.appVersion] : []);
+  return Array.from(new Set(raw.map((v) => String(v).trim().replace(/^v/i, "")).filter(Boolean)));
+}
+
+function compareVersionsDesc(a: string, b: string): number {
+  const pa = a.split(/[.-]/).map((n) => parseInt(n, 10) || 0);
+  const pb = b.split(/[.-]/).map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
+    const d = (pb[i] ?? 0) - (pa[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
 interface AdminUser {
   id: string;
   name: string;
@@ -59,6 +99,11 @@ interface AdminUser {
   country?: string;
   deviceId?: string;
   deviceIds?: string[];
+  deviceCount?: number;
+  appVersion?: string;
+  appPlatform?: string;
+  appVersions?: string[];
+  appPlatforms?: string[];
   role: string;
   accountStatus?: "active" | "suspended" | "deleted";
   credits: number;
@@ -410,6 +455,8 @@ export default function AdminUsersPage() {
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
   const [contactFilter, setContactFilter] = useState<"all" | "has_phone" | "phone_only" | "email_only" | "both">("all");
   const [billingCycleFilter, setBillingCycleFilter] = useState<"all" | "monthly" | "yearly" | "lifetime">("all");
+  const [osFilter, setOsFilter] = useState<"all" | OsKey | "none">("all");
+  const [versionFilter, setVersionFilter] = useState<string>("all");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [exportingCsv, setExportingCsv] = useState(false);
   const [sortField, setSortField] = useState<SortField>("createdAt");
@@ -625,6 +672,31 @@ export default function AdminUsersPage() {
     return counts;
   }, [users]);
 
+  // Counts for the OS and app-version dropdowns.
+  const osCounts = useMemo(() => {
+    const counts: Record<OsKey | "none", number> = { windows: 0, macos: 0, linux: 0, unknown: 0, none: 0 };
+    for (const u of users) {
+      const list = userOsList(u);
+      if (list.length === 0) counts.none += 1;
+      for (const os of list) counts[os] += 1;
+    }
+    return counts;
+  }, [users]);
+
+  const versionOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    let none = 0;
+    for (const u of users) {
+      const list = userVersionList(u);
+      if (list.length === 0) none += 1;
+      for (const v of list) counts.set(v, (counts.get(v) ?? 0) + 1);
+    }
+    const versions = Array.from(counts.entries())
+      .sort((a, b) => compareVersionsDesc(a[0], b[0]))
+      .map(([version, count]) => ({ version, count }));
+    return { versions, none };
+  }, [users]);
+
   const filtered = useMemo(() => {
     let result = users;
 
@@ -669,6 +741,27 @@ export default function AdminUsersPage() {
         if (contactFilter === "email_only") return hasRealEmail && !hasPhone;
         if (contactFilter === "both") return hasPhone && hasRealEmail;
         return true;
+      });
+    }
+
+    // Desktop OS filter (any of the user's devices)
+    if (osFilter !== "all") {
+      result = result.filter((u) => {
+        const list = userOsList(u);
+        return osFilter === "none" ? list.length === 0 : list.includes(osFilter);
+      });
+    }
+
+    // Desktop app version filter (any of the user's devices)
+    if (versionFilter !== "all") {
+      result = result.filter((u) => {
+        const list = userVersionList(u);
+        if (versionFilter === "__none") return list.length === 0;
+        if (versionFilter === "__outdated") {
+          const latest = versionOptions.versions[0]?.version;
+          return Boolean(latest) && list.length > 0 && !list.includes(latest!);
+        }
+        return list.includes(versionFilter);
       });
     }
 
@@ -760,7 +853,7 @@ export default function AdminUsersPage() {
     });
 
     return result;
-  }, [users, search, filter, selectedCountries, contactFilter, billingCycleFilter, activityFilter, sortField, sortDir]);
+  }, [users, search, filter, selectedCountries, contactFilter, billingCycleFilter, osFilter, versionFilter, versionOptions, activityFilter, sortField, sortDir]);
 
   function handleExportCsv() {
     if (filtered.length === 0) {
@@ -796,6 +889,8 @@ export default function AdminUsersPage() {
         "Signup Date",
         "Last Active At",
         "Last Login At",
+        "Desktop OS",
+        "App Version",
       ];
 
       const rows = filtered.map((u) => {
@@ -833,6 +928,8 @@ export default function AdminUsersPage() {
           u.createdAt || "",
           u.lastActive || "",
           u.lastLogin || "",
+          userOsList(u).map((os) => OS_LABELS[os]).join(" / ") || OS_LABELS.none,
+          userVersionList(u).join(" / "),
         ];
       });
 
@@ -854,7 +951,10 @@ export default function AdminUsersPage() {
       const dateStr = new Date().toISOString().slice(0, 10);
       const filterSuffix = filter !== "all" ? `-${filter}` : "";
       const contactSuffix = contactFilter !== "all" ? `-${contactFilter}` : "";
-      const cycleSuffix = billingCycleFilter !== "all" ? `-${billingCycleFilter}` : "";
+      const cycleSuffix =
+        (billingCycleFilter !== "all" ? `-${billingCycleFilter}` : "")
+        + (osFilter !== "all" ? `-${osFilter}` : "")
+        + (versionFilter !== "all" ? `-v${versionFilter.replace(/^__/, "")}` : "");
       link.href = url;
       link.download = `makechurcheasy-users${filterSuffix}${contactSuffix}${cycleSuffix}-${dateStr}.csv`;
       document.body.appendChild(link);
@@ -885,7 +985,7 @@ export default function AdminUsersPage() {
     ? users.find((u) => u.id === showRevokeAmbassador) ?? null
     : null;
 
-  useEffect(() => { setPage(1); }, [search, filter, activityFilter, selectedCountries]);
+  useEffect(() => { setPage(1); }, [search, filter, activityFilter, selectedCountries, osFilter, versionFilter, contactFilter, billingCycleFilter]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -1575,6 +1675,46 @@ export default function AdminUsersPage() {
           <option value="yearly">📆 Yearly Billing</option>
           <option value="lifetime">♾️ Lifetime / One-Time</option>
         </select>
+
+        {/* Desktop OS Filter */}
+        <select
+          value={osFilter}
+          onChange={(e) => setOsFilter(e.target.value as typeof osFilter)}
+          title="Filter by the operating system the desktop app runs on"
+          className={`h-11 px-3 rounded-xl border text-sm bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-colors ${
+            osFilter !== "all"
+              ? "border-violet-500/60 text-violet-300 font-semibold bg-violet-950/20"
+              : "border-slate-700 text-slate-100 focus:border-indigo-500"
+          }`}
+        >
+          <option value="all">💻 All Operating Systems</option>
+          <option value="windows">Windows ({osCounts.windows})</option>
+          <option value="macos">macOS ({osCounts.macos})</option>
+          <option value="linux">Linux ({osCounts.linux})</option>
+          <option value="unknown">Unknown OS ({osCounts.unknown})</option>
+          <option value="none">No desktop app ({osCounts.none})</option>
+        </select>
+
+        {/* Desktop App Version Filter */}
+        <select
+          value={versionFilter}
+          onChange={(e) => setVersionFilter(e.target.value)}
+          title="Filter by desktop app version"
+          className={`h-11 px-3 rounded-xl border text-sm bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-colors ${
+            versionFilter !== "all"
+              ? "border-amber-500/60 text-amber-300 font-semibold bg-amber-950/20"
+              : "border-slate-700 text-slate-100 focus:border-indigo-500"
+          }`}
+        >
+          <option value="all">🏷️ All App Versions</option>
+          {versionOptions.versions.length > 0 && (
+            <option value="__outdated">⚠️ Not on latest (v{versionOptions.versions[0].version})</option>
+          )}
+          {versionOptions.versions.map(({ version, count }) => (
+            <option key={version} value={version}>v{version} ({count})</option>
+          ))}
+          <option value="__none">No app version ({versionOptions.none})</option>
+        </select>
       </div>
 
       {/* Active Country Filter Chips */}
@@ -1707,6 +1847,17 @@ export default function AdminUsersPage() {
                           {user.billingCycle && user.plan !== "free" && (
                             <span className="inline-flex px-1.5 py-0.2 rounded text-[10px] font-medium capitalize text-slate-300 bg-slate-800 border border-slate-700">
                               {user.billingCycle}
+                            </span>
+                          )}
+                          {(userOsList(user).length > 0 || userVersionList(user).length > 0) && (
+                            <span
+                              className="inline-flex px-1.5 py-0.2 rounded text-[10px] font-medium text-slate-300 bg-slate-800 border border-slate-700"
+                              title="Desktop app (latest device)"
+                            >
+                              {[
+                                user.appPlatform ? OS_LABELS[normalizeOs(user.appPlatform)] : userOsList(user).map((os) => OS_LABELS[os]).join("/"),
+                                user.appVersion ? `v${String(user.appVersion).replace(/^v/i, "")}` : "",
+                              ].filter(Boolean).join(" · ")}
                             </span>
                           )}
                         </div>

@@ -1,7 +1,7 @@
 /**
  * dockCommandHandler.ts — Handles dock commands → OBS actions
  *
- * Wires up BroadcastChannel commands from the MakeChurchEasy Dock
+ * Wires up BroadcastChannel commands from the MakeChurchEazy Dock
  * to the actual OBS services (Bible, Lower Thirds, Worship, etc.).
  *
  * Called from App.tsx when dockBridge receives commands.

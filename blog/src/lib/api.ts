@@ -23,7 +23,7 @@ export function getPostBySlug(slug: string): Post | null {
     slug: realSlug,
     coverImage: data.coverImage || "/assets/blog/hello-world/cover.jpg",
     author: data.author || {
-      name: "MakeChurchEasy",
+      name: "MakeChurchEazy",
       picture: "/assets/blog/authors/mce.svg",
     },
     ogImage: data.ogImage || {

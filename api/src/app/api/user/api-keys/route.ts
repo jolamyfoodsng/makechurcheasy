@@ -1,7 +1,7 @@
 /**
  * /api/user/api-keys
  *
- * CRUD for external MakeChurchEasy API keys.
+ * CRUD for external MakeChurchEazy API keys.
  *
  * GET    — list all keys for the authenticated user (metadata only, no hashes)
  * POST   — create a new key when the plan includes API access. Returns the raw key ONCE.

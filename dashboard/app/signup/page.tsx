@@ -420,7 +420,7 @@ function SignupInner() {
                 onChange={(e) => setName(e.target.value)}
                 required
                 className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3.5 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10"
-                placeholder={t("auth.signup.namePlaceholder") || "Pastor David Adeleke"}
+                placeholder={t("auth.signup.namePlaceholder") || "Your full name"}
               />
             </div>
             <div>

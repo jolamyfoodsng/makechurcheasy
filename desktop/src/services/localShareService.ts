@@ -53,7 +53,7 @@ function isTauriRuntime(): boolean {
 
 function requireTauriRuntime(): void {
   if (!isTauriRuntime()) {
-    throw new Error("Open the MakeChurchEasy desktop app to share files between computers.");
+    throw new Error("Open the MakeChurchEazy desktop app to share files between computers.");
   }
 }
 

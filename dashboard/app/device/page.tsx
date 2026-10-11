@@ -450,7 +450,7 @@ function DeviceAuthContent() {
                 Are you trying to authorize this device?
               </h2>
               <p className="mb-5 text-sm text-slate-500">
-                A MakeChurchEasy app is requesting access to your account.
+                A MakeChurchEazy app is requesting access to your account.
               </p>
               {loading ? (
                 <div className="flex h-10 items-center justify-center gap-2 text-sm text-slate-500">
@@ -488,7 +488,7 @@ function DeviceAuthContent() {
             Enter Pairing Code
           </h1>
           <p className="text-sm text-slate-500">
-            Enter the code shown in your MakeChurchEasy app.
+            Enter the code shown in your MakeChurchEazy app.
           </p>
         </div>
 

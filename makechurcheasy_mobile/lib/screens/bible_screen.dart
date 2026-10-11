@@ -217,7 +217,7 @@ class _BibleScreenState extends ConsumerState<BibleScreen> {
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
             Text(
-              'Connect to a MakeChurchEasy Desktop server to browse the Bible.',
+              'Connect to a MakeChurchEazy Desktop server to browse the Bible.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppTheme.textSecondary),
             ),

@@ -233,7 +233,7 @@ export default function UpdateNotification({
               </p>
 
               <h2 id="update-notification-title" className="update-notification__release-title">
-                MakeChurchEasy {result.version || "update"}
+                MakeChurchEazy {result.version || "update"}
               </h2>
 
               <div className="update-notification__versions">
@@ -321,10 +321,10 @@ export default function UpdateNotification({
           {status === "ready" && (
             <div className="update-notification__progress">
               <h2 id="update-notification-title" className="update-notification__release-title">
-                MakeChurchEasy {downloadState.version || result.version} is ready
+                MakeChurchEazy {downloadState.version || result.version} is ready
               </h2>
               <p className="update-notification__progress-text">
-                Restart now to finish updating, or keep working — it installs automatically when you close MakeChurchEasy.
+                Restart now to finish updating, or keep working — it installs automatically when you close MakeChurchEazy.
               </p>
             </div>
           )}
@@ -339,7 +339,7 @@ export default function UpdateNotification({
           )}
 
           {status === "relaunching" && (
-            <p className="update-notification__progress-text">Restarting MakeChurchEasy...</p>
+            <p className="update-notification__progress-text">Restarting MakeChurchEazy...</p>
           )}
 
           {status === "error" && (
@@ -396,7 +396,7 @@ export default function UpdateNotification({
               type="button"
               className="update-notification__btn update-notification__btn--update"
               onClick={handleRestartNow}
-              title="Install the update and restart MakeChurchEasy"
+              title="Install the update and restart MakeChurchEazy"
             >
               Restart Now
             </button>
@@ -404,7 +404,7 @@ export default function UpdateNotification({
               type="button"
               className="update-notification__btn update-notification__btn--later"
               onClick={() => updateDownloadManager.dismissModal()}
-              title="Install when I close MakeChurchEasy"
+              title="Install when I close MakeChurchEazy"
             >
               Later
             </button>

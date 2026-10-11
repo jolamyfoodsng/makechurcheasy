@@ -107,7 +107,7 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      const deviceName = clientOS || pairing.deviceName || "MakeChurchEasy";
+      const deviceName = clientOS || pairing.deviceName || "MakeChurchEazy";
       const { appVersion, appPlatform } = extractDeviceInfo(req);
       let registeredDevice: { deviceId: string; deviceSecret: string };
 

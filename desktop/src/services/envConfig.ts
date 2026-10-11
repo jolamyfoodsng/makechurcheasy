@@ -28,7 +28,7 @@ function parseEnv(): EnvConfig {
   return {
     env,
     isTest,
-    appName: isTest ? "MakeChurchEasy Test" : "MakeChurchEasy",
+    appName: isTest ? "MakeChurchEazy Test" : "MakeChurchEazy",
     authApiUrl: requireEnv("VITE_AUTH_API_URL", import.meta.env.VITE_AUTH_API_URL as string | undefined, env) || "https://api.makechurcheazy.com",
     apiBaseUrl: requireEnv("VITE_API_BASE_URL", import.meta.env.VITE_API_BASE_URL as string | undefined, env) || "https://api.makechurcheazy.com",
     wsUrl: requireEnv("VITE_WS_URL", import.meta.env.VITE_WS_URL as string | undefined, env) || "wss://relay.makechurcheazy.com",
@@ -47,7 +47,7 @@ export function getEnvConfig(): EnvConfig {
 
 export function getAppTitle(page?: string): string {
   const { appName } = getEnvConfig();
-  if (page && page !== "MakeChurchEasy" && page !== appName) return `${page} - ${appName}`;
+  if (page && page !== "MakeChurchEazy" && page !== appName) return `${page} - ${appName}`;
   if (page) return `${page} - ${appName}`;
   return appName;
 }

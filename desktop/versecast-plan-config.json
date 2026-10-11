@@ -203,7 +203,7 @@
         {
             "id": "integration",
             "title": "Seamless Integration",
-            "description": "Works perfectly with OBS and MakeChurchEasy.",
+            "description": "Works perfectly with OBS and MakeChurchEazy.",
             "iconName": "desktop",
             "bg": "bg-blue-50",
             "color": "text-brand-blue"

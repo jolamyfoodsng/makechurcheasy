@@ -9,7 +9,7 @@ import {
 describe("releaseNotesService", () => {
   it("detects trivial release notes", () => {
     expect(isTrivialReleaseNotes("")).toBe(true);
-    expect(isTrivialReleaseNotes("MakeChurchEasy v3.19.0")).toBe(true);
+    expect(isTrivialReleaseNotes("MakeChurchEazy v3.19.0")).toBe(true);
     expect(isTrivialReleaseNotes("v4.31.0")).toBe(true);
     expect(isTrivialReleaseNotes("3.19.0")).toBe(true);
     expect(isTrivialReleaseNotes("## 1. Multi-View\n- Added margin controls")).toBe(false);
@@ -46,12 +46,12 @@ describe("releaseNotesService", () => {
   });
 
   it("does not show another release's curated notes when notes are trivial", () => {
-    expect(getReleaseHighlights("3.19.0", "MakeChurchEasy v3.19.0")).toEqual([]);
+    expect(getReleaseHighlights("3.19.0", "MakeChurchEazy v3.19.0")).toEqual([]);
   });
 
   it("ignores the generic CI release template", () => {
     const ciTemplate = [
-      "## MakeChurchEasy",
+      "## MakeChurchEazy",
       "",
       "### Downloads",
       "| Platform | File |",

@@ -637,7 +637,7 @@ export default function AdminTutorialsPage() {
                     </span>
                   </h3>
                   <p className="mt-0.5 text-xs text-slate-400">
-                    Arranged in sequential order. Users can click and watch inside MakeChurchEasy.
+                    Arranged in sequential order. Users can click and watch inside MakeChurchEazy.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -765,7 +765,7 @@ export default function AdminTutorialsPage() {
                             className={fieldClass}
                             value={video.title}
                             onChange={(event) => updateVideo(index, "title", event.target.value)}
-                            placeholder="e.g. Connect MakeChurchEasy to OBS"
+                            placeholder="e.g. Connect MakeChurchEazy to OBS"
                           />
                         </label>
                         <label>

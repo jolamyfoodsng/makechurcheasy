@@ -1,0 +1,650 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>Modern Lower Thirds</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,100..900;1,62..125,100..900&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: broadcast control room — 16:9 program monitor on top, rundown of 9 titles + operator panel below. */
+:root{
+  --bg:#0e0e10; --panel:#17171a; --panel-2:#1f1f23; --line:#2c2c31;
+  --fg:#ececee; --muted:#8d8d95; --tally:#ff3b30; --preview:#2ecc71;
+  --ui:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--ui);font-size:14px;margin:0;padding-inline:16px;padding-block:14px 28px}
+.app{max-width:1280px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header h1{font-size:18px;font-weight:900;font-stretch:125%;font-style:italic;letter-spacing:.01em;margin:0;text-transform:uppercase}
+header .sub{color:var(--muted);font-size:12.5px}
+.spacer{flex:1}
+.tally{display:inline-flex;align-items:center;gap:8px;font:500 12px var(--mono);letter-spacing:.08em;padding:6px 10px;border:1px solid var(--line);border-radius:4px;color:var(--muted);text-transform:uppercase}
+.tally i{width:9px;height:9px;border-radius:50%;background:#3a3a40;display:block}
+.tally.on{color:var(--fg);border-color:var(--tally)}
+.tally.on i{background:var(--tally);box-shadow:0 0 10px var(--tally)}
+.tally.anim i{background:#f5a524}
+.tc{font:500 12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* program monitor */
+.monitor{position:relative;width:100%;aspect-ratio:16/9;max-width:100%;overflow:hidden;border:1px solid var(--line);border-radius:6px;background:#000}
+.stage{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden}
+.stage.bg-paper{background:#ececec var(--paper-img) center/cover}
+.stage.bg-dark{background:#121214}
+.stage.bg-green{background:#00b140}
+.stage.bg-blue{background:#0047bb}
+.stage.bg-checker{background:repeating-conic-gradient(#cfcfcf 0 25%,#f4f4f4 0 50%) 0 0/48px 48px}
+.stage.bg-none{background:transparent}
+.safe{position:absolute;inset:54px 96px;border:2px dashed rgba(255,59,48,.45);pointer-events:none;display:none}
+.monitor.show-safe .safe{display:block}
+
+/* rundown + panel */
+.deck{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:14px}
+@media (max-width:860px){.deck{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:14px;min-width:0}
+.card h2{font:500 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.rundown{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media (max-width:520px){.rundown{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.rd{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:3px;padding:10px 11px;border-radius:5px;background:var(--panel-2);border:1px solid transparent;min-width:0}
+.rd:hover{border-color:#3a3a42}
+.rd:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.rd .k{font:500 11px var(--mono);color:var(--muted)}
+.rd .n{font-weight:900;font-stretch:125%;font-style:italic;font-size:15px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rd .s{font-size:12px;color:var(--muted)}
+.rd[aria-pressed="true"]{border-color:var(--preview);background:#1d2620}
+.rd[aria-pressed="true"] .k{color:var(--preview)}
+
+.transport{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.btn{all:unset;cursor:pointer;font-weight:800;font-stretch:112%;font-size:13px;text-transform:uppercase;letter-spacing:.04em;padding:10px 14px;border-radius:5px;background:var(--panel-2);border:1px solid var(--line);color:var(--fg);display:inline-flex;align-items:center;gap:8px}
+.btn:hover{border-color:#4a4a52}
+.btn:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.btn.take{background:var(--tally);border-color:var(--tally);color:#fff}
+.btn kbd{font:500 10.5px var(--mono);opacity:.75;border:1px solid currentColor;border-radius:3px;padding:0 4px}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (max-width:520px){.fields{grid-template-columns:minmax(0,1fr)}}
+label.f{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--muted);min-width:0}
+input[type=text],input[type=number],select{font:600 14px var(--ui);color:var(--fg);background:#101012;border:1px solid var(--line);border-radius:4px;padding:8px 9px;min-width:0;width:100%;box-sizing:border-box}
+input[type=text]{text-transform:uppercase}
+input:focus-visible,select:focus-visible{outline:2px solid var(--preview);outline-offset:0}
+input[type=range]{width:100%;accent-color:var(--preview)}
+input[type=color]{width:100%;height:36px;border:1px solid var(--line);border-radius:4px;background:#101012;padding:3px;box-sizing:border-box}
+.row{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.chk{display:inline-flex;gap:7px;align-items:center;font-size:13px;color:var(--fg)}
+.hint{color:var(--muted);font-size:12px;line-height:1.5;margin:10px 0 0}
+.hint code{font:500 11.5px var(--mono);color:var(--fg)}
+.sep{height:1px;background:var(--line);margin:14px 0}
+
+/* ===== Lower-third graphics (all sizes in px at 1920×1080) ===== */
+.slot{position:absolute;left:150px;bottom:150px;transform-origin:0 100%}
+.slot.pos-center{left:50%;transform-origin:50% 100%}
+.slot.pos-right{left:auto;right:150px;transform-origin:100% 100%}
+.grid-cell{position:absolute;width:640px;height:360px;display:flex;align-items:center;justify-content:center}
+.grid-cell .slot{position:relative;left:auto;bottom:auto;right:auto;transform-origin:50% 50%}
+
+.lt{--ink:#0a0a0a;--inv:#ffffff;--sw:3px;position:relative;font-family:"Archivo",sans-serif;font-weight:900;font-stretch:125%;font-style:italic;color:var(--ink);line-height:.86;white-space:nowrap;width:max-content}
+.lt .ln{white-space:pre;display:block;width:max-content}
+.lt .ch{display:inline-block;color:color-mix(in srgb,var(--ink) calc(var(--f,1)*100%),transparent);will-change:opacity,transform}
+.lt .st .ch{-webkit-text-stroke:var(--sw) var(--ink)}
+.lt .of .ch{--f:0}
+.lt .ol .ch{--f:0;-webkit-text-stroke:var(--sw) var(--ink)}
+.lt .up{font-style:normal}
+.lt .inv{--ink:var(--inv)}
+.lt .fill{background:var(--ink)}
+.lt .abs{position:absolute}
+
+/* 1 — Slash */
+.t1{font-size:128px}
+.t1 .role{font-size:.44em;margin:0 0 .12em .55em}
+.t1 .body{position:relative;padding-left:.24em}
+.t1 .bar{position:absolute;left:.1em;top:.06em;bottom:-.02em;width:9px;transform:skewX(-11deg);transform-origin:50% 100%}
+.t1 .n2{font-size:.74em;margin-top:.03em;--sw:2.6px}
+/* 2 — Bracket */
+.t2{font-size:120px}
+.t2 .body{position:relative;padding:.12em 0 0 .24em}
+.t2 .bar{position:absolute;left:.12em;top:0;height:1.78em;width:7px;transform:skewX(-11deg);transform-origin:50% 0}
+.t2 .top{position:absolute;left:.12em;top:0;height:5px;width:3.4em;transform-origin:0 50%}
+.t2 .n2{margin-top:.04em}
+.t2 .role{font-size:.43em;margin-top:.22em}
+/* 3 — Glitch */
+.t3{font-size:124px}
+.t3 .row2{display:flex;align-items:flex-start;margin-top:.06em}
+.t3 .role{font-size:.21em;padding-top:.32em;margin-right:.08em}
+.t3 .dash{position:absolute;height:6px;background:var(--ink)}
+/* 4 — Underline */
+.t4{font-size:100px}
+.t4 .uline{position:absolute;left:.4em;right:.05em;height:7px;top:.93em;transform-origin:100% 50%}
+.t4 .rolewrap{position:relative;height:.5em;margin-top:.28em}
+.t4 .role{font-size:.38em;position:absolute;right:.9em;top:0}
+.t4 .ghost{--sw:1.5px}
+/* 5 — Block */
+.t5{font-size:100px;width:auto}
+.t5 .box{position:absolute;left:0;top:0;width:3.3em;height:4.15em;overflow:hidden}
+.t5 .txt{position:relative;padding-top:.42em;width:max-content}
+.t5 .r1{display:flex;align-items:flex-end}
+.t5 .role{font-size:.235em;font-style:italic;line-height:1.02;width:13.6em;padding:0 0 .16em .25em;box-sizing:border-box}
+.t5 .n1{font-size:1.86em;margin-left:.02em;--sw:2.6px}
+.t5 .n2{font-size:.96em;margin-top:.04em}
+.t5 .mask{position:absolute;left:0;top:0;width:3.3em;height:4.15em;overflow:hidden}
+.t5 .mask .txt{position:absolute;left:0;top:0}
+/* 6 — Frame */
+.t6{font-size:96px}
+.t6 .role{font-size:.19em;margin:0 .5em .5em auto}
+.t6 .frame{position:relative;padding:.16em .22em .12em}
+.t6 .e{position:absolute;background:var(--ink)}
+.t6 .et{left:0;right:0;top:0;height:6px;transform-origin:100% 50%}
+.t6 .el{left:0;top:0;bottom:0;width:6px;transform-origin:50% 0}
+.t6 .eb{left:0;right:0;bottom:0;height:6px;transform-origin:0 50%}
+.t6 .er{right:0;top:0;bottom:0;width:6px;transform-origin:50% 100%}
+.t6 .n2{font-size:1.13em;text-align:right;width:auto;margin-top:.02em;--sw:2.4px}
+/* 7 — Tag */
+.t7{font-size:150px;display:flex;align-items:flex-start}
+.t7 .n1{transform-origin:0 100%;--sw:3px}
+.t7 .side{margin-left:.03em;margin-top:-.12em}
+.t7 .tag{font-size:.42em;padding:.12em .2em .08em .16em;position:relative}
+.t7 .tag .bg{position:absolute;inset:0}
+.t7 .tag .ln{position:relative}
+.t7 .role{font-size:.135em;margin:.6em 0 0 .3em}
+/* 8 — Bar */
+.t8{font-size:110px}
+.t8 .stack{margin-left:.3em;width:max-content}
+.t8 .n2{--sw:2.6px;font-size:1.06em}
+.t8 .barw{position:relative;margin:.04em 0 0 .2em}
+.t8 .barw .bg{position:absolute;inset:0}
+.t8 .role{position:relative;font-size:.27em;padding:.12em .3em .08em}
+/* 9 — Badge */
+.t9{font-size:128px}
+.t9 .tagrow{display:flex;padding-left:2.35em}
+.t9 .tag{position:relative;font-size:.34em;padding:.14em .6em .08em .5em}
+.t9 .tag .bg{position:absolute;inset:0}
+.t9 .tag .ln{position:relative}
+.t9 .n1{margin-top:.08em}
+.t9 .role{font-size:.41em;margin:.14em 0 0 1.7em;--sw:1.8px}
+</style>
+</head><body>
+
+<div class="app">
+  <header>
+    <h1>Modern Lower Thirds</h1>
+    <span class="sub">9 animated titles · edit, take, clear</span>
+    <span class="spacer"></span>
+    <span class="tc" id="tc">00:00</span>
+    <span class="tally" id="tally"><i></i><span id="tallyTxt">Clear</span></span>
+  </header>
+
+  <div class="monitor" id="monitor">
+    <div class="stage bg-paper" id="stage"></div>
+    <div class="safe"></div>
+  </div>
+
+  <div class="deck">
+    <section class="card">
+      <h2>Rundown</h2>
+      <div class="rundown" id="rundown"></div>
+      <div class="sep"></div>
+      <div class="row">
+        <button class="btn" id="btnGrid" type="button">Show all 9</button>
+        <label class="chk"><input type="checkbox" id="safe"> Title-safe guide</label>
+      </div>
+      <p class="hint">Keys: <code>1</code>–<code>9</code> pick a title · <code>I</code> animate in · <code>O</code> animate out · <code>Space</code> toggle · <code>A</code> auto (in, hold, out).</p>
+    </section>
+
+    <section class="card">
+      <h2 id="edTitle">Title</h2>
+      <div class="transport">
+        <button class="btn take" id="btnIn" type="button">In <kbd>I</kbd></button>
+        <button class="btn" id="btnOut" type="button">Out <kbd>O</kbd></button>
+        <button class="btn" id="btnAuto" type="button">Auto <kbd>A</kbd></button>
+      </div>
+      <div class="fields" id="fields"></div>
+      <div class="sep"></div>
+      <div class="fields">
+        <label class="f">Hold (seconds)<input type="number" id="hold" min="1" max="60" step="0.5" value="4"></label>
+        <label class="f">Speed
+          <select id="speed"><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option></select></label>
+        <label class="f">Size <input type="range" id="size" min="0.3" max="1.2" step="0.01" value="0.62"></label>
+        <label class="f">Position
+          <select id="pos"><option value="left">Bottom left</option><option value="center">Bottom center</option><option value="right">Bottom right</option></select></label>
+        <label class="f">Background
+          <select id="bg"><option value="paper">Paper (like the reference)</option><option value="dark">Dark</option><option value="checker">Transparent check</option><option value="green">Green screen</option><option value="blue">Blue screen</option></select></label>
+        <label class="f">Text color <input type="color" id="ink" value="#0a0a0a"></label>
+        <label class="f">Text in boxes <input type="color" id="inv" value="#ffffff"></label>
+        <label class="f" style="justify-content:flex-end"><span class="chk"><input type="checkbox" id="loop"> Loop auto</span></label>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script>
+(() => {
+"use strict";
+/* ---------- tiny DOM helpers ---------- */
+const mk = (tag, cls, parent, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; if (parent) parent.appendChild(e); return e; };
+const line = (parent, text, cls) => {
+  const l = mk("div", "ln " + (cls || ""), parent); l.chars = [];
+  for (const c of String(text)) { const s = mk("span", "ch", l, c === " " ? " " : c); l.chars.push(s); }
+  return l;
+};
+const zip = (a, b) => a.map((x, i) => b && b[i] ? [x, b[i]] : x);
+const seededRand = seed => () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+
+/* animation primitives — every tween is fromTo so a timeline plays in AND reverses out cleanly */
+const E = {
+  fade:  [{ opacity: 0 }, { opacity: 1, duration: .22, ease: "power1.out" }],
+  type:  [{ opacity: 0 }, { opacity: 1, duration: .02, ease: "none" }],
+  fill:  [{ "--f": 0 }, { "--f": 1, duration: .22, ease: "power1.out", immediateRender: false }],
+  rise:  [{ yPercent: 105, opacity: 0 }, { yPercent: 0, opacity: 1, duration: .38, ease: "power3.out" }],
+};
+const seq = (tl, items, fx, start, step) => items.forEach((t, i) => tl.fromTo(t, { ...fx[0] }, { ...fx[1] }, start + i * step));
+const showSeq = (tl, items, start, step) => items.forEach((t, i) =>
+  tl.fromTo(t, { display: "none" }, { display: "inline-block", duration: 0 }, start + i * step));
+
+/* ---------- the nine titles (order = reference video) ---------- */
+const T = [
+ { id: "slash", style: "Slash", fields: [["role","Small title","DESIGNER"],["n1","Name (solid)","TREVOR"],["n2","Name (outline)","HIGGINS"]],
+   build(root, d) {
+     const lt = mk("div", "lt t1", root);
+     const role = line(lt, d.role, "role st"); role.style.clipPath = "inset(-40% -20% -4% -20%)";
+     const body = mk("div", "body", lt);
+     const bar = mk("div", "bar fill", body);
+     const n1 = line(body, d.n1, "n1 of");
+     const n2 = line(body, d.n2, "n2 ol");
+     const tl = gsap.timeline({ paused: true });
+     seq(tl, role.chars, E.rise, .25, .085);
+     tl.fromTo(bar, { scaleY: 0 }, { scaleY: 1, duration: .55, ease: "power3.out" }, .55);
+     seq(tl, n1.chars, E.fade, .62, .075);
+     seq(tl, n1.chars, E.fill, .78, .075);
+     seq(tl, n2.chars, E.fade, .64, .07);
+     return tl;
+   } },
+ { id: "bracket", style: "Bracket", fields: [["n1","Name (solid)","DONALD"],["n2","Name (outline)","DOUGLAS"],["role","Title","ACCOUNTANT"]],
+   build(root, d) {
+     const lt = mk("div", "lt t2", root);
+     const body = mk("div", "body", lt);
+     const bar = mk("div", "bar fill", body), top = mk("div", "top fill", body);
+     const n1 = line(body, d.n1, "n1 st");
+     const n2 = line(body, d.n2, "n2 ol");
+     const role = line(lt, d.role, "role");
+     const tl = gsap.timeline({ paused: true });
+     tl.fromTo(bar, { scaleY: 0 }, { scaleY: 1, duration: .32, ease: "power2.out" }, .3);
+     tl.fromTo(top, { scaleX: 0 }, { scaleX: 1, duration: .5, ease: "power3.out" }, .36);
+     seq(tl, n1.chars, [{ opacity: 0, x: -18 }, { opacity: 1, x: 0, duration: .3, ease: "power2.out" }], .33, .07);
+     seq(tl, n2.chars, E.fade, .82, .075);
+     seq(tl, role.chars, E.fade, .45, .065);
+     return tl;
+   } },
+ { id: "glitch", style: "Glitch", fields: [["n1","Name (solid)","DANIELA"],["role","Small title","TRANSLATOR"],["n2","Name (outline)","PORTER"]],
+   build(root, d) {
+     const lt = mk("div", "lt t3", root);
+     const n1 = line(lt, d.n1, "n1 of");
+     const row2 = mk("div", "row2", lt);
+     const role = line(row2, d.role, "role");
+     const n2 = line(row2, d.n2, "n2 ol");
+     const tl = gsap.timeline({ paused: true });
+     // first letter lands solid, the rest arrive as outline and fill
+     tl.fromTo(n1.chars[0], { opacity: 0, "--f": 1 }, { opacity: 1, duration: .3 }, .25);
+     seq(tl, n1.chars.slice(1), E.fade, .6, .075);
+     seq(tl, n1.chars.slice(1), E.fill, .72, .075);
+     seq(tl, n2.chars, E.fade, .82, .075);
+     seq(tl, role.chars, E.type, .86, .045);
+     // glitch dashes
+     const w = lt.offsetWidth, h = lt.offsetHeight, rnd = seededRand(7);
+     for (let i = 0; i < 11; i++) {
+       const dash = mk("div", "dash", lt);
+       const y = rnd() < .5 ? -18 - rnd() * 30 : h * (.55 + rnd() * .55);
+       gsap.set(dash, { left: rnd() * w * .45 + (rnd() < .3 ? w * .1 : 0), top: y, width: 20 + rnd() * 120 });
+       const t0 = .45 + rnd() * .5;
+       tl.fromTo(dash, { opacity: 0, x: 0 }, { opacity: 1, duration: .01 }, t0)
+         .fromTo(dash, { x: 0 }, { x: (rnd() - .3) * 90, duration: .18, ease: "none", immediateRender: false }, t0 + .02)
+         .fromTo(dash, { opacity: 1 }, { opacity: 0, duration: .01, immediateRender: false }, t0 + .14 + rnd() * .22);
+     }
+     return tl;
+   } },
+ { id: "underline", style: "Underline", fields: [["n1","Full name","AVICE SUMMERS"],["role","Title","JOURNALIST"]],
+   build(root, d) {
+     const lt = mk("div", "lt t4", root);
+     const n1 = line(lt, d.n1, "n1 of");
+     const ul = mk("div", "uline fill", lt);
+     const rw = mk("div", "rolewrap", lt);
+     const ghost = line(rw, d.role, "role ol ghost");
+     const role = line(rw, d.role, "role");
+     const off = Math.min(lt.offsetWidth * .48, 340);
+     const tl = gsap.timeline({ paused: true });
+     tl.fromTo(ul, { scaleX: 0 }, { scaleX: 1, duration: .45, ease: "power3.inOut" }, .28);
+     tl.fromTo(n1.chars[0], { opacity: 0, "--f": 1 }, { opacity: 1, duration: .3 }, .55);
+     seq(tl, n1.chars.slice(1), E.fade, .9, .045);
+     seq(tl, n1.chars.slice(1), E.fill, 1.0, .045);
+     // title: types at the left, then slides right leaving an outline ghost
+     tl.fromTo(role, { x: -off }, { x: 0, duration: .55, ease: "power3.inOut" }, .95);
+     seq(tl, role.chars, E.type, .4, .07);
+     tl.fromTo(ghost, { x: -off, opacity: 0 }, { opacity: .55, duration: .2 }, 1.0)
+       .fromTo(ghost, { opacity: .55 }, { opacity: 0, duration: .35, immediateRender: false }, 1.3);
+     return tl;
+   } },
+ { id: "block", style: "Block", fields: [["role1","Small title, line 1","PROFESSIONAL"],["role2","Small title, line 2","PHOTOGRAPHER"],["n1","Name (outline)","ELWIN"],["n2","Name (solid)","CUNNINGHAM"]],
+   build(root, d) {
+     const lt = mk("div", "lt t5", root);
+     const box = mk("div", "box fill", lt);
+     const makeTxt = parent => {
+       const txt = mk("div", "txt", parent), r1 = mk("div", "r1", txt), role = mk("div", "role", r1);
+       return { txt, r1: line(role, d.role1, ""), r2: line(role, d.role2, ""), n1: line(r1, d.n1, "n1 ol"), n2: line(txt, d.n2, "n2") };
+     };
+     const A = makeTxt(lt);
+     const mask = mk("div", "mask", lt);
+     const B = makeTxt(mask); B.txt.classList.add("inv");
+     const W = box.offsetWidth, H = box.offsetHeight, c = W / 2;
+     const tl = gsap.timeline({ paused: true });
+     const clips = [box, mask];
+     tl.fromTo(clips, { clipPath: `inset(${H*.45}px ${c-3}px ${H*.45}px ${c-3}px)`, opacity: 0 },
+                      { clipPath: `inset(${H*.12}px ${c-4}px ${H*.12}px ${c-4}px)`, opacity: 1, duration: .25, ease: "power2.out" }, .15)
+       .fromTo(box, { opacity: 1 }, { opacity: .35, duration: .04, yoyo: true, repeat: 3, immediateRender: false }, .3)
+       .fromTo(clips, { clipPath: `inset(${H*.12}px ${c-4}px ${H*.12}px ${c-4}px)` },
+                      { clipPath: `inset(0px ${c-14}px 0px ${c-14}px)`, duration: .1, ease: "power2.in", immediateRender: false }, .48)
+       .fromTo(clips, { clipPath: `inset(0px ${c-14}px 0px ${c-14}px)` },
+                      { clipPath: "inset(0px 0px 0px 0px)", duration: .16, ease: "power3.out", immediateRender: false }, .58);
+     seq(tl, zip([...A.r1.chars, ...A.r2.chars], [...B.r1.chars, ...B.r2.chars]), E.type, .78, .035);
+     seq(tl, zip(A.n1.chars, B.n1.chars), E.fade, .62, .085);
+     seq(tl, zip(A.n2.chars, B.n2.chars), E.fade, 1.08, .055);
+     return tl;
+   } },
+ { id: "frame", style: "Frame", fields: [["role","Small title","EXECUTIVE CEO"],["n1","Name (solid)","BARTHOLOMEW"],["n2","Name (outline)","FREDERICK"]],
+   build(root, d) {
+     const lt = mk("div", "lt t6", root);
+     const role = line(lt, d.role, "role");
+     const fr = mk("div", "frame", lt);
+     const et = mk("div", "e et", fr), el = mk("div", "e el", fr), eb = mk("div", "e eb", fr), er = mk("div", "e er", fr);
+     const n1 = line(fr, d.n1, "n1 of");
+     const n2 = line(fr, d.n2, "n2 ol");
+     const tl = gsap.timeline({ paused: true });
+     tl.fromTo(et, { scaleX: 0 }, { scaleX: 1, duration: .38, ease: "power3.out" }, .22)
+       .fromTo(el, { scaleY: 0 }, { scaleY: 1, duration: .1, ease: "none" }, .56)
+       .fromTo(eb, { scaleX: 0 }, { scaleX: 1, duration: .14, ease: "power2.out" }, .63)
+       .fromTo(er, { scaleY: 0 }, { scaleY: 1, duration: .1, ease: "power2.out" }, .74);
+     seq(tl, n1.chars, E.fade, .55, .055);
+     seq(tl, n1.chars, E.fill, .7, .055);
+     showSeq(tl, n2.chars, .9, .065);
+     seq(tl, n2.chars, E.fade, .9, .065);
+     showSeq(tl, role.chars, .86, .045);
+     seq(tl, role.chars, E.type, .86, .045);
+     return tl;
+   } },
+ { id: "tag", style: "Tag", fields: [["n1","Name (big)","SIMON"],["n2","Name (in box)","DIAMOND"],["role","Title","CREATIVE DIRECTOR"]],
+   build(root, d) {
+     const lt = mk("div", "lt t7", root);
+     const n1 = line(lt, d.n1, "n1 st");
+     const side = mk("div", "side", lt);
+     const tag = mk("div", "tag", side), bg = mk("div", "bg fill", tag);
+     const n2 = line(tag, d.n2, "inv");
+     const role = line(side, d.role, "role");
+     const W = tag.offsetWidth, H = tag.offsetHeight;
+     const ink = getComputedStyle(lt).getPropertyValue("--ink").trim() || "#000";
+     const ghost = a => `rgba(${hexRgb(ink)},${a})`;
+     const tl = gsap.timeline({ paused: true });
+     tl.fromTo(bg, { clipPath: `inset(${H*.3}px ${W-1}px ${H*.3}px 0px)` }, { clipPath: `inset(${H*.12}px ${W-6}px ${H*.12}px 0px)`, duration: .2, ease: "power2.out" }, .25)
+       .fromTo(bg, { clipPath: `inset(${H*.12}px ${W-6}px ${H*.12}px 0px)` }, { clipPath: `inset(0px ${W-14}px 0px 0px)`, duration: .08, immediateRender: false }, .45)
+       .fromTo(bg, { clipPath: `inset(0px ${W-14}px 0px 0px)` }, { clipPath: "inset(0px 0px 0px 0px)", duration: .16, ease: "power3.out", immediateRender: false }, .53);
+     seq(tl, n2.chars, E.type, .76, .07);
+     seq(tl, role.chars, E.type, .76, .035);
+     n1.chars.forEach((ch, i) => {
+       const t = i === 0 ? .42 : .9 + i * .06;
+       tl.fromTo(ch, { opacity: 0, x: -50, "--f": i === 0 ? 1 : 0, textShadow: `-70px 0px 0px ${ghost(.4)}` },
+                     { opacity: 1, x: 0, textShadow: `0px 0px 0px ${ghost(0)}`, duration: i === 0 ? .55 : .35, ease: "power3.out" }, t);
+       if (i) tl.fromTo(ch, { "--f": 0 }, { "--f": 1, duration: .2, immediateRender: false }, 1.0 + i * .07);
+     });
+     tl.fromTo(n1, { scale: 1.07 }, { scale: 1, duration: .7, ease: "power2.out" }, .95);
+     return tl;
+   } },
+ { id: "bar", style: "Bar", fields: [["n1","Name (solid)","CARPENTER"],["n2","Name (outline)","HANNAH"],["role","Title (in bar)","ADMINISTRATOR"]],
+   build(root, d) {
+     const lt = mk("div", "lt t8", root);
+     const n1 = line(lt, d.n1, "n1 of");
+     const stack = mk("div", "stack", lt);
+     const n2 = line(stack, d.n2, "n2 ol");
+     const bw = mk("div", "barw", stack), bg = mk("div", "bg fill", bw);
+     const role = line(bw, d.role, "role inv");
+     const W = bw.offsetWidth, H = bw.offsetHeight;
+     const tl = gsap.timeline({ paused: true });
+     tl.fromTo(bg, { clipPath: `inset(${H*.25}px ${W-3}px ${H*.25}px 0px)`, opacity: 0 }, { clipPath: `inset(${H*.2}px ${W-5}px ${H*.2}px 0px)`, opacity: 1, duration: .1 }, .5)
+       .fromTo(bg, { clipPath: `inset(${H*.2}px ${W-5}px ${H*.2}px 0px)` }, { clipPath: `inset(0px ${W-H}px 0px 0px)`, duration: .22, ease: "power2.out", immediateRender: false }, .62)
+       .fromTo(bg, { clipPath: `inset(0px ${W-H}px 0px 0px)` }, { clipPath: "inset(0px 0px 0px 0px)", duration: .18, ease: "power3.out", immediateRender: false }, .86);
+     seq(tl, n2.chars, E.fade, .86, .065);
+     seq(tl, role.chars, E.type, .95, .04);
+     tl.fromTo(n1.chars[0], { opacity: 0, "--f": 1 }, { opacity: 1, duration: .15 }, 1.0);
+     seq(tl, n1.chars.slice(1), E.fade, 1.06, .045);
+     seq(tl, n1.chars.slice(1), E.fill, 1.18, .045);
+     return tl;
+   } },
+ { id: "badge", style: "Badge", fields: [["tag","Name (in box)","GARRISON"],["n1","Name (big)","SCARLETT"],["role","Title (outline)","INSURANCE AGENT"]],
+   build(root, d) {
+     const lt = mk("div", "lt t9", root);
+     const row = mk("div", "tagrow", lt), tag = mk("div", "tag", row), bg = mk("div", "bg fill", tag);
+     const tg = line(tag, d.tag, "inv");
+     const n1 = line(lt, d.n1, "n1 st");
+     const role = line(lt, d.role, "role ol");
+     const W = tag.offsetWidth, H = tag.offsetHeight;
+     const tl = gsap.timeline({ paused: true });
+     tl.fromTo(bg, { clipPath: `inset(${H*.45}px 0px ${H*.45}px ${W-3}px)` }, { clipPath: `inset(${H*.12}px 0px ${H*.12}px ${W-5}px)`, duration: .3, ease: "power1.out" }, .05)
+       .fromTo(bg, { clipPath: `inset(${H*.12}px 0px ${H*.12}px ${W-5}px)` }, { clipPath: `inset(0px 0px 0px ${W-H*1.3}px)`, duration: .2, ease: "power2.out", immediateRender: false }, .4)
+       .fromTo(bg, { clipPath: `inset(0px 0px 0px ${W-H*1.3}px)` }, { clipPath: "inset(0px 0px 0px 0px)", duration: .16, ease: "power3.out", immediateRender: false }, .62);
+     seq(tl, tg.chars, E.type, .8, .065);
+     // the newest letter is solid, earlier letters drop to outline; then the whole name fills
+     const L = n1.chars.length;
+     n1.chars.forEach((ch, i) => {
+       const t = .58 + i * .08;
+       tl.fromTo(ch, { opacity: 0, "--f": 1 }, { opacity: 1, duration: .03 }, t);
+       if (i < L - 1) {
+         tl.fromTo(ch, { "--f": 1 }, { "--f": 0, duration: .06, immediateRender: false }, t + .08);
+         tl.fromTo(ch, { "--f": 0 }, { "--f": 1, duration: .3, ease: "power1.inOut", immediateRender: false }, .62 + L * .08 + .1 + i * .015);
+       }
+     });
+     seq(tl, role.chars, E.type, .8, .045);
+     return tl;
+   } },
+];
+
+function hexRgb(h) {
+  h = h.replace("#", ""); if (h.length === 3) h = [...h].map(x => x + x).join("");
+  const n = parseInt(h, 16); return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
+}
+
+/* ---------- state ---------- */
+const params = new URLSearchParams(location.search);
+const S = {
+  cur: 0, grid: false, on: false,
+  data: T.map(t => Object.fromEntries(t.fields.map(f => [f[0], f[2]]))),
+  hold: 4, speed: 1, size: .62, pos: "left", bg: "paper", ink: "#0a0a0a", inv: "#ffffff", loop: false,
+};
+const LS = "mlt.v1";
+try { const s = JSON.parse(localStorage.getItem(LS) || "null"); if (s && Array.isArray(s.data) && s.data.length === T.length) Object.assign(S, s, { on: false, grid: false }); } catch (e) {}
+const save = () => { try { localStorage.setItem(LS, JSON.stringify({ ...S, on: false })); } catch (e) {} };
+
+/* URL options for a browser source, e.g. ?t=3&n1=JOHN&n2=DOE&role=PASTOR&bg=none&ui=0&auto=1 */
+if (params.has("t")) { const i = Math.max(1, Math.min(9, +params.get("t") || 1)) - 1; S.cur = i;
+  T[i].fields.forEach(f => { if (params.has(f[0])) S.data[i][f[0]] = params.get(f[0]).toUpperCase(); }); }
+["hold", "speed", "size"].forEach(k => { if (params.has(k)) S[k] = +params.get(k); });
+["pos", "bg"].forEach(k => { if (params.has(k)) S[k] = params.get(k); });
+if (params.has("ink")) S.ink = "#" + params.get("ink").replace("#", "");
+if (params.has("inv")) S.inv = "#" + params.get("inv").replace("#", "");
+const UI = params.get("ui") !== "0";
+
+/* ---------- elements ---------- */
+const $ = id => document.getElementById(id);
+const stage = $("stage"), monitor = $("monitor");
+let live = []; // [{slot, tl}]
+let autoTimer = null;
+
+if (!UI) {
+  document.body.style.cssText = "margin:0;padding:0;background:transparent;overflow:hidden";
+  document.querySelector(".app").replaceWith(stage);
+  stage.style.cssText = "position:fixed;left:0;top:0";
+}
+
+function fit() {
+  if (!UI) { const s = Math.min(innerWidth / 1920, innerHeight / 1080); stage.style.transform = `scale(${s})`; return; }
+  stage.style.transform = `scale(${monitor.clientWidth / 1920})`;
+}
+new ResizeObserver(fit).observe(UI ? monitor : document.documentElement);
+addEventListener("resize", fit);
+
+/* paper background like the reference: light grey, soft vignette, dust specks */
+function paper() {
+  const c = document.createElement("canvas"); c.width = 960; c.height = 540; const x = c.getContext("2d");
+  const g = x.createRadialGradient(480, 250, 60, 480, 270, 620);
+  g.addColorStop(0, "#f7f7f7"); g.addColorStop(.6, "#ececec"); g.addColorStop(1, "#d6d6d6");
+  x.fillStyle = g; x.fillRect(0, 0, 960, 540);
+  const r = seededRand(42);
+  x.filter = "blur(40px)";
+  for (let i = 0; i < 14; i++) { x.fillStyle = `rgba(0,0,0,${.02 + r() * .03})`; x.beginPath(); x.ellipse(r() * 960, r() * 540, 60 + r() * 160, 30 + r() * 80, r() * 3, 0, 7); x.fill(); }
+  x.filter = "none";
+  for (let i = 0; i < 160; i++) { x.fillStyle = `rgba(20,20,20,${.25 + r() * .5})`; x.beginPath(); x.arc(r() * 960, r() * 540, r() * 1.6 + .3, 0, 7); x.fill(); }
+  stage.style.setProperty("--paper-img", `url(${c.toDataURL("image/jpeg", .85)})`);
+}
+
+function applyLook(slot, scale) {
+  slot.className = "slot" + (S.grid ? "" : " pos-" + S.pos);
+  const tx = !S.grid && S.pos === "center" ? "translateX(-50%) " : "";
+  slot.style.transform = `${tx}scale(${scale})`;
+  slot.style.setProperty("--ink", S.ink);
+  slot.firstChild && slot.firstChild.style.setProperty("--ink", S.ink);
+  slot.firstChild && slot.firstChild.style.setProperty("--inv", S.inv);
+}
+
+function buildOne(i, parent, scale) {
+  const slot = mk("div", "slot", parent);
+  const tmp = mk("div", "", slot); // build inside the slot so text can be measured
+  slot.removeChild(tmp);
+  const tl = T[i].build(slot, S.data[i]);
+  applyLook(slot, scale);
+  return { slot, tl, i };
+}
+
+function render(keepState) {
+  const wasOn = S.on;
+  live.forEach(l => l.tl.kill());
+  stage.innerHTML = ""; live = [];
+  stage.className = "stage bg-" + S.bg;
+  if (S.grid) {
+    T.forEach((t, i) => {
+      const cell = mk("div", "grid-cell", stage);
+      cell.style.left = (i % 3) * 640 + "px"; cell.style.top = Math.floor(i / 3) * 333 + 40 + "px";
+      live.push(buildOne(i, cell, .42));
+    });
+  } else live.push(buildOne(S.cur, stage, S.size));
+  live.forEach(l => { l.tl.timeScale(S.speed); if (keepState && wasOn) l.tl.progress(1); });
+  if (!(keepState && wasOn)) setOn(false);
+}
+
+/* ---------- transport ---------- */
+function setOn(v, anim) {
+  S.on = v;
+  const t = $("tally"); if (!t) return;
+  t.classList.toggle("on", v); t.classList.toggle("anim", !!anim);
+  $("tallyTxt").textContent = anim ? (v ? "Animating in" : "Animating out") : v ? "On air" : "Clear";
+}
+function animIn() {
+  clearTimeout(autoTimer);
+  live.forEach((l, k) => { l.tl.timeScale(S.speed); l.tl.play(S.on ? undefined : 0); });
+  setOn(true, true);
+  const d = Math.max(...live.map(l => l.tl.duration())) / S.speed;
+  autoTimer = setTimeout(() => setOn(true), d * 1000);
+  return d;
+}
+function animOut() {
+  clearTimeout(autoTimer);
+  live.forEach(l => { l.tl.timeScale(S.speed * 1.15); l.tl.reverse(); });
+  setOn(false, true);
+  const d = Math.max(...live.map(l => l.tl.time())) / (S.speed * 1.15);
+  autoTimer = setTimeout(() => { setOn(false); if (S.loop && S._auto) autoTimer = setTimeout(auto, 700); }, d * 1000 + 30);
+}
+function auto() {
+  S._auto = true;
+  live.forEach(l => l.tl.pause(0)); setOn(false);
+  const d = animIn();
+  clearTimeout(autoTimer);
+  autoTimer = setTimeout(() => { setOn(true); autoTimer = setTimeout(animOut, S.hold * 1000); }, d * 1000);
+}
+const toggle = () => (S.on ? animOut() : animIn());
+
+/* timecode readout */
+(function tick() { const l = live[0]; if (l && $("tc")) { const t = l.tl.time(); $("tc").textContent = `${String(Math.floor(t)).padStart(2, "0")}:${String(Math.round((t % 1) * 30)).padStart(2, "0")}f`; } requestAnimationFrame(tick); })();
+
+/* ---------- UI ---------- */
+function buildRundown() {
+  const rd = $("rundown"); rd.innerHTML = "";
+  T.forEach((t, i) => {
+    const b = mk("button", "rd", rd); b.type = "button"; b.setAttribute("aria-pressed", String(i === S.cur && !S.grid));
+    mk("span", "k", b, `${i + 1} · ${t.style}`);
+    const d = S.data[i]; mk("span", "n", b, d.n1 || d.tag || "");
+    mk("span", "s", b, (d.role || d.role2 || d.n2 || "").toLowerCase());
+    b.onclick = () => select(i);
+  });
+}
+function buildFields() {
+  const t = T[S.cur], box = $("fields"); box.innerHTML = "";
+  $("edTitle").textContent = S.grid ? "All titles" : `Title ${S.cur + 1} · ${t.style}`;
+  t.fields.forEach(([k, label]) => {
+    const l = mk("label", "f", box, label), inp = mk("input", "", l);
+    inp.type = "text"; inp.id = `f-${t.id}-${k}`; inp.value = S.data[S.cur][k]; inp.spellcheck = false;
+    inp.oninput = () => { S.data[S.cur][k] = inp.value.toUpperCase(); save(); buildRundown(); clearTimeout(inp._d); inp._d = setTimeout(() => render(true), 120); };
+  });
+}
+function select(i) {
+  S.cur = i; S.grid = false; clearTimeout(autoTimer); S._auto = false;
+  $("btnGrid").textContent = "Show all 9";
+  buildRundown(); buildFields(); render(false); save();
+  animIn();
+}
+
+paper();
+if (UI) {
+  buildRundown(); buildFields();
+  const bind = (id, key, ev = "input", map = v => v, after = () => render(true)) => {
+    const e = $(id); if (e.type === "checkbox") e.checked = !!S[key]; else e.value = S[key];
+    e.addEventListener(ev, () => { S[key] = e.type === "checkbox" ? e.checked : map(e.value); save(); after(); });
+  };
+  bind("hold", "hold", "input", v => Math.max(1, +v || 4), () => {});
+  bind("speed", "speed", "change", Number, () => live.forEach(l => l.tl.timeScale(S.speed)));
+  bind("size", "size", "input", Number, () => live.forEach(l => applyLook(l.slot, S.grid ? .42 : S.size)));
+  bind("pos", "pos", "change", String, () => live.forEach(l => applyLook(l.slot, S.grid ? .42 : S.size)));
+  bind("bg", "bg", "change");
+  bind("ink", "ink", "input", String);
+  bind("inv", "inv", "input", String);
+  bind("loop", "loop", "change", v => v, () => {});
+  $("safe").onchange = e => monitor.classList.toggle("show-safe", e.target.checked);
+  $("btnIn").onclick = () => { S._auto = false; animIn(); };
+  $("btnOut").onclick = () => { S._auto = false; animOut(); };
+  $("btnAuto").onclick = auto;
+  $("btnGrid").onclick = () => {
+    S.grid = !S.grid; $("btnGrid").textContent = S.grid ? "Back to one title" : "Show all 9";
+    buildRundown(); buildFields(); render(false); animIn();
+  };
+  addEventListener("keydown", e => {
+    if (e.target.matches("input,select,textarea") || e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (/^[1-9]$/.test(k)) select(+k - 1);
+    else if (k === "i") { S._auto = false; animIn(); }
+    else if (k === "o") { S._auto = false; animOut(); }
+    else if (k === "a") auto();
+    else if (k === " ") { e.preventDefault(); S._auto = false; toggle(); }
+    else return;
+  });
+} else { S.bg = params.get("bg") || "none"; }
+stage.className = "stage bg-" + S.bg;
+
+/* public API for embedding: LowerThirds.show(3, {n1:"JOHN"}), .hide(), .auto() */
+window.LowerThirds = {
+  titles: T.map((t, i) => ({ number: i + 1, style: t.style, fields: t.fields.map(f => f[0]) })),
+  show(n, data) { const i = (n || S.cur + 1) - 1; if (data) Object.assign(S.data[i], data); S.cur = i; S.grid = false; render(false); return animIn(); },
+  hide: () => animOut(), auto: () => auto(), toggle: () => toggle(),
+  seek(t) { clearTimeout(autoTimer); live.forEach(l => { l.tl.pause(); l.tl.time(t); }); },
+  grid(v) { S.grid = !!v; render(false); },
+};
+
+const start = () => { fit(); render(false); if (UI || params.get("auto") === "1") setTimeout(UI ? animIn : auto, 350); else if (params.get("in") === "1") setTimeout(animIn, 350); };
+(document.fonts && document.fonts.load ? Promise.race([
+  Promise.all([document.fonts.load('italic 900 100px "Archivo"'), document.fonts.load('900 100px "Archivo"')]).then(() => document.fonts.ready),
+  new Promise(r => setTimeout(r, 2500))]) : Promise.resolve()).then(start, start);
+})();
+</script>
+</body></html>

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { dockObsClient, getMcePresentationVisibilityKeepSet } from "./dockObsClient";
+import { dockObsClient, getMcePresentationVisibilityKeepSet, isMceLowerThirdSourceName } from "./dockObsClient";
 import routingSource from "./dockSceneRouting.ts?raw";
 import routingControlSource from "./components/DockSceneRoutingControl.tsx?raw";
 import bibleTabSource from "./tabs/DockBibleTab.tsx?raw";
@@ -197,20 +197,36 @@ describe("dock scene routing", () => {
     expect(keepSet.has("User Camera")).toBe(false);
   });
 
-  it("keeps the first MCE layer only when the lower-third preference asks for it", () => {
+  it("lets a lower third sit on top of everything except other lower thirds unless asked to hide the rest", () => {
     const items = [
       { sourceName: "MCE Browser - Bible", sceneItemIndex: 0 },
-      { sourceName: "MCE Lower Third", sceneItemIndex: 1 },
-      { sourceName: "MCE Ticker", sceneItemIndex: 2 },
+      { sourceName: "MCE Browser - Worship", sceneItemIndex: 1 },
+      { sourceName: "MCE LT: Speaker strap", sceneItemIndex: 2 },
+      { sourceName: "MCE LT: Giving banner", sceneItemIndex: 3 },
+      { sourceName: "MCE Ticker", sceneItemIndex: 4 },
     ];
 
-    const keepFirst = getMcePresentationVisibilityKeepSet("MCE Lower Third", items, "keep-first");
-    const activeOnly = getMcePresentationVisibilityKeepSet("MCE Lower Third", items, "active-only");
+    const overlay = getMcePresentationVisibilityKeepSet("MCE LT: Speaker strap", items, "overlay");
+    const activeOnly = getMcePresentationVisibilityKeepSet("MCE LT: Speaker strap", items, "active-only");
 
-    expect(keepFirst.has("MCE Browser - Bible")).toBe(true);
+    expect(overlay.has("MCE LT: Speaker strap")).toBe(true);
+    expect(overlay.has("MCE Browser - Bible")).toBe(true);
+    expect(overlay.has("MCE Browser - Worship")).toBe(true);
+    expect(overlay.has("MCE Ticker")).toBe(true);
+    expect(overlay.has("MCE LT: Giving banner")).toBe(false);
+
+    expect(activeOnly.has("MCE LT: Speaker strap")).toBe(true);
     expect(activeOnly.has("MCE Browser - Bible")).toBe(false);
-    expect(keepFirst.has("MCE Ticker")).toBe(false);
+    expect(activeOnly.has("MCE Browser - Worship")).toBe(false);
     expect(activeOnly.has("MCE Ticker")).toBe(false);
+  });
+
+  it("recognises every lower-third source name", () => {
+    expect(isMceLowerThirdSourceName("Lower Third - MCE Presentation")).toBe(true);
+    expect(isMceLowerThirdSourceName("Animated Lower Thirds - MCE Presentation")).toBe(true);
+    expect(isMceLowerThirdSourceName("MCE LT: Speaker strap")).toBe(true);
+    expect(isMceLowerThirdSourceName("MCE Browser - Bible")).toBe(false);
+    expect(isMceLowerThirdSourceName("Ticker - MCE Presentation")).toBe(false);
   });
 
   it("preserves audio sources when preserveAudio is true (default) upon switching presentation content", () => {

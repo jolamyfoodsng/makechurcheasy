@@ -1,46 +1,64 @@
-# MakeChurchEazy Release Highlights (v4.1.3)
+# MakeChurchEazy Release Highlights (v4.1.4)
+
+## 1. More Reliable Mac Update Recovery
+- **Lead:** If a signed update cannot finish, MakeChurchEazy now opens the downloaded installer with the operating system instead of relying on an in-app link that rejects local installer files. Update failures also include clearer details to help explain what went wrong.
+
+> **How to get it:** Install v4.1.4 once from makechurcheazy.com/downloads. Future updates will be offered in the app.
+
+---
+
+## Previous Release Highlights (v4.1.3)
 
 ## 1. Voice AI Stops When You Walk Away
-- **Lead:** Voice AI stops listening when the screen turns off or the computer goes to sleep, instead of running in the background.
-- **Lead:** After 5 minutes without speech, a 60-second prompt asks whether to keep listening. The next check comes after 10 minutes, then every 15 minutes; if nobody responds, Voice AI stops automatically.
-- **Lead:** The prompt works on every app page and in the OBS Scripture Assistant dock, and the dock buttons respond correctly.
-- **Lead:** Empty or garbled transcripts no longer count as speech or keep a session running.
+- **Stops when the screen turns off:** If your laptop screen goes dark or the computer goes to sleep, Voice AI now stops listening straight away instead of running (and using credits) in the background.
+- **"Are you still using Voice AI?" check:** After 5 minutes with no speech you get a prompt with a 60-second countdown. Choose **Yes, keep listening** to carry on or **No, stop** to end it. If nobody answers, it stops on its own. The next checks come after 10 minutes, then every 15 minutes.
+- **Works everywhere:** The prompt appears on any page of the app and in the OBS Scripture Assistant dock, and answering it from the dock now works.
+- **Room noise no longer counts as speech:** Empty or garbled transcripts no longer keep a session running.
 
 ## 2. Scripture Assistant Auto-Push Fix
-- **Lead:** Auto-push now sends only verses detected in the last few seconds while Voice AI is listening, and never sends the same detection twice. Older detections remain in the queue for manual selection.
-- **Lead:** Auto-pushed verses use the Bible theme selected in the Bible tab; only the verse and reference change.
+- **No more old verses coming back:** With auto-push on, a verse that had already been shown could be pushed again minutes or hours later, after you had moved on. Auto-push now only sends verses heard in the last few seconds, only while Voice AI is listening, and never repeats one it already sent. Older detections stay in the queue so you can still click them.
+- **Uses your Bible theme:** Auto-pushed verses use the same theme as your Bible tab — only the verse and reference change.
 
 ## 3. The Dock Remembers Where You Were
-- **Lead:** Reloading the OBS Dock returns to the last tab, selected Bible verse, and open worship song and slide, including when a verse is already live.
-- **Lead:** Restored items are selected only; reloading does not send anything to OBS.
+- **Reopens on your last tab:** Reloading the OBS Dock no longer jumps back to Bible. It opens on the tab you were using, even if a verse is still live in OBS.
+- **Picks up where you left off:** The selected Bible verse and the open worship song and slide are remembered too. They are only selected again — nothing is sent to OBS on reload.
 
 ## 4. Lower Thirds & Broadcast Graphics
-- **Lead:** Lower thirds now appear over lyrics, slides, tickers, and media. A new lower third replaces the previous one. Dock settings let you hide slides and verses while a lower third is showing.
-- **Lead:** The lower-third editor gives each text box a clear heading, hint, and Reset link. It fills in church name, pastor, and role from the church profile when available, and keeps Send to OBS visible.
-- **Lead:** Broadcast Graphics previews load as you scroll, keeping the page responsive. The larger preview includes Animate In and Animate Out controls.
-- **Lead:** After OBS connects, MakeChurchEazy refreshes its browser sources one at a time when no output is live, streaming, or recording.
+- **Lower thirds sit on top:** Sending a lower third no longer hides your lyrics, slides, ticker or media. A second lower third replaces the first. If you prefer the old behaviour, tick **Hide slides and verses while a lower third is showing** in the Dock settings.
+- **Easier lower-third editing:** Every text box has a clear heading, a short hint and a Reset link. Your church name, pastor and role are filled in from your church profile, and Send to OBS stays visible at the bottom.
+- **Faster Broadcast Graphics page:** Previews load as you scroll, so the page no longer freezes when it first opens. The preview player is larger, with Animate In and Animate Out buttons.
+- **OBS sources stay up to date:** After OBS connects, MakeChurchEazy refreshes its own browser sources one at a time so they show the latest version. It never touches a scene that is live, streaming or recording.
 
-## 5. Smaller Fixes
-- **Lead:** Dock upgrade links open the plans page in your browser.
-- **Lead:** The desktop dashboard greeting uses the signed-in account name.
+## 5. Mac Updates Install In-App Again
+- **Updates install on Mac:** On Mac, in-app updates downloaded but then failed with "Update failed". macOS was blocking the app from replacing itself. From this version on, updates install and restart the app on their own.
+- **One manual install needed on Mac:** Because of that block, older Mac versions can't install this update themselves. Download it once from makechurcheazy.com/download, open the file, drag MakeChurchEazy into Applications and choose **Replace**. Windows updates as usual.
+- **Your data comes with you:** The first time you open this version on Mac, your sign-in, settings, songs and library are carried over automatically.
+- **Clear messages if an update can't install:** If MakeChurchEazy is running from the disk image or the Downloads folder, the app now asks you to move it to Applications first. Any other problem shows what went wrong instead of just "Update failed".
+- **A backup if an update still fails:** If the in-app update can't finish, the app now opens the installer for you instead of stopping.
 
-> **How to get it:** Install the update when the app prompts you, or download the latest version from makechurcheazy.com/downloads.
+## 6. Smaller Fixes
+- **Upgrade links open in your browser:** Upgrade buttons in the Dock now open the plans page in your web browser instead of inside the Dock.
+- **Links in the app work again:** Announcement buttons and other links that open a web page did nothing when clicked. They now open in your web browser.
+- **Your own name in the greeting:** The desktop dashboard greets you by your account name instead of the church's main pastor.
+
+> **How to get it:** On Windows, install the update when the app prompts you. On Mac, download this version once from makechurcheazy.com/download and drag it into Applications. Future Mac updates install from inside the app.
 
 ---
 
 ## Previous Release Highlights (v4.1.2)
 
-## 1. Broadcast Graphics Fix (Windows & Installed App)
+### 1. Broadcast Graphics Fix (Windows & Installed App)
 - **Lead:** Fixed blank or plain-text previews on Windows and installed Mac copies. Graphics now show their colours, fonts, and animation in the library, Customize editor, and Dock.
 - **Lead:** Graphics sent to OBS now include their styles and animation files. These files ship with the app, so graphics also display correctly offline.
 
-## 2. New Broadcast Graphics
+### 2. New Broadcast Graphics
 - **Lead:** Live Social Bar adds a gradient title bar, logo tab, LIVE badge, and three social handles, with animated entrance and exit.
 - **Lead:** Arrow Logo Bar adds a chevron logo block, gradient arrow, social icons, and website strip, with animated entrance and exit.
 
 > **How to get the fix:** Install the update when the app prompts you, or download the latest version from makechurcheazy.com/downloads. If your graphics already looked fine, nothing changes for you.
 
 ---
+
 ## Previous Release Highlights (v4.1.0)
 
 ## 1. Multi-Stream Broadcasting

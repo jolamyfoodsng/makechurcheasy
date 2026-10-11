@@ -53,8 +53,8 @@ describe("broadcastSettingsService", () => {
     expect(updated.activeProfileId).toBe("profile-guest-minister");
 
     const active = getActiveProfile(updated);
-    expect(active?.nickname).toBe("Pst. Isaac");
-    expect(active?.name).toBe("Pastor Isaac (Guest Minister)");
+    expect(active?.nickname).toBe("Guest");
+    expect(active?.name).toBe("Guest Minister");
   });
 
   it("adds a new person profile with custom nickname and channels", () => {
@@ -110,11 +110,11 @@ describe("broadcastSettingsService", () => {
     const channelId = updated?.channels[0].id;
     if (channelId) {
       updateChannel("profile-guest-minister", channelId, {
-        name: "Pastor Isaac YouTube Updated",
+        name: "Guest Minister YouTube Updated",
         streamKey: "new-key-999",
       });
       const afterUpdate = loadBroadcastStore().profiles.find((p) => p.id === "profile-guest-minister");
-      expect(afterUpdate?.channels[0].name).toBe("Pastor Isaac YouTube Updated");
+      expect(afterUpdate?.channels[0].name).toBe("Guest Minister YouTube Updated");
       expect(afterUpdate?.channels[0].streamKey).toBe("new-key-999");
 
       // Toggle channel enabled status
@@ -222,6 +222,7 @@ describe("broadcastSettingsService", () => {
     expect(PLATFORM_KEY_GUIDES.kick.url).toBeDefined();
     expect(PLATFORM_KEY_GUIDES.twitch.url).toBeDefined();
     expect(PLATFORM_KEY_GUIDES.custom.instructions).toBeDefined();
+    expect(JSON.stringify(PLATFORM_KEY_GUIDES).toLowerCase()).not.toContain("sanctuary");
   });
 
   it("resolveObsServerUrl properly maps friendly UI labels to valid RTMP/RTMPS URLs for OBS", () => {
@@ -322,3 +323,4 @@ describe("broadcastSettingsService", () => {
     expect(restoredProf?.channels[1].id).toBe(initialSecond);
   });
 });
+

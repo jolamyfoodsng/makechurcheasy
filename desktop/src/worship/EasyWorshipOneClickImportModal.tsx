@@ -172,7 +172,7 @@ export default function EasyWorshipOneClickImportModal({
 
             <h2 className="ew-import-title">Importing in Background...</h2>
             <p className="ew-import-subtitle">
-              Keep this running in the background while it is importing. You can close this window and continue using MakeChurchEasy.
+              Keep this running in the background while it is importing. You can close this window and continue using MakeChurchEazy.
             </p>
 
             <div className="ew-import-progress-box">
@@ -206,7 +206,7 @@ export default function EasyWorshipOneClickImportModal({
 
             <h2 className="ew-import-title">Fully Imported!</h2>
             <p className="ew-import-subtitle">
-              All your EasyWorship songs, lyrics, media, and themes have been successfully imported into your MakeChurchEasy library.
+              All your EasyWorship songs, lyrics, media, and themes have been successfully imported into your MakeChurchEazy library.
             </p>
 
             <div className="ew-summary-grid">

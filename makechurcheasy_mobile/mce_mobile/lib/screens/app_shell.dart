@@ -155,7 +155,7 @@ class _AppShellState extends State<AppShell> {
                   Row(
                     children: [
                       Text(
-                        'MakeChurchEasy',
+                        'MakeChurchEazy',
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
@@ -405,7 +405,7 @@ class _AppShellState extends State<AppShell> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('MakeChurchEasy', style: MCETypography.bodyBold),
+                        Text('MakeChurchEazy', style: MCETypography.bodyBold),
                         SizedBox(height: 2),
                         Text('Desktop control', style: MCETypography.caption),
                       ],

@@ -36,7 +36,7 @@ export function withOfferCode(url: string, offerCode?: string | null): string {
     const isAbsolute = url.startsWith("http://") || url.startsWith("https://");
     const parsed = isAbsolute
       ? new URL(url)
-      : new URL(url, "https://makechurcheasy.com");
+      : new URL(url, "https://makechurcheazy.com");
     if (!parsed.searchParams.has("promo") && !parsed.searchParams.has("code")) {
       parsed.searchParams.set("promo", offerCode);
     }
@@ -191,7 +191,7 @@ function getOfferCards(announcement: DesktopAnnouncement, discountPercent: numbe
 }
 
 const DISMISS_STORAGE_KEY = "mce_dismissed_announcements_v1";
-const WEB_APP_ORIGIN = "https://makechurcheasy.com";
+const WEB_APP_ORIGIN = "https://makechurcheazy.com";
 
 const DESKTOP_ANNOUNCEMENT_ROUTES: Record<string, string> = {
   "/": "/",

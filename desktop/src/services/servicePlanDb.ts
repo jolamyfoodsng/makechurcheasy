@@ -4,7 +4,7 @@
  * A service plan is an ordered list of items describing a church service flow:
  *   Welcome Media → Worship Songs → Bible Readings → Speaker → Announcements → etc.
  *
- * Plans are saved locally and can be loaded from the MakeChurchEasy Dock.
+ * Plans are saved locally and can be loaded from the MakeChurchEazy Dock.
  * They sync to a JSON file via save_dock_data so the dock can fetch them.
  * All records are scoped to the current user via userId.
  */

@@ -15,8 +15,8 @@ export default function MediaBesideObsShowcase() {
       id="media" eyebrow="Media beside OBS"
       heading={<>Keep every image and video <span>right beside you inside OBS.</span></>}
       description={[
-        "You don’t need to upload your media to OBS every time you want to use it. MakeChurchEasy keeps your worship backgrounds, sermon clips, announcements, and service media ready beside your OBS workflow.",
-        "Choose what you need, send it live, and let MakeChurchEasy create or update the source automatically.",
+        "You don’t need to upload your media to OBS every time you want to use it. MakeChurchEazy keeps your worship backgrounds, sermon clips, announcements, and service media ready beside your OBS workflow.",
+        "Choose what you need, send it live, and let MakeChurchEazy create or update the source automatically.",
       ]}
       benefits={benefits}
       microcopy="Your media is always ready—right where you need it."

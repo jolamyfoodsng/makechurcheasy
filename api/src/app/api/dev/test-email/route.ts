@@ -15,10 +15,10 @@ export async function GET() {
 
   const result = await sendEmail({
     to: "dev@test.com",
-    subject: "MakeChurchEasy Dev Test",
+    subject: "MakeChurchEazy Dev Test",
     html: `
       <div style="font-family: sans-serif; padding: 32px;">
-        <h2 style="color: #2563eb;">MakeChurchEasy Dev Test Email</h2>
+        <h2 style="color: #2563eb;">MakeChurchEazy Dev Test Email</h2>
         <p>This is a test email sent at <strong>${new Date().toISOString()}</strong>.</p>
         <p>If you're seeing this in <a href="http://localhost:1080">MailDev</a>, the SMTP transport is working correctly.</p>
       </div>

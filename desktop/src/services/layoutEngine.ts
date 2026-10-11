@@ -1,5 +1,5 @@
 /**
- * Layout Engine — MakeChurchEasy
+ * Layout Engine — MakeChurchEazy
  *
  * Translates layout state into REAL OBS API calls via obs-websocket.
  * Nothing here is simulated — every function sends actual WebSocket commands.

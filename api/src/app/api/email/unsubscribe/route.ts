@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
   }
   return page(
     "Unsubscribe from offers and tips?",
-    "You'll stop receiving offers and promotional emails from MakeChurchEasy. Account, security and billing emails will still reach you.",
+    "You'll stop receiving offers and promotional emails from MakeChurchEazy. Account, security and billing emails will still reach you.",
     { token },
   );
 }
@@ -50,5 +50,5 @@ export async function POST(req: NextRequest) {
       { _id: new ObjectId(userId) },
       { $set: { "emailPreferences.marketing": false, "emailPreferences.marketingUnsubscribedAt": new Date().toISOString() } },
     );
-  return page("You're unsubscribed", "You won't receive offers and promotional emails from MakeChurchEasy any more. Account, security and billing emails will still reach you.");
+  return page("You're unsubscribed", "You won't receive offers and promotional emails from MakeChurchEazy any more. Account, security and billing emails will still reach you.");
 }

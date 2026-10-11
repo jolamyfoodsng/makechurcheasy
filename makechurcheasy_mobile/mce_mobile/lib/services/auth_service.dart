@@ -43,7 +43,7 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// Login with email and password against MakeChurchEasy cloud API
+  /// Login with email and password against MakeChurchEazy cloud API
   Future<bool> login({
     required String email,
     required String password,

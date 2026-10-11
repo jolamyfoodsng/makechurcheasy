@@ -1,12 +1,12 @@
-# MakeChurchEasy: Capability Inventory and Problem-First Content Library
+# MakeChurchEazy: Capability Inventory and Problem-First Content Library
 
 **Verified against the current repository:** 10 August 2026  
-**Audience:** MakeChurchEasy founders, content partners, TikTok educators, church media teams  
+**Audience:** MakeChurchEazy founders, content partners, TikTok educators, church media teams  
 **Purpose:** turn the product into useful, searchable problem-solving content instead of generic app promotion.
 
 ## How to read this document
 
-This is a source-backed inventory of the product surfaces currently represented in the MakeChurchEasy codebase. It is also a content catalogue. Every content idea is written as a problem a church media operator might search for.
+This is a source-backed inventory of the product surfaces currently represented in the MakeChurchEazy codebase. It is also a content catalogue. Every content idea is written as a problem a church media operator might search for.
 
 Use these labels when planning a video:
 
@@ -17,9 +17,9 @@ Use these labels when planning a video:
 
 The list is intentionally broader than a feature list. A feature becomes useful marketing only when it is connected to a painful moment: a blank browser source, lyrics that need cleaning, a verse that must appear quickly, a volunteer who cannot find the right scene, or a sermon that needs to become readable slides.
 
-## 1. What MakeChurchEasy is
+## 1. What MakeChurchEazy is
 
-MakeChurchEasy is a church presentation and live-production workspace. It connects a dock or remote controller to OBS, or to a browser-based Presentation Link, so a church team can prepare and send Bible verses, lyrics, notes, sermon points, media, lower thirds, tickers, countdowns, and multi-source layouts during a service.
+MakeChurchEazy is a church presentation and live-production workspace. It connects a dock or remote controller to OBS, or to a browser-based Presentation Link, so a church team can prepare and send Bible verses, lyrics, notes, sermon points, media, lower thirds, tickers, countdowns, and multi-source layouts during a service.
 
 The product is strongest when explained through these outcomes:
 
@@ -58,7 +58,7 @@ The product is strongest when explained through these outcomes:
 
 ### 3.1 Connection, OBS, and presentation
 
-MakeChurchEasy can:
+MakeChurchEazy can:
 
 - connect to OBS through WebSocket;
 - connect to OBS running on another laptop on the same network;
@@ -72,7 +72,7 @@ MakeChurchEasy can:
 - optionally synchronize a routed scene with the MCE Presentation scene;
 - keep a routed destination independent when synchronization is not enabled;
 - inspect existing OBS scenes and sources;
-- synchronize known MakeChurchEasy sources when OBS reconnects or a module opens;
+- synchronize known MakeChurchEazy sources when OBS reconnects or a module opens;
 - use idempotent push behavior intended to avoid duplicate sources;
 - refresh source and scene state;
 - recover from missing or stale source state through the OBS sync path;
@@ -81,7 +81,7 @@ MakeChurchEasy can:
 
 ### 3.2 Bible and scripture
 
-MakeChurchEasy can:
+MakeChurchEazy can:
 
 - search scripture by reference;
 - search scripture by word or phrase;
@@ -129,7 +129,7 @@ MakeChurchEasy can:
 
 ### 3.3 Worship lyrics and song management
 
-MakeChurchEasy can:
+MakeChurchEazy can:
 
 - search a saved song library;
 - search recent song queries;
@@ -170,7 +170,7 @@ MakeChurchEasy can:
 
 ### 3.4 Notes and text slides
 
-MakeChurchEasy can:
+MakeChurchEazy can:
 
 - create a saved note;
 - search notes;
@@ -192,7 +192,7 @@ MakeChurchEasy can:
 
 ### 3.5 Sermon quotes and points
 
-MakeChurchEasy can:
+MakeChurchEazy can:
 
 - create a sermon quote list;
 - create a sermon point list;
@@ -216,7 +216,7 @@ MakeChurchEasy can:
 
 ### 3.6 Lower thirds, speakers, and branded graphics
 
-MakeChurchEasy can:
+MakeChurchEazy can:
 
 - choose built-in lower-third themes;
 - choose Bible lower-third themes;
@@ -252,7 +252,7 @@ MakeChurchEasy can:
 
 ### 3.7 Tickers and announcements
 
-MakeChurchEasy can:
+MakeChurchEazy can:
 
 - create an announcement message;
 - edit an announcement message;
@@ -275,7 +275,7 @@ MakeChurchEasy can:
 
 ### 3.8 Countdowns and pre-service graphics
 
-MakeChurchEasy can:
+MakeChurchEazy can:
 
 - create a countdown;
 - save a countdown for reuse;
@@ -301,7 +301,7 @@ MakeChurchEasy can:
 
 ### 3.9 Images, videos, documents, text overlays, and playlists
 
-MakeChurchEasy can:
+MakeChurchEazy can:
 
 - browse uploaded media;
 - browse recent media;
@@ -352,7 +352,7 @@ MakeChurchEasy can:
 
 ### 3.10 Multi-view and Quick Merge
 
-MakeChurchEasy can:
+MakeChurchEazy can:
 
 - create a multi-view layout;
 - save a layout;
@@ -390,7 +390,7 @@ MakeChurchEasy can:
 
 ### 3.11 Voice, Verse AI, and live transcripts
 
-MakeChurchEasy can:
+MakeChurchEazy can:
 
 - request microphone permission;
 - select a microphone;
@@ -439,7 +439,7 @@ MakeChurchEasy can:
 
 ### 3.12 Service planning and live service operation
 
-MakeChurchEasy can:
+MakeChurchEazy can:
 
 - create a service plan;
 - name a service plan;
@@ -475,7 +475,7 @@ MakeChurchEasy can:
 
 ### 3.13 Themes, templates, backgrounds, and branding
 
-MakeChurchEasy can:
+MakeChurchEazy can:
 
 - browse built-in themes;
 - browse custom themes;
@@ -501,7 +501,7 @@ MakeChurchEasy can:
 
 ### 3.14 Remote control, devices, and account operations
 
-MakeChurchEasy can:
+MakeChurchEazy can:
 
 - onboard a new user;
 - pair a browser or mobile controller with the desktop;
@@ -533,21 +533,21 @@ These are the content topics to give a partner. The wording is intentionally clo
 
 ### A. OBS setup and connection problems
 
-- **OBS-01 — How to connect MakeChurchEasy to OBS for the first time.** Problem: the operator does not know which connection details matter. Demo: connect, show status, send one test verse.
-- **OBS-02 — How to add a MakeChurchEasy Bible browser source in OBS.** Problem: the overlay page exists but is not visible in OBS. Demo: add the browser source, confirm the URL and dimensions, refresh once, send a verse.
+- **OBS-01 — How to connect MakeChurchEazy to OBS for the first time.** Problem: the operator does not know which connection details matter. Demo: connect, show status, send one test verse.
+- **OBS-02 — How to add a MakeChurchEazy Bible browser source in OBS.** Problem: the overlay page exists but is not visible in OBS. Demo: add the browser source, confirm the URL and dimensions, refresh once, send a verse.
 - **OBS-03 — How to show church lyrics in OBS without opening a second presentation app.** Problem: worship lyrics are being copied manually. Demo: choose a song section and send it to preview/program.
-- **OBS-04 — MakeChurchEasy works in the browser but OBS is blank: what to check.** Problem: the URL loads in Arc/browser but not in the OBS browser source. Demo: compare URL, network access, source dimensions, and cache behavior.
+- **OBS-04 — MakeChurchEazy works in the browser but OBS is blank: what to check.** Problem: the URL loads in Arc/browser but not in the OBS browser source. Demo: compare URL, network access, source dimensions, and cache behavior.
 - **OBS-05 — How to connect to OBS running on another laptop.** Problem: the presentation computer and operator computer are separate. Demo: same network, IP, port, password, connection test.
-- **OBS-06 — How to use MakeChurchEasy without OBS using Presentation Link.** Problem: a church wants to operate with a browser presentation. Demo: open the presentation link and send Bible/worship/media content.
+- **OBS-06 — How to use MakeChurchEazy without OBS using Presentation Link.** Problem: a church wants to operate with a browser presentation. Demo: open the presentation link and send Bible/worship/media content.
 - **OBS-07 — Why OBS and the controller must be on the same network.** Problem: remote connection fails even though both computers are powered on. Demo: show the network requirement and a connection retry.
 - **OBS-08 — Preview versus Program: how to avoid sending the wrong thing live.** Problem: a volunteer takes an unreviewed slide live. Demo: preview, verify, then take live.
 - **OBS-09 — How to route Bible output to a different OBS scene.** Problem: every tab goes to one default scene. Demo: select a target scene, push, and verify the source in that scene.
 - **OBS-10 — How to route worship, media, or lower thirds independently.** Problem: changing one scene unexpectedly changes another. Demo: route one module, leave MCE Presentation untouched, then compare.
 - **OBS-11 — What “sync with MCE Presentation” actually means.** Problem: the operator expects independent scenes to mirror automatically. Demo: show independent output, enable sync, compare behavior.
-- **OBS-12 — How to clear only the MakeChurchEasy output.** Problem: clearing one overlay removes too much or leaves stale content. Demo: use the module clear action and verify the scene.
+- **OBS-12 — How to clear only the MakeChurchEazy output.** Problem: clearing one overlay removes too much or leaves stale content. Demo: use the module clear action and verify the scene.
 - **OBS-13 — How to reconnect after OBS restarts.** Problem: the dock shows disconnected after a restart. Demo: reconnect, let sources synchronize, send a test item.
-- **OBS-14 — How to check whether MakeChurchEasy, OBS, and Voice AI are connected.** Problem: the operator cannot tell which part is broken. Demo: use the production status view.
-- **OBS-15 — How to recover missing MakeChurchEasy sources in OBS.** Problem: a source disappeared after a scene or profile change. Demo: refresh/synchronize and verify before creating duplicates.
+- **OBS-14 — How to check whether MakeChurchEazy, OBS, and Voice AI are connected.** Problem: the operator cannot tell which part is broken. Demo: use the production status view.
+- **OBS-15 — How to recover missing MakeChurchEazy sources in OBS.** Problem: a source disappeared after a scene or profile change. Demo: refresh/synchronize and verify before creating duplicates.
 - **OBS-16 — How to control a live presentation from a second laptop.** Problem: the OBS computer is at the front of the room. Demo: remote presentation setup and a safe preview action.
 - **OBS-17 — How to control OBS scenes from your phone during church.** Problem: the operator needs to move away from the production desk. Demo: pair mobile, approve connection, switch a scene.
 - **OBS-18 — How to test an OBS setup before Sunday service.** Problem: the first test happens when the service starts. Demo: connection, browser source, scene route, Bible, lyrics, media, clear.
@@ -697,7 +697,7 @@ These are the content topics to give a partner. The wording is intentionally clo
 ### H. Media, documents, slideshows, and text overlays
 
 - **MEDIA-01 — How to show a church image in OBS.** Problem: a flyer or announcement graphic needs to go live. Demo: upload, select, preview, program.
-- **MEDIA-02 — How to play a church video in OBS from MakeChurchEasy.** Problem: volunteers are switching media players manually. Demo: select, play, mute, clear.
+- **MEDIA-02 — How to play a church video in OBS from MakeChurchEazy.** Problem: volunteers are switching media players manually. Demo: select, play, mute, clear.
 - **MEDIA-03 — How to fit a video without stretching it.** Problem: the image looks distorted. Demo: cover, contain, stretch comparison.
 - **MEDIA-04 — How to loop a video during pre-service.** Problem: the video stops before service starts. Demo: loop control.
 - **MEDIA-05 — How to mute a media source without muting the whole stream.** Problem: the source audio is not needed. Demo: media mute.
@@ -795,7 +795,7 @@ These are the content topics to give a partner. The wording is intentionally clo
 ### L. Remote operation and mobile control
 
 - **REMOTE-01 — How to control church presentation from your phone.** Problem: the operator cannot stay at the OBS desk. Demo: pair and open remote controls.
-- **REMOTE-02 — How to pair a mobile device with MakeChurchEasy.** Problem: the phone is not recognized. Demo: connection wizard.
+- **REMOTE-02 — How to pair a mobile device with MakeChurchEazy.** Problem: the phone is not recognized. Demo: connection wizard.
 - **REMOTE-03 — How to approve a remote desktop connection.** Problem: pairing is waiting for permission. Demo: desktop approval step.
 - **REMOTE-04 — How to control Bible verses from mobile.** Problem: scripture needs to be sent from the floor or stage. Demo: mobile Bible screen.
 - **REMOTE-05 — How to control worship lyrics from mobile.** Problem: the lyric operator is away from the main computer. Demo: song/section control.
@@ -865,13 +865,13 @@ These are valuable content topics because they match urgent searches, but they m
 
 ### O. Plans, credits, and church operations
 
-- **OPS-01 — How to know which MakeChurchEasy plan unlocks mobile control.** Problem: a church wants remote operation but does not know the requirement. Demo: plan comparison and device flow.
+- **OPS-01 — How to know which MakeChurchEazy plan unlocks mobile control.** Problem: a church wants remote operation but does not know the requirement. Demo: plan comparison and device flow.
 - **OPS-02 — How to check whether a feature is plan-gated.** Problem: a button is unavailable without an explanation. Demo: entitlement/upgrade context.
 - **OPS-03 — How credits relate to AI and translation workflows.** Problem: the operator starts a process without knowing the usage cost. Demo: credits page and transparent estimate.
 - **OPS-04 — How to manage connected church devices.** Problem: an old phone or laptop still appears as a controller. Demo: devices page.
 - **OPS-05 — How to prepare a church account for a new volunteer.** Problem: onboarding is left until service day. Demo: login, pairing, resources, and test.
 - **OPS-06 — How to update church branding in one place.** Problem: each graphic has inconsistent names/colors. Demo: profile/branding settings.
-- **OPS-07 — How to find MakeChurchEasy tutorials and resources.** Problem: a volunteer needs self-service help. Demo: resources/tutorial surfaces.
+- **OPS-07 — How to find MakeChurchEazy tutorials and resources.** Problem: a volunteer needs self-service help. Demo: resources/tutorial surfaces.
 - **OPS-08 — How to review downloads and install the correct desktop build.** Problem: the team is using mismatched versions. Demo: downloads page and version check.
 - **OPS-09 — How to check subscription, billing, and transaction status.** Problem: an upgrade or renewal is unclear. Demo: billing surfaces; do not promise a payment provider behavior without a current live test.
 - **OPS-10 — How to use referrals or invite another church team member.** Problem: growth is happening through informal links. Demo: referral/invite flow if enabled.
@@ -916,7 +916,7 @@ Do not record the product as a long feature tour. Produce these repeatable forma
 
 1. **0–3 seconds:** state the searched problem exactly.
 2. **3–8 seconds:** show the bad or slow workflow.
-3. **8–28 seconds:** perform the fix in MakeChurchEasy.
+3. **8–28 seconds:** perform the fix in MakeChurchEazy.
 4. **28–38 seconds:** show the output in OBS or Presentation Link.
 5. **38–45 seconds:** state the next related problem and invite the viewer to follow for the next fix.
 
@@ -928,7 +928,7 @@ Example:
 
 Use the viewer’s problem in the first sentence. Prefer:
 
-- “How to show Bible verses in OBS” over “MakeChurchEasy Bible feature”;
+- “How to show Bible verses in OBS” over “MakeChurchEazy Bible feature”;
 - “How to fix blank OBS browser source” over “Our OBS integration”;
 - “How to import and clean worship lyrics” over “Song library demo”;
 - “How to display a sermon quote” over “Sermon module walkthrough”;
@@ -936,7 +936,7 @@ Use the viewer’s problem in the first sentence. Prefer:
 - “How to make a church countdown” over “Countdowns are here”;
 - “How to use AI to find Bible verses while preaching” over “Our AI is powerful.”
 
-Use one exact problem per video. Put the feature name after the problem, not before it. A good caption contains the task, the environment, and the result: `How to show Bible verses in OBS with MakeChurchEasy | Bible lower third + preview/live workflow`.
+Use one exact problem per video. Put the feature name after the problem, not before it. A good caption contains the task, the environment, and the result: `How to show Bible verses in OBS with MakeChurchEazy | Bible lower third + preview/live workflow`.
 
 ## 8. Claims that require care
 
@@ -961,7 +961,7 @@ For each video, create a card with these fields:
 | Search question | The exact viewer problem |
 | Audience | Pastor, worship leader, OBS operator, volunteer, or church admin |
 | Starting state | What is failing or taking too long |
-| Setup | OBS version/build, MakeChurchEasy build, scene name, source type, network/mic details |
+| Setup | OBS version/build, MakeChurchEazy build, scene name, source type, network/mic details |
 | Fix | The smallest verified action sequence |
 | Proof | What the viewer must see in OBS or Presentation Link |
 | Limitation | Plan gate, credits, network, local file, or live-verification note |
@@ -979,7 +979,7 @@ Recommended ownership:
 
 Start with high-intent, easy-to-understand problems before advanced features:
 
-1. `OBS-01` — Connect MakeChurchEasy to OBS.
+1. `OBS-01` — Connect MakeChurchEazy to OBS.
 2. `OBS-02` — Add the Bible browser source.
 3. `BIBLE-01` — Put a verse on screen quickly.
 4. `BIBLE-02` — Find a verse by phrase.
@@ -1014,7 +1014,7 @@ Start with high-intent, easy-to-understand problems before advanced features:
 
 The partner should not sell “an app with many tabs.” The story is:
 
-> “MakeChurchEasy helps a church media team solve the exact problems that happen between the sermon, the camera, the lyrics, the OBS scene, and the livestream. Search for the problem, follow the workflow, and see the result in the real output.”
+> “MakeChurchEazy helps a church media team solve the exact problems that happen between the sermon, the camera, the lyrics, the OBS scene, and the livestream. Search for the problem, follow the workflow, and see the result in the real output.”
 
-That positioning gives MakeChurchEasy a durable content engine: every real service problem can become a short, searchable tutorial, a live test, a before/after, or a volunteer training lesson.
+That positioning gives MakeChurchEazy a durable content engine: every real service problem can become a short, searchable tutorial, a live test, a before/after, or a volunteer training lesson.
 

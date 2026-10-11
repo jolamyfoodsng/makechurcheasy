@@ -13,12 +13,12 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
           <Link href="/dashboard" className="flex items-center gap-3 group">
             <AppLogo className="h-9 w-auto object-contain transition-transform group-hover:scale-105" mode="dark" />
             <div>
-              <span className="text-base font-bold text-slate-900 block leading-tight">MakeChurchEasy</span>
+              <span className="text-base font-bold text-slate-900 block leading-tight">MakeChurchEazy</span>
               <span className="text-[11px] font-medium text-slate-500 block">Church Presentation Studio</span>
             </div>
           </Link>
           <Link
-            href="https://makechurcheasy.com"
+            href="https://makechurcheazy.com"
             className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
           >
             ← Back to website
@@ -30,7 +30,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="pt-6 border-t border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-400">
-          <span>&copy; {new Date().getFullYear()} MakeChurchEasy Inc. All rights reserved.</span>
+          <span>&copy; {new Date().getFullYear()} MakeChurchEazy Inc. All rights reserved.</span>
           <div className="flex items-center gap-4">
             <Link href="/terms" className="hover:text-slate-600 transition-colors">Terms</Link>
             <Link href="/privacy" className="hover:text-slate-600 transition-colors">Privacy</Link>
@@ -56,7 +56,7 @@ export function AuthShowcase() {
       <div className="relative z-10 flex items-center justify-between">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs font-semibold text-slate-200">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          MakeChurchEasy Studio · Sunday Ready
+          MakeChurchEazy Studio · Sunday Ready
         </div>
         <span className="text-xs text-slate-400">Desktop & Remote</span>
       </div>
@@ -79,7 +79,7 @@ export function AuthShowcase() {
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80" />
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80" />
             </div>
-            <span className="font-mono text-[11px] text-slate-400">MakeChurchEasy Studio · Church Output</span>
+            <span className="font-mono text-[11px] text-slate-400">MakeChurchEazy Studio · Church Output</span>
             <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-2 py-0.5 rounded">ON AIR</span>
           </div>
 
@@ -88,7 +88,7 @@ export function AuthShowcase() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/features/verse-ai-live-preaching-obs-studio.jpg"
-              alt="MakeChurchEasy Studio live presentation interface"
+              alt="MakeChurchEazy Studio live presentation interface"
               className="w-full h-full object-cover object-top"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent pointer-events-none" />
@@ -115,7 +115,7 @@ export function AuthShowcase() {
       {/* Bottom Quote & Trust */}
       <div className="relative z-10 pt-4 border-t border-white/10 flex items-center justify-between text-xs text-slate-400">
         <p className="italic max-w-md text-slate-300">
-          &ldquo;MakeChurchEasy saved our Sunday mornings. The instant scripture lookup and OBS lower-thirds just work.&rdquo;
+          &ldquo;MakeChurchEazy saved our Sunday mornings. The instant scripture lookup and OBS lower-thirds just work.&rdquo;
         </p>
         <span className="font-semibold text-white">1,200+ Churches</span>
       </div>

@@ -51,7 +51,7 @@ async function waitForWindowCreation(windowRef: WebviewWindow): Promise<void> {
     void windowRef.once("tauri://error", (event) => {
       const message = typeof event.payload === "string"
         ? event.payload
-        : "MakeChurchEasy could not be opened.";
+        : "MakeChurchEazy could not be opened.";
       finish(() => reject(new Error(message)));
     });
   });
@@ -67,7 +67,7 @@ async function createWindow(): Promise<WebviewWindow | null> {
   }
 
   const windowRef = new WebviewWindow(MAKE_CHATGPT_WINDOW_LABEL, {
-    title: "MakeChurchEasy",
+    title: "MakeChurchEazy",
     url: getWindowUrl(),
     width: BUBBLE_SIZE,
     height: BUBBLE_SIZE,

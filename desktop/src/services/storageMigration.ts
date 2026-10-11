@@ -1,7 +1,7 @@
 /**
  * storageMigration.ts — One-time migration of localStorage keys
  *
- * When we rebranded from VerseCast to MakeChurchEasy, all storage keys
+ * When we rebranded from VerseCast to MakeChurchEazy, all storage keys
  * were renamed. This module migrates old keys to new keys on first run.
  *
  * Safe to call multiple times — only migrates keys that still have old names.

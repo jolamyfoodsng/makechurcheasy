@@ -142,9 +142,9 @@ export const DEFAULT_LADDERS: OfferLadder[] = [
         trialExtensionDays: 21,
         title: "Take 3 more weeks to try it",
         message:
-          "You tried MakeChurchEasy, but didn't get much time with it. We've added 21 more days so your team can try it on a real service.",
+          "You tried MakeChurchEazy, but didn't get much time with it. We've added 21 more days so your team can try it on a real service.",
         ctaLabel: "Add 21 days to my trial",
-        emailSubject: "3 more weeks to try MakeChurchEasy",
+        emailSubject: "3 more weeks to try MakeChurchEazy",
       }),
     ],
   },

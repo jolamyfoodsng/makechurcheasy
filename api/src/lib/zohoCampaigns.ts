@@ -1,4 +1,12 @@
-/** Zoho Campaigns subscriber API for verified MakeChurchEasy signups. */
+/**
+ * Adds newly verified MakeChurchEazy signups to the Zoho Campaigns list whose
+ * active List Entry workflow sends the welcome message.
+ *
+ * This integration stays inactive until OAuth credentials, the list key, and
+ * confirmation that the list's Zoho signup form is disabled are configured.
+ * MakeChurchEazy has already verified the address before this function runs;
+ * a second Zoho opt-in confirmation would be redundant.
+ */
 
 export type ZohoSignupWelcomeResult =
   | { status: "sent" }
@@ -116,7 +124,7 @@ export async function sendVerifiedSignupWelcomeThroughZoho(params: {
       resfmt: "JSON",
       listkey: config.listKey,
       contactinfo: contactInfo,
-      source: "MakeChurchEasy verified signup",
+      source: "MakeChurchEazy verified signup",
     });
     const subscribeResponse = await fetch("https://campaigns.zoho.com/api/v1.1/json/listsubscribe", {
       method: "POST",

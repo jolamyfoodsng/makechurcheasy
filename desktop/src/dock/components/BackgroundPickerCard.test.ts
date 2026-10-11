@@ -1338,3 +1338,4 @@ describe("Quick Settings modal redesign", () => {
     expect(dockCssSource).toContain('max-width: 390px');
   });
 });
+

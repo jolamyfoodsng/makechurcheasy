@@ -294,7 +294,7 @@ const DEFAULTS: Omit<PlatformSettings, "_id" | "updatedAt" | "updatedBy"> = {
     minimumSupportedVersion: "2.0.0",
     gracePeriodHours: 48,
     updateMessage: "A new version is available. Please update to continue.",
-    emergencyLockMessage: "MakeChurchEasy is temporarily unavailable due to emergency maintenance.",
+    emergencyLockMessage: "MakeChurchEazy is temporarily unavailable due to emergency maintenance.",
     windowsDownloadUrl: "",
     macDownloadUrl: "",
     linuxDownloadUrl: "",
@@ -421,7 +421,7 @@ const DEFAULTS: Omit<PlatformSettings, "_id" | "updatedAt" | "updatedBy"> = {
   },
   security: {
     maintenanceMode: false,
-    maintenanceMessage: "MakeChurchEasy is under scheduled maintenance. We'll be back shortly.",
+    maintenanceMessage: "MakeChurchEazy is under scheduled maintenance. We'll be back shortly.",
     internetVerificationEnabled: false,
     maxOfflineDays: 28,
     verificationIntervalHours: 6,

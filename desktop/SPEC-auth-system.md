@@ -1,12 +1,12 @@
-# Add Authentication & User Management to MakeChurchEasy
+# Add Authentication & User Management to MakeChurchEazy
 
-We need to introduce a proper authentication system across both the MakeChurchEasy website and the desktop application.
+We need to introduce a proper authentication system across both the MakeChurchEazy website and the desktop application.
 
 ## Goal
 
-Users should no longer be able to directly download or use MakeChurchEasy without creating an account.
+Users should no longer be able to directly download or use MakeChurchEazy without creating an account.
 
-Authentication should become the entry point into the MakeChurchEasy ecosystem.
+Authentication should become the entry point into the MakeChurchEazy ecosystem.
 
 ---
 
@@ -113,7 +113,7 @@ Landing Page → Download
 New Flow:
 
 ```
-Landing Page → Sign Up / Login → Dashboard → Download MakeChurchEasy
+Landing Page → Sign Up / Login → Dashboard → Download MakeChurchEazy
 ```
 
 Users must authenticate before downloading.
@@ -162,7 +162,7 @@ VC-9KX72P
 - Visible immediately
 - Used for: support, analytics, bug reports, feature requests
 
-**Download MakeChurchEasy**
+**Download MakeChurchEazy**
 
 - Latest Version
 - Release Notes
@@ -196,7 +196,7 @@ No email/password inside the desktop app. Use device pairing (like Discord TV Lo
 **Login Screen Design:**
 
 ```
-MakeChurchEasy
+MakeChurchEazy
 Church Presentation Software for OBS
 
 [ Continue in Browser ]
@@ -212,12 +212,12 @@ Nothing else. No email fields. No password fields.
 
 ### Primary Flow: Continue in Browser
 
-1. User opens MakeChurchEasy for the first time
-2. Shows: `Welcome to MakeChurchEasy [ Continue in Browser ]`
+1. User opens MakeChurchEazy for the first time
+2. Shows: `Welcome to MakeChurchEazy [ Continue in Browser ]`
 3. Click generates a temporary pairing code (e.g. `ABCD-1234`)
 4. Opens browser to `https://makechurcheazy.com/device`
-5. User signs into their MakeChurchEasy account
-6. Website asks: `Authorize this device? Device: MakeChurchEasy Code: ABCD-1234 [ Authorize ]`
+5. User signs into their MakeChurchEazy account
+6. Website asks: `Authorize this device? Device: MakeChurchEazy Code: ABCD-1234 [ Authorize ]`
 7. User clicks Authorize
 8. Desktop app instantly becomes authenticated
 

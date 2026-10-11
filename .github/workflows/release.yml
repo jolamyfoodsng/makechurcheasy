@@ -1,14 +1,14 @@
 name: Release — Build & Publish
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Trigger: push a version tag (v*) — created automatically by auto-tag.yml
-# when you bump the version in package.json and push to main.
+# Trigger: push a version tag (v*) to jolamyfoodsng/makechurcheasy-v2.
 #
-# Quick release workflow:
-#   1. npm run version:patch      (or :minor / :major)
-#   2. git add . && git commit -m "bump v0.X.Y" && git push
-#   3. auto-tag.yml creates the git tag automatically
-#   4. This workflow builds + publishes a GitHub Release with installers
+# Quick release workflow (from desktop/):
+#   npm run release:patch      (or :minor / :major)
+#   → bumps desktop/package.json + tauri.conf.json, commits them, tags vX.Y.Z
+#     and pushes to origin (makechurcheasy-v2), which starts this workflow.
+#   desktop/ also holds an old nested checkout of jolamyfoodsng/makechurcheasy;
+#   scripts/release.cjs always uses the repo root, never that checkout.
 #
 # Manual trigger also available from GitHub → Actions → Release → Run workflow
 #
@@ -72,6 +72,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          repository: jolamyfoodsng/makechurcheasy-v2
           ref: ${{ github.event.inputs.version || github.ref }}
 
       # ── Node.js ──
@@ -230,9 +231,9 @@ jobs:
           tauriScript: npx tauri
           args: --target x86_64-pc-windows-msvc
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version || format('v{0}', 'latest') }}
-          releaseName: "MakeChurchEasy ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version || 'latest' }}"
+          releaseName: "MakeChurchEazy ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version || 'latest' }}"
           releaseBody: |
-            ## MakeChurchEasy
+            ## MakeChurchEazy
 
             ### Downloads
             | Platform | File |
@@ -297,6 +298,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          repository: jolamyfoodsng/makechurcheasy-v2
           ref: ${{ github.event.inputs.version || github.ref }}
 
       # ── Node.js ──
@@ -488,9 +490,9 @@ jobs:
           tauriScript: npx tauri
           args: --target ${{ matrix.target }}
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version || format('v{0}', 'latest') }}
-          releaseName: "MakeChurchEasy ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version || 'latest' }}"
+          releaseName: "MakeChurchEazy ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version || 'latest' }}"
           releaseBody: |
-            ## MakeChurchEasy
+            ## MakeChurchEazy
 
             ### Downloads
             | Platform | File |
@@ -521,6 +523,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          repository: jolamyfoodsng/makechurcheasy-v2
           ref: ${{ github.event.inputs.version || github.ref }}
 
       - name: Resolve release tag
@@ -558,7 +561,7 @@ jobs:
           node scripts/normalize-update-json.cjs /tmp/mce-release/latest.json \
             --out /tmp/mce-release/latest.json \
             --source-repo "${{ github.repository }}" \
-            --target-repo "jolamyfoodsng/makechurcheasy-releases" \
+            --target-repo "jolamyfoodsng/makechurcheasy-v2" \
             --tag "${{ steps.release-tag.outputs.tag }}"
 
       - name: Upload normalized latest.json

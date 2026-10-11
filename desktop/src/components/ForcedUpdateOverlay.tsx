@@ -300,12 +300,12 @@ export default function ForcedUpdateOverlay({ state, onDismiss, onRefresh, isDoc
               >
                 {isDock
                   ? isBlocked
-                    ? "This has been blocked because you need to update the app. Please open MakeChurchEasy on this computer to update."
-                    : "A new version of MakeChurchEasy is required. Please open MakeChurchEasy on this computer to update before the deadline."
+                    ? "This has been blocked because you need to update the app. Please open MakeChurchEazy on this computer to update."
+                    : "A new version of MakeChurchEazy is required. Please open MakeChurchEazy on this computer to update before the deadline."
                   : isEmergency
                   ? state.updateMessage
                   : state.updateMessage ||
-                    `A new version of MakeChurchEasy is required. Your version is v${state.currentVersion}. Update to v${state.requiredVersion} or later to continue.`}
+                    `A new version of MakeChurchEazy is required. Your version is v${state.currentVersion}. Update to v${state.requiredVersion} or later to continue.`}
               </p>
 
               {!isEmergency && state.requiredVersion && (
@@ -363,7 +363,7 @@ export default function ForcedUpdateOverlay({ state, onDismiss, onRefresh, isDoc
                 >
                   <Icon name="error_outline" size={14} />
                   <span>
-                    This is the last day. Update MakeChurchEasy now so you are not locked out.
+                    This is the last day. Update MakeChurchEazy now so you are not locked out.
                   </span>
                 </div>
               )}
@@ -449,7 +449,7 @@ export default function ForcedUpdateOverlay({ state, onDismiss, onRefresh, isDoc
 
           {status === "relaunching" && (
             <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0 }}>
-              Restarting MakeChurchEasy...
+              Restarting MakeChurchEazy...
             </p>
           )}
 

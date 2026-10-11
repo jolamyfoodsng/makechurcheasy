@@ -532,7 +532,7 @@ export default function DashboardSidebar({
                 </div>
                 <div>
                   <h3 id="support-modal-title" style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700 }}>
-                    MakeChurchEasy Support
+                    MakeChurchEazy Support
                   </h3>
                   <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--text-muted, #94a3b8)" }}>
                     We're here to help Sunday run smoothly

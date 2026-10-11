@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       redeemed: { $ne: true },
       $or: [
         ...(userId ? [{ userId }] : []),
-        { deviceName: deviceName || "MakeChurchEasy" },
+        { deviceName: deviceName || "MakeChurchEazy" },
         ...(previousCode ? [{ code: previousCode }] : []),
       ],
     };
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
 
     await db.collection("pairingCodes").insertOne({
       code,
-      deviceName: deviceName || "MakeChurchEasy",
+      deviceName: deviceName || "MakeChurchEazy",
       userId,
       installationId: typeof installationId === "string" ? installationId : null,
       fingerprintHash: typeof fingerprintHash === "string" ? fingerprintHash : null,

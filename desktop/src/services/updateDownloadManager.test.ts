@@ -163,18 +163,18 @@ describe("Dynamic Admin Discounts Resilience", () => {
       message: "Get 40% off",
       tone: "offer",
       tags: ["discount"],
-      ctaUrl: "https://makechurcheasy.com/pricing",
+      ctaUrl: "https://makechurcheazy.com/pricing",
       offerCode: "EASTER40",
     };
 
     const url = resolveActionUrl(announcement);
     expect(url).toContain("promo=EASTER40");
-    expect(url).toContain("https://makechurcheasy.com/pricing");
+    expect(url).toContain("https://makechurcheazy.com/pricing");
   });
 
   it("preserves existing promo parameters when using withOfferCode", () => {
-    const urlWithCode = withOfferCode("https://makechurcheasy.com/subscription/plans?promo=EXISTING", "NEWCODE");
-    expect(urlWithCode).toBe("https://makechurcheasy.com/subscription/plans?promo=EXISTING");
+    const urlWithCode = withOfferCode("https://makechurcheazy.com/subscription/plans?promo=EXISTING", "NEWCODE");
+    expect(urlWithCode).toBe("https://makechurcheazy.com/subscription/plans?promo=EXISTING");
   });
 
   it("synthesizes valid fallback checkout URL when ctaUrl is omitted by admin", () => {
@@ -192,7 +192,7 @@ describe("Dynamic Admin Discounts Resilience", () => {
     };
 
     const url = resolveActionUrl(announcement);
-    expect(url).toBe("https://makechurcheasy.com/subscription/plans?promo=SUMMER50&plan=pro&billing=yearly");
+    expect(url).toBe("https://makechurcheazy.com/subscription/plans?promo=SUMMER50&plan=pro&billing=yearly");
   });
 
   it("falls back to default plan and billing cycle if not specified", () => {
@@ -206,6 +206,6 @@ describe("Dynamic Admin Discounts Resilience", () => {
     };
 
     const url = resolveActionUrl(announcement);
-    expect(url).toBe("https://makechurcheasy.com/subscription/plans?plan=growth&billing=monthly");
+    expect(url).toBe("https://makechurcheazy.com/subscription/plans?plan=growth&billing=monthly");
   });
 });

@@ -3,7 +3,7 @@
  *
  * Reads EasyWorship SQLite database tables (`Songs.db` and `SongWords.db`)
  * or RTF lyric payloads and converts them into structured `SmartImportSongDraft`
- * records for MakeChurchEasy's worship library.
+ * records for MakeChurchEazy's worship library.
  */
 
 import { invoke } from "@tauri-apps/api/core";

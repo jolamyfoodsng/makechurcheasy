@@ -53,7 +53,7 @@ export default function VerificationLockScreen({ daysOffline }: Props) {
 
         {/* Message */}
         <p className="verification-lock__message">
-          MakeChurchEasy requires periodic internet verification to ensure your account
+          MakeChurchEazy requires periodic internet verification to ensure your account
           is in good standing. Please connect to the internet and verify your account
           to continue using the app.
         </p>

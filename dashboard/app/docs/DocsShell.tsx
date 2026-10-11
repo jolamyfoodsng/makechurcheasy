@@ -724,7 +724,7 @@ export function DocsShell({ page }: DocsShellProps) {
                 <span>Pair Mobile Remote</span>
               </Link>
               <a
-                href="https://github.com/jolamyfoodsng/makechurcheasy/issues"
+                href="https://github.com/jolamyfoodsng/makechurcheasy-v2/issues"
                 target="_blank"
                 rel="noreferrer"
                 className={styles.subLink}

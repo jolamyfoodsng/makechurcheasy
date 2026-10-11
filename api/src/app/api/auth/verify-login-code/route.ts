@@ -233,7 +233,7 @@ export async function POST(req: NextRequest) {
       {
         $set: {
           userId,
-          deviceName: deviceName || existingDevice?.deviceName || "MakeChurchEasy",
+          deviceName: deviceName || existingDevice?.deviceName || "MakeChurchEazy",
           deviceSecret,
           lastSeen: new Date(),
           pairedAt: new Date(),

@@ -418,7 +418,7 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
           Text('About this app', style: MCETypography.cardTitle),
           SizedBox(height: MCESpacing.sm),
           Text(
-            'MakeChurchEasy Mobile is the Dock remote: Bible, Text, Media, Scenes, Ministry, macros, and automations are sent to the paired desktop and rendered through its OBS presentation layer. Multi-View remains desktop-only.',
+            'MakeChurchEazy Mobile is the Dock remote: Bible, Text, Media, Scenes, Ministry, macros, and automations are sent to the paired desktop and rendered through its OBS presentation layer. Multi-View remains desktop-only.',
             style: MCETypography.caption.copyWith(
               color: MCEColors.textSecondary,
               height: 1.5,

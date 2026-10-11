@@ -7,10 +7,10 @@
   CopyFiles /SILENT "$INSTDIR\\resources\\windows-runtime\\*.dll" "$INSTDIR"
   ; Clean up bootstrapper — not needed at runtime
   ; Register makechurcheasy and mce URL protocols
-  WriteRegStr HKCR "makechurcheasy" "" "URL:MakeChurchEasy Protocol"
+  WriteRegStr HKCR "makechurcheasy" "" "URL:MakeChurchEazy Protocol"
   WriteRegStr HKCR "makechurcheasy" "URL Protocol" ""
   WriteRegStr HKCR "makechurcheasy\shell\open\command" "" '"$INSTDIR\MakeChurchEasy.exe" "%1"'
-  WriteRegStr HKCR "mce" "" "URL:MakeChurchEasy Protocol"
+  WriteRegStr HKCR "mce" "" "URL:MakeChurchEazy Protocol"
   WriteRegStr HKCR "mce" "URL Protocol" ""
   WriteRegStr HKCR "mce\shell\open\command" "" '"$INSTDIR\MakeChurchEasy.exe" "%1"'
 !macroend

@@ -15,7 +15,7 @@ export class ContentConflictError extends Error {}
 
 const defaultCover = "/assets/blog/hello-world/cover.jpg";
 const defaultAuthor = {
-  name: "MakeChurchEasy",
+  name: "MakeChurchEazy",
   picture: "/assets/blog/authors/mce.svg",
 };
 

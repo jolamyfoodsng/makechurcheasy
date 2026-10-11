@@ -1,5 +1,5 @@
 /*
- * Make Church Easy — "Sunday graphics" lower thirds (20 animated graphics), registered into
+ * Make Church Eazy — "Sunday graphics" lower thirds (20 animated graphics), registered into
  * the Motion engine (kinetic-lower-thirds.js must load first).
  *
  * Ported from the Sunday lower thirds bench (sunday-lower-thirds.html): service bars, ways to
@@ -290,7 +290,7 @@
 
   T.advert = { cls: "g9", group: "announcements", tags: ["Church", "Graphics", "Announcement", "Advert", "Sunday", "Motion", "Animated"], color: "#331509", hold: 8,
     name: "Advertise With Us", tech: "Brown box opens with a gold shimmer headline and WhatsApp / email contact",
-    fields: [text("l1", "Headline", "REACH SERIOUS CLIENTS"), text("l2", "Sub-line", "BY ADVERTISING WITH US"), text("t", "Contact label", "Contact for more info"), text("phone", "Phone (WhatsApp)", "1234 5678"), text("mail", "Email", "info@yourwebsitehere.com"),
+    fields: [text("l1", "Headline", "YOUR NAME HERE"), text("l2", "Sub-line", "AND SUBLINE HERE"), text("t", "Contact label", "Contact for more info"), text("phone", "Phone (WhatsApp)", "1234 5678"), text("mail", "Email", "info@yourwebsitehere.com"),
       color("a", "Background brown", "#331509", 1)],
     html: function (v) { return '<div class="g9-box"><div><div class="g9-l1">' + esc(v.l1) + '</div><div class="g9-l2">' + esc(v.l2) + '</div></div><div class="g9-r"><span class="t">' + esc(v.t) + '</span><div class="ph">' + bic("whatsapp") + "<span>" + esc(v.phone) + '</span></div><div class="ml">' + ic("mail") + "<span>" + esc(v.mail) + "</span></div></div></div>"; },
     seq: [[".g9-box", "wipeV", 0, { d: .6 }], [".g9-l1", "wipeL", .3, { d: .8 }], [".g9-l2", "left", .6], [".g9-r > *", "right", .5, { s: .12 }]],

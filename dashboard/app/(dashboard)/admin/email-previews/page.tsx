@@ -719,7 +719,7 @@ export default function AdminEmailPreviewsPage() {
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2">
-                              <p className="text-xs font-bold text-white">MakeChurchEasy</p>
+                              <p className="text-xs font-bold text-white">MakeChurchEazy</p>
                               <span className="text-[11px] text-slate-500 font-medium">10:42 AM</span>
                             </div>
                             <p className="mt-0.5 text-xs font-semibold text-slate-100 truncate">

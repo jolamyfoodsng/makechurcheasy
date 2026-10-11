@@ -244,6 +244,9 @@ export async function resolveLanOverlayBaseUrl(): Promise<string | null> {
  */
 export function getDockBaseUrl(): string {
   if (_overrideBaseUrl) return _overrideBaseUrl;
+  // Local development: point OBS at the Vite dev server so Dock edits hot-reload.
+  // Installed builds always use the static 127.0.0.1 overlay address.
+  if (import.meta.env.DEV) return _devDockBaseUrl ?? `http://localhost:${DEV_VITE_PORT}`;
   return DEFAULT_TAURI_OVERLAY_BASE_URL;
 }
 

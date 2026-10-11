@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const REPO = "jolamyfoodsng/makechurcheasy-releases";
+const REPO = "jolamyfoodsng/makechurcheasy-v2";
 const GITHUB_API_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
 
 const LATEST_MANIFEST_URL = `https://github.com/${REPO}/releases/latest/download/latest.json`;

@@ -28,7 +28,7 @@
           "key": "name",
           "label": "Name",
           "type": "text",
-          "defaultValue": "Pastor Daniel Carter",
+          "defaultValue": "Your Pastor's Name",
           "placeholder": "Enter speaker name",
           "required": true,
           "group": "Content"
@@ -330,7 +330,7 @@
           "key": "line2",
           "label": "Line 2",
           "type": "text",
-          "defaultValue": "or visit yourchurch.org/give",
+          "defaultValue": "or visit yourchurchname.com/give",
           "placeholder": "Secondary giving line",
           "group": "Content"
         }
@@ -387,7 +387,7 @@
           "key": "details",
           "label": "Details",
           "type": "text",
-          "defaultValue": "Visit yourchurch.org/prayer or text PRAY to 555-1234",
+          "defaultValue": "Visit yourchurchname.com/prayer or text PRAY to 555-1234",
           "placeholder": "Supporting details",
           "group": "Content"
         }
@@ -501,7 +501,7 @@
           "key": "details",
           "label": "Details",
           "type": "text",
-          "defaultValue": "Visit yourchurch.org/prayer or text PRAY to 555-1234",
+          "defaultValue": "Visit yourchurchname.com/prayer or text PRAY to 555-1234",
           "placeholder": "Supporting details",
           "group": "Content"
         }
@@ -1410,7 +1410,7 @@
           "key": "qrUrl",
           "label": "QR URL",
           "type": "text",
-          "defaultValue": "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://yourchurch.org/give",
+          "defaultValue": "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://yourchurchname.com/give",
           "placeholder": "QR image URL",
           "group": "Content"
         },
@@ -1505,7 +1505,7 @@
           "key": "details",
           "label": "Details",
           "type": "text",
-          "defaultValue": "yourchurch.org/give",
+          "defaultValue": "yourchurchname.com/give",
           "placeholder": "URL or text-to-give",
           "group": "Content"
         },
@@ -1513,7 +1513,7 @@
           "key": "qrUrl",
           "label": "QR URL",
           "type": "text",
-          "defaultValue": "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://yourchurch.org/give",
+          "defaultValue": "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://yourchurchname.com/give",
           "placeholder": "QR image URL",
           "group": "Content"
         },
@@ -1608,7 +1608,7 @@
           "key": "details",
           "label": "Details",
           "type": "text",
-          "defaultValue": "yourchurch.org/give",
+          "defaultValue": "yourchurchname.com/give",
           "placeholder": "Details",
           "required": true,
           "group": "Content"
@@ -1705,7 +1705,7 @@
           "key": "url",
           "label": "URL",
           "type": "text",
-          "defaultValue": "yourchurch.org/give",
+          "defaultValue": "yourchurchname.com/give",
           "placeholder": "URL",
           "group": "Content"
         },
@@ -1713,7 +1713,7 @@
           "key": "qrUrl",
           "label": "QR URL",
           "type": "text",
-          "defaultValue": "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://yourchurch.org/give",
+          "defaultValue": "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://yourchurchname.com/give",
           "placeholder": "QR image URL",
           "group": "Content"
         },
@@ -1927,7 +1927,7 @@
           "key": "method1Line",
           "label": "Method 1",
           "type": "text",
-          "defaultValue": "yourchurch.org/give",
+          "defaultValue": "yourchurchname.com/give",
           "placeholder": "Details",
           "group": "Method 1"
         },
@@ -2062,7 +2062,7 @@
           "key": "qrUrl",
           "label": "QR URL",
           "type": "text",
-          "defaultValue": "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://yourchurch.org/give",
+          "defaultValue": "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://yourchurchname.com/give",
           "placeholder": "QR image URL",
           "group": "Content"
         },
@@ -2157,7 +2157,7 @@
           "key": "details",
           "label": "Details",
           "type": "text",
-          "defaultValue": "yourchurch.org/give",
+          "defaultValue": "yourchurchname.com/give",
           "placeholder": "Giving details",
           "group": "Content"
         },
@@ -2259,7 +2259,7 @@
           "key": "url",
           "label": "URL",
           "type": "text",
-          "defaultValue": "yourchurch.org/give",
+          "defaultValue": "yourchurchname.com/give",
           "placeholder": "Fallback URL",
           "group": "Content"
         },
@@ -2345,7 +2345,7 @@
           "key": "line",
           "label": "Line",
           "type": "text",
-          "defaultValue": "Give online at yourchurch.org/give or text GIVE to 555-2100",
+          "defaultValue": "Give online at yourchurchname.com/give or text GIVE to 555-2100",
           "placeholder": "Info line",
           "required": true,
           "group": "Content"
@@ -2354,7 +2354,7 @@
           "key": "qrUrl",
           "label": "QR URL",
           "type": "text",
-          "defaultValue": "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://yourchurch.org/give",
+          "defaultValue": "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://yourchurchname.com/give",
           "placeholder": "QR image URL",
           "group": "Content"
         },
@@ -3183,7 +3183,7 @@
           "key": "name",
           "label": "Speaker Name",
           "type": "text",
-          "defaultValue": "Rev. Dr. Jane Smith",
+          "defaultValue": "Your Pastor's Name",
           "placeholder": "Name",
           "required": true,
           "group": "Content"
@@ -3234,7 +3234,7 @@
           "key": "name",
           "label": "Speaker Name",
           "type": "text",
-          "defaultValue": "Rev. Dr. Jane Smith",
+          "defaultValue": "Your Pastor's Name",
           "placeholder": "Name",
           "required": true,
           "group": "Content"
@@ -3285,7 +3285,7 @@
           "key": "name",
           "label": "Speaker Name",
           "type": "text",
-          "defaultValue": "Rev. Dr. Jane Smith",
+          "defaultValue": "Your Pastor's Name",
           "placeholder": "Name",
           "required": true,
           "group": "Content"
@@ -3336,7 +3336,7 @@
           "key": "name",
           "label": "Speaker Name",
           "type": "text",
-          "defaultValue": "Rev. Dr. Jane Smith",
+          "defaultValue": "Your Pastor's Name",
           "placeholder": "Name",
           "required": true,
           "group": "Content"
@@ -3387,7 +3387,7 @@
           "key": "name",
           "label": "Speaker Name",
           "type": "text",
-          "defaultValue": "Rev. Dr. Jane Smith",
+          "defaultValue": "Your Pastor's Name",
           "placeholder": "Name",
           "required": true,
           "group": "Content"

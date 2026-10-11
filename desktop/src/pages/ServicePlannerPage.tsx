@@ -342,7 +342,7 @@ export default function ServicePlannerPage() {
             <p className="app-section-kicker">Service Planner</p>
             <h1>Build the service run-down before you go live.</h1>
             <p>
-              Plan Bible verses, worship cues, sermon quotes or points, and media as one ordered list shared with the MakeChurchEasy Dock.
+              Plan Bible verses, worship cues, sermon quotes or points, and media as one ordered list shared with the MakeChurchEazy Dock.
             </p>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

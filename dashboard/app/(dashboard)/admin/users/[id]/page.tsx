@@ -4315,7 +4315,7 @@ export default function AdminUserDetailPage() {
           <div role="alertdialog" aria-modal="true" aria-labelledby="account-action-title" aria-describedby="account-action-description" className="w-full max-w-md rounded-2xl border border-slate-700 bg-gray-900 p-6 shadow-2xl">
             <h2 id="account-action-title" className="text-base font-semibold text-slate-50">{confirmAccountAction === "suspend" ? "Block this user?" : "Restore this user?"}</h2>
             <p id="account-action-description" className="mt-2 text-sm leading-6 text-slate-400">
-              {confirmAccountAction === "suspend" ? "The user will lose access to MakeChurchEasy until you unblock the account." : "The user will be able to sign in and use MakeChurchEasy again."}
+              {confirmAccountAction === "suspend" ? "The user will lose access to MakeChurchEazy until you unblock the account." : "The user will be able to sign in and use MakeChurchEazy again."}
             </p>
             <div className="mt-6 flex justify-end gap-2">
               <button type="button" onClick={() => setConfirmAccountAction(null)} className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-gray-800">Cancel</button>
@@ -4791,7 +4791,7 @@ export default function AdminUserDetailPage() {
                   <Receipt className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-100 print:text-gray-900">MakeChurchEasy Official Receipt</h3>
+                  <h3 className="text-base font-bold text-slate-100 print:text-gray-900">MakeChurchEazy Official Receipt</h3>
                   <p className="text-xs text-slate-400 print:text-gray-500 font-mono">Ref: {selectedPaymentReceipt.reference || "N/A"}</p>
                 </div>
               </div>

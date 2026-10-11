@@ -3,8 +3,8 @@
  *
  * Manages browser sources in OBS that display lower-third themes.
  * Supports:
- *   - Pushing theme + variable values to MakeChurchEasy-managed LT sources
- *   - Discovering all LT sources in OBS (MakeChurchEasy-managed + MV-created)
+ *   - Pushing theme + variable values to MakeChurchEazy-managed LT sources
+ *   - Discovering all LT sources in OBS (MakeChurchEazy-managed + MV-created)
  *   - Sending to all LT sources at once
  *   - Sending to a specific LT source
  *   - Blanking / clearing all LT sources
@@ -360,7 +360,7 @@ class LowerThirdObsService {
   }
 
   /**
-   * Ensure a dedicated MakeChurchEasy LT scene exists with a browser source inside.
+   * Ensure a dedicated MakeChurchEazy LT scene exists with a browser source inside.
    * The scene is named "MCE LT: <sourceName>" and contains one browser_source.
    * Returns the scene name and the browser source name.
    */
@@ -486,7 +486,7 @@ class LowerThirdObsService {
 
   /**
    * Scan OBS for all lower-third browser sources.
-   * Returns both MakeChurchEasy-managed (VC_LT_*) and MV-created (MV_*_LT:*) sources.
+   * Returns both MakeChurchEazy-managed (VC_LT_*) and MV-created (MV_*_LT:*) sources.
    */
   async discoverSources(): Promise<LTObsSource[]> {
     if (!obsService.isConnected) return [];

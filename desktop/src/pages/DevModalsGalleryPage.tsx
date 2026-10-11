@@ -3,7 +3,7 @@
  *
  * EXCLUSIVE TO LOCAL DEVELOPMENT FOR ADMINS (NEVER INCLUDED OR ACCESSIBLE IN PROD).
  * Provides an interactive testbed to trigger, preview, and verify all dialogs,
- * confirmations, paywalls, updates, and promotional announcements in MakeChurchEasy.
+ * confirmations, paywalls, updates, and promotional announcements in MakeChurchEazy.
  */
 
 import { useState, useEffect } from "react";
@@ -51,7 +51,7 @@ const SAMPLE_UPDATE_INFO = {
   releaseNotes: "• Redesigned modern modals with glassmorphic backdrop blur\n• Real-time high-speed device sync\n• Enhanced worship lyrics auto-alignment",
   mandatory: false,
   releaseDate: new Date().toISOString(),
-  downloadUrl: "https://makechurcheasy.com/downloads",
+  downloadUrl: "https://makechurcheazy.com/downloads",
 };
 
 const SAMPLE_ANNOUNCEMENTS: Record<string, DesktopAnnouncement> = {
@@ -59,11 +59,11 @@ const SAMPLE_ANNOUNCEMENTS: Record<string, DesktopAnnouncement> = {
     id: "promo-black-friday-preview",
     deliveryId: "del-bf-preview",
     title: "Annual Ministry Celebration Sale!",
-    message: "Get 40% OFF the MakeChurchEasy Growth Plan for your entire media team. Includes unlimited AI transcription, 4K multi-screen dock, and priority support.",
+    message: "Get 40% OFF the MakeChurchEazy Growth Plan for your entire media team. Includes unlimited AI transcription, 4K multi-screen dock, and priority support.",
     tone: "offer",
     tags: ["promo", "growth"],
     ctaLabel: "Claim 40% Discount",
-    ctaUrl: "https://makechurcheasy.com/subscription/plans?promo=CELEBRATE40",
+    ctaUrl: "https://makechurcheazy.com/subscription/plans?promo=CELEBRATE40",
     offerCode: "CELEBRATE40",
     offerDiscountPercent: 40,
     expiresAt: new Date(Date.now() + 86400000 * 3).toISOString(),
@@ -78,7 +78,7 @@ const SAMPLE_ANNOUNCEMENTS: Record<string, DesktopAnnouncement> = {
     tone: "upgrade",
     tags: ["feature", "speech"],
     ctaLabel: "Explore Features",
-    ctaUrl: "https://makechurcheasy.com/features",
+    ctaUrl: "https://makechurcheazy.com/features",
   },
   maintenance: {
     id: "system-notice-preview",
@@ -88,7 +88,7 @@ const SAMPLE_ANNOUNCEMENTS: Record<string, DesktopAnnouncement> = {
     tone: "warning",
     tags: ["maintenance", "system"],
     ctaLabel: "View Status Page",
-    ctaUrl: "https://status.makechurcheasy.com",
+    ctaUrl: "https://status.makechurcheazy.com",
   },
 };
 
@@ -164,7 +164,7 @@ export default function DevModalsGalleryPage() {
         </div>
         <h1 className="dev-modals-title">Modals & Announcements Gallery</h1>
         <p className="dev-modals-subtitle">
-          Interactive testbench to preview, test keyboard shortcuts (ESC), and audit the visual design of every dialog and announcement banner across MakeChurchEasy.
+          Interactive testbench to preview, test keyboard shortcuts (ESC), and audit the visual design of every dialog and announcement banner across MakeChurchEazy.
         </p>
 
         {lastAction && (
@@ -419,7 +419,7 @@ export default function DevModalsGalleryPage() {
             </div>
             <h3>Close App Update Warning</h3>
             <p>
-              Modal warning when user attempts to quit MakeChurchEasy while an update download is actively writing to disk.
+              Modal warning when user attempts to quit MakeChurchEazy while an update download is actively writing to disk.
             </p>
             <button
               type="button"
@@ -827,7 +827,7 @@ export default function DevModalsGalleryPage() {
             </div>
             <h3 className="mv-modal-title">New Version Available!</h3>
             <p className="mv-modal-prompt">
-              MakeChurchEasy <strong>v3.31.0</strong> is ready to install (current: v3.30.0).
+              MakeChurchEazy <strong>v3.31.0</strong> is ready to install (current: v3.30.0).
             </p>
             <div className="dev-release-notes-box">
               <p className="dev-release-notes-heading">What&apos;s new:</p>
@@ -883,12 +883,12 @@ export default function DevModalsGalleryPage() {
             <div className="update-modal-body">
               <h3>Your update will continue downloading</h3>
               <p>
-                MakeChurchEasy is downloading the update in the background so you can continue
+                MakeChurchEazy is downloading the update in the background so you can continue
                 working without disruption. We will let you know as soon as the installation is ready.
               </p>
               <div className="update-modal-preview">
                 <div className="update-modal-preview__row">
-                  <span className="update-modal-preview__label">MakeChurchEasy v3.31.0</span>
+                  <span className="update-modal-preview__label">MakeChurchEazy v3.31.0</span>
                   <span className="update-modal-preview__val">68% · 42.1 MB / 61.8 MB</span>
                 </div>
                 <div className="update-modal-preview__track">
@@ -930,7 +930,7 @@ export default function DevModalsGalleryPage() {
             <div className="update-modal-body">
               <h3>Download is still in progress</h3>
               <p>
-                MakeChurchEasy is currently downloading the latest update (v3.31.0).
+                MakeChurchEazy is currently downloading the latest update (v3.31.0).
                 If you close the application now, the download will be interrupted and you will need to restart it later.
               </p>
               <div className="update-modal-preview">

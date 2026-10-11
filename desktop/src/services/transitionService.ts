@@ -1,5 +1,5 @@
 /**
- * Transition Service — MakeChurchEasy
+ * Transition Service — MakeChurchEazy
  *
  * Controls OBS scene transition type and duration.
  * Provides a simple API for the UI to set global transitions.

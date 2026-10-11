@@ -17,8 +17,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   static const _pages = [
     _OnboardingPageData(
       icon: Icons.church_outlined,
-      title: 'Welcome to\nMakeChurchEasy',
-      subtitle: 'The remote control app for\nMakeChurchEasy Studio',
+      title: 'Welcome to\nMakeChurchEazy',
+      subtitle: 'The remote control app for\nMakeChurchEazy Studio',
       features: [],
     ),
     _OnboardingPageData(

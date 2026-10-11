@@ -60,7 +60,7 @@ function ForcedUpgradeScreen() {
     gracePeriodHours: null,
     startedAt: null,
     lockAt: null,
-    updateMessage: "A mandatory update is required to continue using MakeChurchEasy.",
+    updateMessage: "A mandatory update is required to continue using MakeChurchEazy.",
     currentVersion: CURRENT_APP_VERSION,
     downloadUrl: "",
     releaseNotesUrl: "",
@@ -149,7 +149,7 @@ export default function LicenseGuard({ children }: LicenseGuardProps) {
           <div className="license-offline-warning-banner__content">
             <p className="license-offline-warning-banner__title">Connect to the internet</p>
             <p className="license-offline-warning-banner__description">
-              You have not connected to the internet for {daysOffline} days. Please connect to the internet soon to keep MakeChurchEasy verified and synchronized.
+              You have not connected to the internet for {daysOffline} days. Please connect to the internet soon to keep MakeChurchEazy verified and synchronized.
             </p>
           </div>
           <div className="license-offline-warning-banner__actions">
@@ -471,7 +471,7 @@ function LicenseLockScreen({
               ? "Offline limit reached (3 weeks offline)"
               : reason === "maintenance"
               ? "Checking again automatically"
-              : "Access to MakeChurchEasy is currently blocked"}
+              : "Access to MakeChurchEazy is currently blocked"}
           </p>
           <h2 className="license-guard-title">{config.title}</h2>
         </div>

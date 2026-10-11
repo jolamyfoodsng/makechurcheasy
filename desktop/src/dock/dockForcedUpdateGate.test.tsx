@@ -78,7 +78,7 @@ describe("DockAuthGate forced update lock enforcement", () => {
     expect(html).toContain("Dock Blocked");
     expect(html).toContain("v4.0.0 is required");
     expect(html).toContain("This has been blocked because you need to update the app.");
-    expect(html).toContain("Please open MakeChurchEasy on this computer to update.");
+    expect(html).toContain("Please open MakeChurchEazy on this computer to update.");
 
     // Dock mode must render 'I Updated, Refresh' button, and NOT have Update Now, Quit App, or Remind Me Later buttons
     expect(html).toContain("I Updated, Refresh");

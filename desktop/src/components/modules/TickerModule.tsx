@@ -115,7 +115,7 @@ function getTickerBranding(): { logoUrl: string; brandName: string } {
   const settings = getMVSettings();
   return {
     logoUrl: resolveOverlayAssetUrl(settings.brandLogoPath),
-    brandName: settings.churchName || "MakeChurchEasy",
+    brandName: settings.churchName || "MakeChurchEazy",
   };
 }
 

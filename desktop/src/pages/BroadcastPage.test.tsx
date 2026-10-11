@@ -60,4 +60,8 @@ describe("BroadcastPage UI & Multi-Platform Streaming Redesign", () => {
     expect(html).not.toContain("linearGradient id=\"obs");
   });
 
+  it("strictly enforces zero occurrences of the forbidden word", () => {
+    const html = renderToStaticMarkup(<BroadcastPage />);
+    expect(html.toLowerCase()).not.toContain("sanctuary");
+  });
 });

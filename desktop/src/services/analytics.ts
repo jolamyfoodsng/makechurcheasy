@@ -1,5 +1,5 @@
 /**
- * analytics.ts — MakeChurchEasy analytics service.
+ * analytics.ts — MakeChurchEazy analytics service.
  *
  * Sends events to a self-hosted Cloudflare Worker endpoint.
  * Never call the endpoint directly from components.

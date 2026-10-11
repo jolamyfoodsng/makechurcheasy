@@ -4,7 +4,7 @@ excerpt: "Prepare scripture, notes, and supporting media in a way that helps the
 date: "2026-08-21T09:00:00.000Z"
 coverImage: "/assets/blog/dynamic-routing/cover.jpg"
 author:
-  name: "MakeChurchEasy"
+  name: "MakeChurchEazy"
   picture: "/assets/blog/authors/mce.svg"
 ogImage:
   url: "/assets/blog/dynamic-routing/cover.jpg"

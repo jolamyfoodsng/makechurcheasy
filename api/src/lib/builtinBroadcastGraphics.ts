@@ -312,20 +312,12 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "sortOrder": 36
   },
   {
-    "graphicId": "lt-ch-give-gold",
-    "name": "Ways to Give — Maroon & Gold",
-    "category": "giving",
-    "accentColor": "#f6c75a",
-    "description": "Maroon band with drifting bokeh, gold script title, flare and sparkles.",
-    "sortOrder": 37
-  },
-  {
     "graphicId": "lt-sun-green",
     "name": "Green Service Bar",
     "category": "service",
     "accentColor": "#5cc52c",
     "description": "Glossy green bar wipes in, the title rises, a script word writes on and a light sweeps across.",
-    "sortOrder": 38
+    "sortOrder": 37
   },
   {
     "graphicId": "lt-sun-bishop",
@@ -333,7 +325,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "speaker",
     "accentColor": "#45c23b",
     "description": "Bold name skews in over a green theme bar.",
-    "sortOrder": 39
+    "sortOrder": 38
   },
   {
     "graphicId": "lt-sun-minister",
@@ -341,7 +333,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "service",
     "accentColor": "#f26b21",
     "description": "White panel with an orange ministering tab, socials and an enquiries block.",
-    "sortOrder": 40
+    "sortOrder": 39
   },
   {
     "graphicId": "lt-sun-prayer",
@@ -349,7 +341,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "service",
     "accentColor": "#f2c230",
     "description": "Black bar opens from the centre with the church name, socials and a white info strip.",
-    "sortOrder": 41
+    "sortOrder": 40
   },
   {
     "graphicId": "lt-sun-givenavy",
@@ -357,7 +349,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "giving",
     "accentColor": "#13306b",
     "description": "Navy bar with glowing light streaks that draw on, three ways to give rise in.",
-    "sortOrder": 42
+    "sortOrder": 41
   },
   {
     "graphicId": "lt-sun-givesunset",
@@ -365,7 +357,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "giving",
     "accentColor": "#de7346",
     "description": "Drifting sunset gradient bar with a navy tab and three ways to give.",
-    "sortOrder": 43
+    "sortOrder": 42
   },
   {
     "graphicId": "lt-sun-sundaynavy",
@@ -373,7 +365,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "service",
     "accentColor": "#141d4a",
     "description": "Light strip with a yellow tab, socials and a slanted navy contact block.",
-    "sortOrder": 44
+    "sortOrder": 43
   },
   {
     "graphicId": "lt-sun-advert",
@@ -381,7 +373,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "announcements",
     "accentColor": "#331509",
     "description": "Brown box opens with a gold shimmer headline and WhatsApp / email contact.",
-    "sortOrder": 45
+    "sortOrder": 44
   },
   {
     "graphicId": "lt-sun-givegrey",
@@ -389,7 +381,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "giving",
     "accentColor": "#262626",
     "description": "Charcoal bar with a white divider and three ways to give.",
-    "sortOrder": 46
+    "sortOrder": 45
   },
   {
     "graphicId": "lt-sun-giveautumn",
@@ -397,7 +389,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "giving",
     "accentColor": "#3d1110",
     "description": "Falling-leaves panel and a maroon bar with three ways to give.",
-    "sortOrder": 47
+    "sortOrder": 46
   },
   {
     "graphicId": "lt-sun-healing",
@@ -405,7 +397,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "service",
     "accentColor": "#e5352a",
     "description": "Black title bar and red info strip slide in from opposite sides.",
-    "sortOrder": 48
+    "sortOrder": 47
   },
   {
     "graphicId": "lt-sun-logored",
@@ -413,7 +405,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "branding",
     "accentColor": "#c8161d",
     "description": "Logo box, silver title bar and a red social panel with a light sweep.",
-    "sortOrder": 49
+    "sortOrder": 48
   },
   {
     "graphicId": "lt-sun-logoline",
@@ -421,7 +413,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "branding",
     "accentColor": "#c8161d",
     "description": "Logo box, black and white stripes and a silver bar with centred text.",
-    "sortOrder": 50
+    "sortOrder": 49
   },
   {
     "graphicId": "lt-sun-logoredbar",
@@ -429,7 +421,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "branding",
     "accentColor": "#c8161d",
     "description": "White logo box and a glossy red bar with title, website and socials.",
-    "sortOrder": 51
+    "sortOrder": 50
   },
   {
     "graphicId": "lt-sun-logoslant",
@@ -437,7 +429,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "branding",
     "accentColor": "#d42a20",
     "description": "Slanted black logo block with socials and a white card, a spinning red corner.",
-    "sortOrder": 52
+    "sortOrder": 51
   },
   {
     "graphicId": "lt-sun-logodark",
@@ -445,7 +437,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "branding",
     "accentColor": "#d42a20",
     "description": "White logo box, dark title bar with socials and a red website strip.",
-    "sortOrder": 53
+    "sortOrder": 52
   },
   {
     "graphicId": "lt-sun-subscribe",
@@ -453,7 +445,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "subscribe",
     "accentColor": "#ff0000",
     "description": "Logo spins into a tile, the bar swings out, like is tapped, subscribe pressed and the bell rings.",
-    "sortOrder": 54
+    "sortOrder": 53
   },
   {
     "graphicId": "lt-sun-socials",
@@ -461,7 +453,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "social",
     "accentColor": "#ee1153",
     "description": "One card that cycles platform to platform: the tile pops, the bar opens and the handle rises.",
-    "sortOrder": 55
+    "sortOrder": 54
   },
   {
     "graphicId": "lt-sun-classicsub",
@@ -469,7 +461,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "subscribe",
     "accentColor": "#d30d0d",
     "description": "White card rises, a cursor clicks like, subscribe and the bell.",
-    "sortOrder": 56
+    "sortOrder": 55
   },
   {
     "graphicId": "lt-sun-threebtn",
@@ -477,6 +469,38 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "category": "subscribe",
     "accentColor": "#e5141b",
     "description": "Three dark buttons pop up and a hand cursor clicks each one.",
+    "sortOrder": 56
+  },
+  {
+    "graphicId": "lt-stream-day",
+    "name": "Day Badge",
+    "category": "service",
+    "accentColor": "#10243f",
+    "description": "A DAY tag with a date plate that wipes in beside it.",
     "sortOrder": 57
+  },
+  {
+    "graphicId": "lt-stream-partner",
+    "name": "Partnership Link + QR",
+    "category": "giving",
+    "accentColor": "#10243f",
+    "description": "A scan code beside a heading and link; the code opens exactly the link that is typed.",
+    "sortOrder": 58
+  },
+  {
+    "graphicId": "lt-stream-ticker",
+    "name": "News Ticker Bar",
+    "category": "announcements",
+    "accentColor": "#2fe0c3",
+    "description": "A label tab and a full-width bar of messages that scroll across, one message per line.",
+    "sortOrder": 59
+  },
+  {
+    "graphicId": "lt-stream-live",
+    "name": "Live Bug",
+    "category": "service",
+    "accentColor": "#ff3156",
+    "description": "A LIVE pill with a pulsing dot and a hashtag.",
+    "sortOrder": 60
   }
 ];

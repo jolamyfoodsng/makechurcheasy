@@ -2,7 +2,7 @@
  * ResourcesPage.tsx — Setup resources for the dock-first workflow
  *
  * Keeps the media library as the default setup surface while the
- * MakeChurchEasy Dock stays focused on live control.
+ * MakeChurchEazy Dock stays focused on live control.
  */
 
 import { useMemo } from "react";

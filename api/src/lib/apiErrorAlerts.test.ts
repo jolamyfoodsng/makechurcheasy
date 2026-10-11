@@ -32,7 +32,7 @@ test("builds an identified and escaped API alert", () => {
     occurredAt: "2026-08-15T12:00:00.000Z",
   });
 
-  assert.match(message, /MakeChurchEasy API error response/);
+  assert.match(message, /MakeChurchEazy API error response/);
   assert.match(message, /Alert ID:<\/b> mce-api-alert-1/);
   assert.match(message, /Request ID:<\/b> req-123/);
   assert.match(message, /POST \/api\/notes/);
@@ -40,7 +40,7 @@ test("builds an identified and escaped API alert", () => {
   assert.match(message, /Database &lt;connection&gt; failed/);
 });
 
-test("sends API errors to the configured MakeChurchEasy Alerts chat", async () => {
+test("sends API errors to the configured MakeChurchEazy Alerts chat", async () => {
   const originalFetch = globalThis.fetch;
   let requestBody: Record<string, unknown> | null = null;
   globalThis.fetch = (async (_input, init) => {

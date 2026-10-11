@@ -231,7 +231,7 @@ export const MERGED_ALL_THEMES: ThemeLike[] = [{
       "key": "details",
       "label": "Details",
       "type": "text",
-      "defaultValue": "Visit yourchurch.org/prayer or text PRAY to 555-1234",
+      "defaultValue": "Visit yourchurchname.com/prayer or text PRAY to 555-1234",
       "placeholder": "Supporting details",
       "group": "Content"
     }
@@ -384,7 +384,7 @@ export const MERGED_ALL_THEMES: ThemeLike[] = [{
       "key": "method1Line",
       "label": "Method 1",
       "type": "text",
-      "defaultValue": "yourchurch.org/give",
+      "defaultValue": "yourchurchname.com/give",
       "placeholder": "Details",
       "group": "Method 1"
     },
@@ -508,7 +508,7 @@ export const MERGED_ALL_THEMES: ThemeLike[] = [{
       "key": "qrUrl",
       "label": "QR URL",
       "type": "image",
-      "defaultValue": "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://yourchurch.org/give",
+      "defaultValue": "https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://yourchurchname.com/give",
       "placeholder": "QR image URL",
       "group": "Content"
     },

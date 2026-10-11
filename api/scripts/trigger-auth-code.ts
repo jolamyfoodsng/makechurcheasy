@@ -21,7 +21,7 @@ async function main() {
     : Math.floor(100000 + Math.random() * 900000).toString();
 
   console.log("═══════════════════════════════════════════════════════════════");
-  console.log("  MakeChurchEasy Auth Code Trigger");
+  console.log("  MakeChurchEazy Auth Code Trigger");
   console.log("═══════════════════════════════════════════════════════════════");
   console.log(`• Target recipient: ${targetEmail}`);
   console.log(`• Code type:        ${type}`);
@@ -44,7 +44,7 @@ async function main() {
   if (process.env.CLOUDFLARE_EMAIL_ACCOUNT_ID && process.env.CLOUDFLARE_EMAIL_API_TOKEN) {
     console.log(`\n[2] Testing direct Cloudflare API dispatch...`);
     const txResult = await sendTransactionalEmail({
-      from: { email: process.env.EMAIL_FROM || "noreply@notifications.makechurcheazy.com", name: "MakeChurchEasy" },
+      from: { email: process.env.EMAIL_FROM || "noreply@notifications.makechurcheazy.com", name: "MakeChurchEazy" },
       to: [targetEmail],
       subject: emailOpts.subject,
       html: emailOpts.html,

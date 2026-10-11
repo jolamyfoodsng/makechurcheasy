@@ -10,7 +10,7 @@ class MCEBrandMark extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: 'MakeChurchEasy',
+      label: 'MakeChurchEazy',
       image: true,
       child: Image.asset(
         assetPath,

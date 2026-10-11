@@ -1,8 +1,8 @@
-# MakeChurchEasy Design System Master Guide
+# MakeChurchEazy Design System Master Guide
 
 Version: 1.0
 
-This document is the highest design authority for MakeChurchEasy.
+This document is the highest design authority for MakeChurchEazy.
 
 Applies to:
 
@@ -22,9 +22,9 @@ DESIGN_SYSTEM_MASTER.md wins.
 
 # Product Philosophy
 
-MakeChurchEasy is not church management software.
+MakeChurchEazy is not church management software.
 
-MakeChurchEasy is a presentation and livestream platform built around OBS.
+MakeChurchEazy is a presentation and livestream platform built around OBS.
 
 Every screen should reinforce:
 

@@ -68,11 +68,11 @@ function isTransientPairingError(error: unknown) {
 
 async function createPairingCodeWithRetry() {
   try {
-    return await createPairingCode("MakeChurchEasy", PAIRING_CODE_TTL);
+    return await createPairingCode("MakeChurchEazy", PAIRING_CODE_TTL);
   } catch (error) {
     if (!isTransientPairingError(error)) throw error;
     await wait(500);
-    return createPairingCode("MakeChurchEasy", PAIRING_CODE_TTL);
+    return createPairingCode("MakeChurchEazy", PAIRING_CODE_TTL);
   }
 }
 

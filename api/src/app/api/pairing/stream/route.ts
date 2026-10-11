@@ -172,7 +172,7 @@ export async function GET(req: NextRequest) {
               }
             }
 
-            const deviceName = clientOS || pairing.deviceName || "MakeChurchEasy";
+            const deviceName = clientOS || pairing.deviceName || "MakeChurchEazy";
             // Version from query param (EventSource can't send headers), platform from user-agent
             const { appPlatform } = extractDeviceInfo(req);
             const appVersion = clientVersion || "";

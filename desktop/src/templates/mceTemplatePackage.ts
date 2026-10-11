@@ -4,7 +4,7 @@ import { ensureGoogleFontsLoaded } from "./googleFonts";
 /**
  * The `.mce` format is intentionally not an image format. It is an
  * MCE-native package containing structured, editable layers that only the
- * MakeChurchEasy template interpreter knows how to open.
+ * MakeChurchEazy template interpreter knows how to open.
  */
 export const MCE_TEMPLATE_PACKAGE_MAGIC = "MCE-TEMPLATE-PACKAGE";
 export const MCE_TEMPLATE_PACKAGE_VERSION = 1;
@@ -13,6 +13,7 @@ export const MCE_TEMPLATE_MIME = "application/x-makechurcheasy-template";
 interface MceTemplatePackagePayload {
   magic: typeof MCE_TEMPLATE_PACKAGE_MAGIC;
   version: typeof MCE_TEMPLATE_PACKAGE_VERSION;
+  /** File-format identifier (kept from the original brand spelling so older packages and apps stay compatible). */
   app: "MakeChurchEasy";
   kind: "editable-template";
   savedAt: string;
@@ -97,7 +98,7 @@ export async function parseMceTemplatePackage(source: Blob | string): Promise<Ed
   const raw = typeof source === "string" ? source : await source.text();
   const lines = raw.split("\n");
   if (lines[0] !== MCE_TEMPLATE_PACKAGE_MAGIC || lines[1] !== String(MCE_TEMPLATE_PACKAGE_VERSION)) {
-    throw new Error("This is not a valid MakeChurchEasy template package.");
+    throw new Error("This is not a valid MakeChurchEazy template package.");
   }
 
   try {

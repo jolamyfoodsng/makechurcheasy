@@ -1,5 +1,5 @@
 /**
- * DockMinistryTab.tsx — Ministry tab for the MakeChurchEasy Dock
+ * DockMinistryTab.tsx — Ministry tab for the MakeChurchEazy Dock
  *
  * Sub-tabs:
  *   1. Lower Thirds — send/blank lower-third overlays via OBS
@@ -36,7 +36,8 @@ import allThemesData from "../../../lower_thirds/all_themes.json";
 import DockSceneRoutingControl from "../components/DockSceneRoutingControl";
 import DockLowerThirdEditor from "./DockLowerThirdEditor";
 import DockTimeTab from "./DockTimeTab";
-import { requireEntitlement, getDockPlan, showUpgradeModal, getDockEntitlementLimit } from "../dockEntitlement";
+import { requireEntitlement, getDockPlan, showUpgradeModal, getDockEntitlementLimit, refreshDockPlanNow } from "../dockEntitlement";
+import { getStoredLocalDevPlanOverride } from "../../services/localDevPlanOverride";
 import { checkEntitlementSync } from "../../services/entitlementClient";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { readNativeDockSetting, writeNativeDockSetting } from "../../services/localDockSettings";
@@ -377,7 +378,7 @@ function loadInitialTickerBranding(): TickerBranding {
   const settings = getSettings();
   return {
     logoUrl: resolveOverlayAssetUrl(settings.brandLogoPath),
-    brandName: settings.churchName || "MakeChurchEasy",
+    brandName: settings.churchName || "MakeChurchEazy",
     brandColor: settings.brandColor || "#6A34DE",
   };
 }
@@ -535,6 +536,21 @@ export default function DockMinistryTab({
     if (mountedRef.current) setObsConnected(dockObsClient.isConnected);
     return () => { mountedRef.current = false; unsub(); };
   }, []);
+
+  // Whenever a locked tab is showing, re-check the plan right away. A plan that was
+  // still syncing when the dock opened must not keep the tab locked for a minute.
+  const activeTabLocked =
+    (subTab === "ticker" && !tickerEntitlement.allowed) ||
+    (subTab === "lower-thirds" && !lowerThirdEntitlement.allowed) ||
+    (subTab === "time" && !timeEntitlement.allowed);
+  useEffect(() => {
+    if (!activeTabLocked) return;
+    let cancelled = false;
+    void refreshDockPlanNow().then((plan) => {
+      if (!cancelled && mountedRef.current) setDockPlan(plan);
+    });
+    return () => { cancelled = true; };
+  }, [subTab, activeTabLocked]);
 
   // Refresh dock plan every 30s (matches DockAuthGate polling)
   useEffect(() => {
@@ -766,7 +782,7 @@ export default function DockMinistryTab({
   const tickerBrandLogoUrl = selectedTickerTheme?.source === "dock" || selectedTickerTheme?.source === "remote"
     ? tickerBranding.logoUrl
     : "";
-  const tickerBrandName = tickerBranding.brandName || "MakeChurchEasy";
+  const tickerBrandName = tickerBranding.brandName || "MakeChurchEazy";
   const obsFontFamily = loadDockOutputFontFamily();
 
   const fallbackLtTheme = (availableLtThemes[0] ?? ALL_LT_THEMES[0]) as LowerThirdTheme;
@@ -1235,18 +1251,27 @@ export default function DockMinistryTab({
     }
   }, [hasTickerSceneRoute, presentationLinkMode, t, tickerSceneRoute.targets, tickerSceneRoute.syncPresentation]);
 
+  // The latest success message for the sub-tab being shown (shown as an icon only).
+  const successNotice: string | null =
+    subTab === "ticker"
+      ? success
+      : subTab === "lower-thirds" && ltFeedback && ltFeedbackTone === "success"
+        ? ltFeedback
+        : null;
+
   return (
     <div className="dock-mv-tab">
       {/* ── Header ── */}
 
 
       {/* ── Sub-Tab Switcher ── */}
+      {/* Locked tabs still open their tab. The locked panel inside explains the plan and has the Upgrade button, so a tab click never jumps out to the website. */}
       <div className="dock-ministry-tabs">
         {showTickerTab && (
           <button
             type="button"
             className={`dock-ministry-tab${subTab === "ticker" ? " dock-ministry-tab--active" : ""}`}
-            onClick={() => tickerEntitlement.allowed ? setSubTab("ticker") : showUpgradeModal(tickerEntitlement.reason || "Upgrade to Growth to enable Ticker.")}
+            onClick={() => setSubTab("ticker")}
             aria-label={t("ministry.ticker")}
             title={t("ministry.ticker")}>
             <Icon name="campaign" size={12} />
@@ -1257,7 +1282,7 @@ export default function DockMinistryTab({
           <button
             type="button"
             className={`dock-ministry-tab${subTab === "lower-thirds" ? " dock-ministry-tab--active" : ""}`}
-            onClick={() => lowerThirdEntitlement.allowed ? setSubTab("lower-thirds") : showUpgradeModal(lowerThirdEntitlement.reason || "Upgrade to Growth to enable Lower Thirds.")}
+            onClick={() => setSubTab("lower-thirds")}
             aria-label={t("ministry.lowerThirds")}
             title={t("ministry.lowerThirds")}>
             <Icon name="subtitles" size={12} />
@@ -1268,15 +1293,25 @@ export default function DockMinistryTab({
           <button
             type="button"
             className={`dock-ministry-tab${subTab === "time" ? " dock-ministry-tab--active" : ""}`}
-            onClick={() => timeEntitlement.allowed ? setSubTab("time") : showUpgradeModal(timeEntitlement.reason || "Upgrade to Growth to enable Time tools.")}
+            onClick={() => setSubTab("time")}
             aria-label={t("ministry.time", "Time")}
             title={t("ministry.time", "Time")}>
             <Icon name="schedule" size={12} />
             <span>{t("ministry.timeShort", "Time")}</span>
           </button>
         )}
-        {subTab === "ticker" && tickerEntitlement.allowed && (
-          <span style={{ marginLeft: "auto", display: "inline-flex" }}>
+        <span className="dock-ministry-tabs__end">
+          {/* Success notice: just an icon in a slot that is always reserved, so it never moves the page or covers a button. */}
+          <span
+            className="dock-ministry-status"
+            role="status"
+            aria-live="polite"
+            aria-label={successNotice || undefined}
+            title={successNotice || undefined}
+          >
+            {successNotice && <Icon name="check_circle" size={16} />}
+          </span>
+          {subTab === "ticker" && tickerEntitlement.allowed && (
             <DockSceneRoutingControl
               module="ticker"
               route={tickerSceneRoute}
@@ -1284,10 +1319,8 @@ export default function DockMinistryTab({
               disabled={presentationLinkMode}
               title={t("sceneRouting.tickerOutput", "Ticker output")}
             />
-          </span>
-        )}
-        {subTab === "lower-thirds" && lowerThirdEntitlement.allowed && (
-          <span style={{ marginLeft: "auto", display: "inline-flex" }}>
+          )}
+          {subTab === "lower-thirds" && lowerThirdEntitlement.allowed && (
             <DockSceneRoutingControl
               module="lower-third"
               route={lowerThirdSceneRoute}
@@ -1295,8 +1328,8 @@ export default function DockMinistryTab({
               disabled={presentationLinkMode}
               title={t("sceneRouting.lowerThirdOutput", "Lower-third output")}
             />
-          </span>
-        )}
+          )}
+        </span>
       </div>
 
       {/* ── Ticker Tab ── */}
@@ -1329,12 +1362,6 @@ export default function DockMinistryTab({
               <button type="button" className="dock-mv-tab__feedback-close" onClick={() => setError(null)} title={t("common.close")}>
                 <Icon name="close" size={12} />
               </button>
-            </div>
-          )}
-          {success && (
-            <div className="dock-mv-tab__feedback dock-mv-tab__feedback--toast dock-mv-tab__feedback--success">
-              <Icon name="check_circle" size={14} />
-              <span>{success}</span>
             </div>
           )}
 
@@ -1779,9 +1806,9 @@ export default function DockMinistryTab({
       {showLowerThirdTab && subTab === "lower-thirds" && lowerThirdEntitlement.allowed && (
         <>
           {/* LT Feedback */}
-          {ltFeedback && (
-            <div className={`dock-mv-tab__feedback dock-mv-tab__feedback--toast dock-mv-tab__feedback--${ltFeedbackTone}`}>
-              <Icon name={ltFeedbackTone === "success" ? "check_circle" : "error"} size={14} />
+          {ltFeedback && ltFeedbackTone === "error" && (
+            <div className="dock-mv-tab__feedback dock-mv-tab__feedback--toast dock-mv-tab__feedback--error">
+              <Icon name="error" size={14} />
               <span>{ltFeedback}</span>
               <button type="button" className="dock-mv-tab__feedback-close" onClick={() => setLtFeedback(null)} title={t("common.close")}>
                 <Icon name="close" size={12} />
@@ -1791,11 +1818,8 @@ export default function DockMinistryTab({
 
           <div className="dock-mv-tab__list">
             {/* Theme Picker */}
-            <div className="dock-mv-tab__section">
-              <div className="dock-mv-tab__section-label">{t("ministry.theme")}</div>
-              <div className="dock-mv-tab__section-desc">
-                {t("ministry.lowerThirdThemeHelp", "For Scripture, choose the lower-third theme in Bible.")}
-              </div>
+            <div className="dock-mv-tab__section" style={{ marginBottom: 6 }}>
+              <div className="dock-mv-tab__section-label" style={{ paddingBottom: 3 }}>{t("ministry.theme")}</div>
               <div style={{ padding: "4px 0" }}>
                 {ltFavorites.length > 0 ? (
                   <select
@@ -1806,8 +1830,8 @@ export default function DockMinistryTab({
                       background: "var(--dock-surface)",
                       border: "1px solid var(--dock-border)",
                       borderRadius: 3,
-                      padding: "4px 6px",
-                      fontSize: 11,
+                      padding: "2px 6px",
+                      fontSize: 10,
                       fontWeight: 600,
                       color: "var(--dock-text)",
                       fontFamily: "inherit",
@@ -2329,6 +2353,11 @@ export default function DockMinistryTab({
           <div style={{ fontSize: 11, color: "var(--dock-text-dim)", marginBottom: 16, lineHeight: 1.5 }}>
             {t("upgrade.timeDescription", "Keep your services on time with countdowns, timers, and clocks.")}
           </div>
+          {import.meta.env.DEV && (
+            <div style={{ fontSize: 10, color: "var(--dock-text-dim)", opacity: 0.7, marginBottom: 12 }}>
+              {`dev: dock plan = ${dockPlan} · local plan override = ${getStoredLocalDevPlanOverride() ?? "none"}`}
+            </div>
+          )}
           <button
             type="button"
             className="dock-btn dock-btn--primary dock-btn--sm dock-upgrade-plan-btn"

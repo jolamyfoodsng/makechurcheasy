@@ -2154,7 +2154,7 @@ function MotionSection({
   );
 }
 
-/* ── Color Section — ThemeModalStitch layout, MakeChurchEasy skin ── */
+/* ── Color Section — ThemeModalStitch layout, MakeChurchEazy skin ── */
 function ColorSection({
   quickSettings,
   onQuickSettingsChange,

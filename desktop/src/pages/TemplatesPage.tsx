@@ -206,7 +206,7 @@ export default function TemplatesPage() {
       <div className="app-page__inner templates-page__inner">
         <header className="app-page__header templates-page__header">
           <div className="app-page__header-copy">
-            <p className="app-page__eyebrow">MAKECHURCHEASY TEMPLATES</p>
+            <p className="app-page__eyebrow">MAKECHURCHEAZY TEMPLATES</p>
             <h1 className="app-page__title">Start with a service-ready design</h1>
             <p className="app-page__subtitle">
               Choose a structured graphic, preview it, and update the words in the app. Your team can move from idea to a usable church visual in minutes.

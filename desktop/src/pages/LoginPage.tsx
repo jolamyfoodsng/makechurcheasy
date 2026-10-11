@@ -75,7 +75,7 @@ export default function LoginPage() {
   async function startQrLogin() {
     setError("");
     resetPairingApiBase();
-    const result = await createPairingCode("MakeChurchEasy");
+    const result = await createPairingCode("MakeChurchEazy");
     if ("error" in result) {
       setError(result.error);
       return;
@@ -97,7 +97,7 @@ export default function LoginPage() {
     setQrDataUrl("");
     resetPairingApiBase();
 
-    const result = await createPairingCode("MakeChurchEasy");
+    const result = await createPairingCode("MakeChurchEazy");
     if ("error" in result) {
       setRegenError(result.error);
       setRegenerating(false);
@@ -304,7 +304,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div style={{ textAlign: "center", marginBottom: "36px" }}>
           <AppLogo
-            alt="MakeChurchEasy"
+            alt="MakeChurchEazy"
             mode="dark"
             style={{ height: "130px", width: "130px" }}
           />
@@ -316,7 +316,7 @@ export default function LoginPage() {
               marginBottom: "6px",
             }}
           >
-            MakeChurchEasy
+            MakeChurchEazy
           </h1>
           <p style={{ fontSize: "13px", color: "#9898a8" }}>
             {t("login.subtitle")}
@@ -390,7 +390,7 @@ export default function LoginPage() {
               onClick={async () => {
                 setError("");
                 resetPairingApiBase();
-                const result = await createPairingCode("MakeChurchEasy");
+                const result = await createPairingCode("MakeChurchEazy");
                 if ("error" in result) {
                   setError(result.error);
                   return;
@@ -701,7 +701,7 @@ export default function LoginPage() {
             >
               Generate a code from{" "}
               <span style={{ color: "#9898a8" }}>
-                MakeChurchEasy
+                MakeChurchEazy
               </span>{" "}
               in your browser, then enter it here.
             </p>

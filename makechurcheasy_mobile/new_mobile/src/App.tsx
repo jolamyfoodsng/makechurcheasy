@@ -602,7 +602,7 @@ export default function App() {
             </div>
             <div className="memory-info">
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Slot 01</div>
-              <div style={{ fontSize: '15px', fontWeight: 600 }}>Pastor John</div>
+              <div style={{ fontSize: '15px', fontWeight: 600 }}>Speaker Name</div>
               <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Guest Speaker</div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>

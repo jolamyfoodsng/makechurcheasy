@@ -73,7 +73,7 @@ describe("Dock session transfer", () => {
   it("rejects malformed or unsupported session files", () => {
     expect(() => parseDockSessionJSON("not json")).toThrow("not valid JSON");
     expect(() => parseDockSessionJSON(JSON.stringify({ _format: "other", _version: 1 })))
-      .toThrow("not a MakeChurchEasy Dock session");
+      .toThrow("not a MakeChurchEazy Dock session");
     expect(() => parseDockSessionJSON(JSON.stringify({
       _format: DOCK_SESSION_FORMAT,
       _version: 99,

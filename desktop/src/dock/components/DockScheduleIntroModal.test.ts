@@ -21,10 +21,10 @@ describe("Dock Schedule & History Onboarding & OBS Error Enhancements", () => {
   it("explains Schedule and History features concisely and highlights where to locate it", () => {
     expect(introModalSource).toContain("Service Schedule & History");
     expect(introModalSource).toContain("Where to find it:");
-    expect(introModalSource).toContain("Located on the left edge of your Dock");
-    expect(introModalSource).toContain("Schedule & History Side-by-Side");
-    expect(introModalSource).toContain("One-Click Live Projection");
-    expect(introModalSource).toContain("Resize & Pin");
+    expect(introModalSource).toContain("on the left edge of your Dock");
+    expect(introModalSource).toContain("Schedule & History:");
+    expect(introModalSource).toContain("One-click projection:");
+    expect(introModalSource).toContain("Resize & pin:");
     expect(introModalSource).toContain("localStorage.setItem(DOCK_SCHEDULE_INTRO_KEY, \"true\")");
     expect(introModalSource).toContain("localStorage.getItem(DOCK_SCHEDULE_INTRO_KEY)");
   });
@@ -32,7 +32,7 @@ describe("Dock Schedule & History Onboarding & OBS Error Enhancements", () => {
   it("provides helpful solutions and diagnostics for OBS WebSocket connection errors", () => {
     expect(dockPageSource).toContain("formatDockObsError");
     expect(dockPageSource).toContain("Tools → WebSocket Server Settings");
-    expect(dockPageSource).toContain("MakeChurchEasy");
+    expect(dockPageSource).toContain("MakeChurchEazy");
     expect(dockPageSource).toContain("port 4455");
   });
 

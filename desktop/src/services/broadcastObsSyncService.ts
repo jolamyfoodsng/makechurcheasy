@@ -187,7 +187,7 @@ type CloudSyncResponse = {
   } | null;
 };
 
-/** Ask the cloud broadcasting engine (through the Make Church Easy API) to restream this profile. */
+/** Ask the cloud broadcasting engine (through the Make Church Eazy API) to restream this profile. */
 async function requestCloudSync(profile: BroadcastPersonProfile, channels: BroadcastChannel[]): Promise<CloudSyncResponse | null> {
   const deviceId = getDeviceId();
   if (!deviceId) return { status: 401, data: { success: false, error: "NOT_SIGNED_IN" } };
@@ -242,7 +242,7 @@ function fallbackReason(code: string | undefined, serverMessage?: string): strin
     case "QUOTA_EXHAUSTED":
       return serverMessage || "This month's multi-stream hours are used up.";
     case "NOT_SIGNED_IN":
-      return "Sign in to Make Church Easy to multi-stream.";
+      return "Sign in to Make Church Eazy to multi-stream.";
     case "STREAM_NOT_ENABLED":
     case "MISSING_TOKEN":
       return "Multi-streaming is not available right now.";
@@ -255,7 +255,7 @@ function fallbackReason(code: string | undefined, serverMessage?: string): strin
  * Point OBS at the right place for a speaker/minister profile.
  *
  * - One destination → OBS streams straight to that platform (no cloud hop).
- * - Several destinations → OBS streams once to Make Church Easy's cloud broadcasting engine, which
+ * - Several destinations → OBS streams once to Make Church Eazy's cloud broadcasting engine, which
  *   restreams to every destination. Each profile has its own private ingest; destinations are
  *   re-sent on every sync so the engine always matches what is on screen. While live, the
  *   destinations of the profile that is live can be changed without stopping.

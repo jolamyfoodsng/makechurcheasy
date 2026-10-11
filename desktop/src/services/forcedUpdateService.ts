@@ -408,7 +408,7 @@ function mapDesktopConfigToAppSettings(config: DesktopConfig): AppVersionSetting
       (!config.appUpdates.emergencyLock && config.security.maintenanceMode && config.security.maintenanceMessage?.trim())
         ? config.security.maintenanceMessage.trim()
         : config.appUpdates.emergencyLockMessage ??
-      "MakeChurchEasy is temporarily unavailable due to emergency maintenance.",
+      "MakeChurchEazy is temporarily unavailable due to emergency maintenance.",
     windowsDownloadUrl: config.appUpdates.windowsDownloadUrl ?? "",
     macDownloadUrl: config.appUpdates.macDownloadUrl ?? "",
     linuxDownloadUrl: config.appUpdates.linuxDownloadUrl ?? "",
@@ -443,7 +443,7 @@ export function getPolicyUpdateNotice(
     currentVersion: version,
     downloadUrl: getDownloadUrlForCurrentPlatform(settings),
     releaseNotesUrl: settings.releaseNotesUrl,
-    message: settings.updateMessage || `A newer version of MakeChurchEasy (v${settings.latestVersion}) is available.`,
+    message: settings.updateMessage || `A newer version of MakeChurchEazy (v${settings.latestVersion}) is available.`,
   };
 }
 
@@ -621,7 +621,7 @@ export function getForcedUpdateState(
       lockAt,
       updateMessage:
         settings.emergencyLockMessage ||
-        "MakeChurchEasy is temporarily unavailable due to emergency maintenance.",
+        "MakeChurchEazy is temporarily unavailable due to emergency maintenance.",
       currentVersion: ver,
       downloadUrl,
       releaseNotesUrl: settings.releaseNotesUrl,

@@ -1,5 +1,5 @@
 /**
- * dock.css — MakeChurchEasy Dock styles
+ * dock.css — MakeChurchEazy Dock styles
  *
  * Narrow dark-theme layout designed for OBS Custom Browser Docks.
  * Max width ~340px, dark surfaces, compact spacing.
@@ -44190,4 +44190,54 @@ button.dock-btm-toolbar__clear--inline,
   outline: 2px solid var(--dock-accent, #3b82f6);
   outline-offset: 2px;
   border-radius: 6px;
+}
+
+/* ── Ministry sub-tab bar: success icon (never moves or covers anything) ── */
+
+/* Right side of the sub-tab bar: success icon + output routing control. */
+.dock-ministry-tabs__end {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 4px;
+  flex-shrink: 0;
+}
+
+/* Fixed-size slot that is always there, so the icon appearing never shifts the layout. */
+.dock-ministry-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: #4ade80;
+}
+
+.dock-ministry-status > * {
+  animation: dock-ministry-status-in 0.16s ease-out;
+}
+
+@keyframes dock-ministry-status-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock-ministry-status > * { animation: none; }
+}
+
+/* Lower-third editor: keep Send to OBS / Animate out pinned to the bottom of the
+   scrolling list, so they are always reachable however far the user scrolls. */
+.dock-mv-tab__list .dock-lt-editor-layout {
+  overflow: visible;
+}
+
+.dock-mv-tab__list .dock-lt-editor-layout__bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 6;
+  border-radius: 0 0 4px 4px;
+  box-shadow: 0 -8px 10px -8px rgba(0, 0, 0, 0.5);
 }

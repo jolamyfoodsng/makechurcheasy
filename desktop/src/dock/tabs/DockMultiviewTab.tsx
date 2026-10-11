@@ -1,5 +1,5 @@
 /**
- * DockMultiviewTab.tsx — Multi-View tab for the MakeChurchEasy Dock
+ * DockMultiviewTab.tsx — Multi-View tab for the MakeChurchEazy Dock
  *
  * Card-based Multi-View manager:
  *   - Each Multi-View is an independent card stacked vertically

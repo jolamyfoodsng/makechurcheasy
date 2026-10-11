@@ -1,4 +1,4 @@
-# MakeChurchEasy Analytics Worker
+# MakeChurchEazy Analytics Worker
 
 Self-hosted analytics endpoint using Cloudflare Workers + KV.
 

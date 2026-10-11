@@ -2,7 +2,7 @@
  * easyWorshipBackgroundImporter.ts — Background 1-Click Importer
  *
  * Runs full EasyWorship ingestion (Songs, Lyrics, Videos, Images, Themes)
- * asynchronously in the background so the user can continue using MakeChurchEasy.
+ * asynchronously in the background so the user can continue using MakeChurchEazy.
  */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -107,7 +107,7 @@ class EasyWorshipBackgroundImporter {
       this.notifyProgress("Parsing song slides and lyrics...", 45);
       const drafts = convertEasyWorshipRecordsToDrafts(records);
 
-      // 3. Batch save songs into MakeChurchEasy database
+      // 3. Batch save songs into MakeChurchEazy database
       this.notifyProgress(
         `Importing ${drafts.length} songs into library...`,
         65,

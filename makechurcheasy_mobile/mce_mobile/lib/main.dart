@@ -59,7 +59,7 @@ class _MCEAppView extends StatelessWidget {
         );
 
         return MaterialApp(
-          title: 'MakeChurchEasy',
+          title: 'MakeChurchEazy',
           debugShowCheckedModeBanner: false,
           theme: MCETheme.lightTheme,
           darkTheme: MCETheme.darkTheme,
