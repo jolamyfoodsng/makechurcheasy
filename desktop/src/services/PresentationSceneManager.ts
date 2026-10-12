@@ -34,38 +34,59 @@ export const PRESENTATION_SCENE_NAME = "MCE Presentation";
 /** Source name for the user's program scene reference at the bottom of MCE Presentation */
 export const PROGRAM_SCENE_SOURCE_NAME = "MCE Program Scene Reference";
 
+/**
+ * Worship and Notes share ONE browser source (and one background source) in
+ * MCE Presentation. Projecting either one updates that source: it loads the
+ * Worship page for songs and the Notes page for notes.
+ */
+export const SHARED_WORSHIP_NOTES_SOURCE_NAME = "Worship - MCE Presentation";
+export const SHARED_WORSHIP_NOTES_BG_SOURCE_NAME = "Worship BG - MCE Presentation";
+
+/**
+ * The separate Notes sources older versions created. They are no longer used
+ * and are removed from OBS when found.
+ */
+export const LEGACY_NOTES_SOURCE_NAMES: readonly string[] = [
+  "Notes - MCE Presentation",
+  "Notes BG - MCE Presentation",
+  "MCE Browser - Notes",
+  "MCE Notes",
+  "MCE BG - Notes",
+  "MCE Notes BG",
+];
+
 /** Source names for each module (descriptor first for visibility when OBS docks are narrowed) */
 export const SOURCE_NAMES = {
   BIBLE: "Bible - MCE Presentation",
-  WORSHIP: "Worship - MCE Presentation",
+  WORSHIP: SHARED_WORSHIP_NOTES_SOURCE_NAME,
   MEDIA: "Media - MCE Presentation",
-  NOTES: "Notes - MCE Presentation",
+  NOTES: SHARED_WORSHIP_NOTES_SOURCE_NAME,
   LOWER_THIRD: "Lower Third - MCE Presentation",
 } as const;
 
 /** Background source names */
 export const BG_SOURCE_NAMES = {
   BIBLE: "Bible BG - MCE Presentation",
-  WORSHIP: "Worship BG - MCE Presentation",
+  WORSHIP: SHARED_WORSHIP_NOTES_BG_SOURCE_NAME,
   MEDIA: "Media BG - MCE Presentation",
-  NOTES: "Notes BG - MCE Presentation",
+  NOTES: SHARED_WORSHIP_NOTES_BG_SOURCE_NAME,
   LOWER_THIRD: "Lower Third BG - MCE Presentation",
 } as const;
 
 /** Fullscreen source names */
 export const FULLSCREEN_SOURCE_NAMES = {
   BIBLE: "Bible - MCE Presentation",
-  WORSHIP: "Worship - MCE Presentation",
+  WORSHIP: SHARED_WORSHIP_NOTES_SOURCE_NAME,
   COUNTDOWN: "Countdown - MCE Presentation",
-  NOTES: "Notes - MCE Presentation",
+  NOTES: SHARED_WORSHIP_NOTES_SOURCE_NAME,
 } as const;
 
 /** Fullscreen background source names */
 export const FULLSCREEN_BG_SOURCE_NAMES = {
   BIBLE: "Bible BG - MCE Presentation",
-  WORSHIP: "Worship BG - MCE Presentation",
+  WORSHIP: SHARED_WORSHIP_NOTES_BG_SOURCE_NAME,
   COUNTDOWN: "Countdown BG - MCE Presentation",
-  NOTES: "Notes BG - MCE Presentation",
+  NOTES: SHARED_WORSHIP_NOTES_BG_SOURCE_NAME,
 } as const;
 
 /** Map of current source names to their legacy aliases for backward compatibility */
@@ -86,7 +107,6 @@ export function getLegacySourceAliases(name: string): string[] {
     "Image - MCE Presentation": ["Image - MCE Media", "MCE Media - Image", "MCE Image"],
     "Audio - MCE Presentation": ["Audio - MCE Media", "MCE Media - Audio", "Audio - MCE Media Image", "MCE Media - Image Audio"],
     "Pattern - MCE Presentation": ["Pattern - MCE Media", "MCE Media - Pattern"],
-    "Text - MCE Presentation": ["Text - MCE Media", "MCE Media - Text"],
     "Template - MCE Presentation": ["Template - MCE Media"],
     "Remote - MCE Presentation": ["Remote - MCE Media", "MCE Media - Remote"],
     "Ticker - MCE Presentation": ["Ticker - MCE Ticker", "MCE Ticker"],
@@ -520,12 +540,41 @@ class PresentationSceneManager {
     }
   }
 
+  /** True once the old separate Notes sources were looked for in this app session. */
+  private _legacyNotesSourcesChecked = false;
+
+  /**
+   * Worship and Notes now share one source, so the separate Notes source and
+   * Notes background that older versions created are removed from OBS. Done
+   * once per app session; only the exact MakeChurchEazy names are touched.
+   */
+  private async removeLegacyNotesSources(): Promise<void> {
+    if (this._legacyNotesSourcesChecked) return;
+    this._legacyNotesSourcesChecked = true;
+    try {
+      const resp = await obsService.call("GetInputList") as { inputs?: Array<{ inputName: string }> };
+      const present = new Set((resp.inputs ?? []).map((input) => input.inputName));
+      for (const name of LEGACY_NOTES_SOURCE_NAMES) {
+        if (!present.has(name)) continue;
+        try {
+          await obsService.call("RemoveInput", { inputName: name });
+        } catch { /* best effort */ }
+        _state.sources.delete(name);
+        _state.bgSources.delete(name);
+      }
+    } catch {
+      // Allow another attempt on the next call if OBS could not be queried.
+      this._legacyNotesSourcesChecked = false;
+    }
+  }
+
   /**
    * Ensure a specific module's source (+ BG) exists in the presentation scene.
    * Creates the source lazily — only when first requested.
    */
   async ensureModuleSource(module: ModuleType): Promise<void> {
     await this.ensurePresentationScene();
+    await this.removeLegacyNotesSources();
     const canvas = await getCanvasSize();
     const sceneName = PRESENTATION_SCENE_NAME;
 
@@ -546,6 +595,7 @@ class PresentationSceneManager {
    */
   async showModule(module: ModuleType): Promise<void> {
     await this.ensurePresentationScene();
+    await this.removeLegacyNotesSources();
     const sceneName = PRESENTATION_SCENE_NAME;
 
     // Map module to source name

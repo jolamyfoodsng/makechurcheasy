@@ -10,7 +10,7 @@ import { openDB, type IDBPDatabase } from "idb";
 import type { BiblePassage, BibleTheme, SlideConfig } from "./types";
 import type { InstalledBible, RawBibleData } from "./types";
 import { DEFAULT_SLIDE_CONFIG, DEFAULT_THEME_SETTINGS } from "./types";
-import { syncFavoriteBibleThemesToDock } from "../services/favoriteThemes";
+import { notifyDockThemesChanged, syncFavoriteBibleThemesToDock } from "../services/favoriteThemes";
 import { trackThemeCreated } from "../services/tracking";
 import { serializeBibleThemesForDock } from "../services/dockBibleThemeAssets";
 import { resolveOverlayAssetUrl, toStoredOverlayAssetUrl } from "../services/overlayUrl";
@@ -688,12 +688,22 @@ export async function saveCustomTheme(theme: BibleTheme): Promise<void> {
 
   trackThemeCreated(theme.source || "custom");
 
-  syncCustomThemesToDock().catch((err) => {
-    console.warn("[bibleDb] Failed to sync custom themes to dock:", err);
-  });
-  syncFavoriteBibleThemesToDock().catch((err) => {
-    console.warn("[bibleDb] Failed to sync favorite Bible themes to dock:", err);
-  });
+  // Write the Dock files first, then tell open Docks, so they read the new list.
+  syncCustomThemesToDock()
+    .catch((err) => {
+      console.warn("[bibleDb] Failed to sync custom themes to dock:", err);
+    })
+    .then(() => syncFavoriteBibleThemesToDock())
+    .catch((err) => {
+      console.warn("[bibleDb] Failed to sync favorite Bible themes to dock:", err);
+    })
+    // The Dock opens with a saved copy of the theme chosen for Bible / Worship / Notes;
+    // rewrite it so an edited theme is not shown with its old look.
+    .then(() => import("../services/productionSettings").then((m) => m.syncProductionSettingsToDock()))
+    .catch((err) => {
+      console.warn("[bibleDb] Failed to sync production settings to dock:", err);
+    })
+    .then(() => notifyDockThemesChanged());
 
   // Push updated usage counts to the server immediately
   import("../services/usageSync").then((m) => m.triggerUsageSync()).catch(() => { });
@@ -725,12 +735,22 @@ export async function deleteCustomTheme(id: string): Promise<void> {
     throw new Error("Failed to delete custom theme");
   }
 
-  syncCustomThemesToDock().catch((err) => {
-    console.warn("[bibleDb] Failed to sync custom themes to dock:", err);
-  });
-  syncFavoriteBibleThemesToDock().catch((err) => {
-    console.warn("[bibleDb] Failed to sync favorite Bible themes to dock:", err);
-  });
+  // Write the Dock files first, then tell open Docks, so they read the new list.
+  syncCustomThemesToDock()
+    .catch((err) => {
+      console.warn("[bibleDb] Failed to sync custom themes to dock:", err);
+    })
+    .then(() => syncFavoriteBibleThemesToDock())
+    .catch((err) => {
+      console.warn("[bibleDb] Failed to sync favorite Bible themes to dock:", err);
+    })
+    // The Dock opens with a saved copy of the theme chosen for Bible / Worship / Notes;
+    // rewrite it so an edited theme is not shown with its old look.
+    .then(() => import("../services/productionSettings").then((m) => m.syncProductionSettingsToDock()))
+    .catch((err) => {
+      console.warn("[bibleDb] Failed to sync production settings to dock:", err);
+    })
+    .then(() => notifyDockThemesChanged());
 
   // Push updated usage counts to the server immediately
   import("../services/usageSync").then((m) => m.triggerUsageSync()).catch(() => { });
@@ -812,7 +832,7 @@ export interface BibleSettings {
 const DEFAULT_SETTINGS: BibleSettings = {
   defaultTranslation: "KJV",
   slideConfig: DEFAULT_SLIDE_CONFIG,
-  activeThemeId: "classic-dark",
+  activeThemeId: "preset-caption-rule", // DEFAULT_BUILTIN_THEME_ID
   lastBook: "John",
   lastChapter: 3,
   lastVerse: 1,

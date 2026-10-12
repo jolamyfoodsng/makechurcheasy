@@ -34,6 +34,7 @@ import {
 } from "../services/forcedUpdateService";
 import { useAuth } from "@/contexts/AuthContext";
 import Icon from "./Icon";
+import OfflineSyncPrompt from "./OfflineSyncPrompt";
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheazy.com";
 
@@ -91,7 +92,7 @@ function ForcedUpgradeScreen() {
 }
 
 export default function LicenseGuard({ children }: LicenseGuardProps) {
-  const { unlocked, lockReason, payload, verifying, daysOffline, offlineWarning } = useLicenseGuardState();
+  const { unlocked, lockReason, payload, verifying, daysOffline, offlineWarning, paidPausedOffline, offlineDaysRemaining } = useLicenseGuardState();
   const [showDowngradeBanner, setShowDowngradeBanner] = useState(false);
   const [showDeviceLimitPreview, setShowDeviceLimitPreview] = useState(false);
 
@@ -141,15 +142,20 @@ export default function LicenseGuard({ children }: LicenseGuardProps) {
   return (
     <>
       {children}
+      <OfflineSyncPrompt />
       {offlineWarning && unlocked && (
         <div className="license-offline-warning-banner" role="alert">
           <div className="license-offline-warning-banner__icon" aria-hidden="true">
             <Icon name="wifi_off" size={18} />
           </div>
           <div className="license-offline-warning-banner__content">
-            <p className="license-offline-warning-banner__title">Connect to the internet</p>
+            <p className="license-offline-warning-banner__title">
+              {paidPausedOffline ? "Paid features paused: sync needed" : "Connect to the internet to sync"}
+            </p>
             <p className="license-offline-warning-banner__description">
-              You have not connected to the internet for {daysOffline} days. Please connect to the internet soon to keep MakeChurchEazy verified and synchronized.
+              {paidPausedOffline
+                ? `Not online for ${daysOffline} days. The app runs as Free until it syncs with makechurcheazy.com.`
+                : `Not online for ${daysOffline} days. Sync once every 2 weeks; paid features pause in ${offlineDaysRemaining} day${offlineDaysRemaining === 1 ? "" : "s"}.`}
             </p>
           </div>
           <div className="license-offline-warning-banner__actions">
@@ -159,7 +165,7 @@ export default function LicenseGuard({ children }: LicenseGuardProps) {
               disabled={verifying}
               className="license-offline-warning-banner__action"
             >
-              {verifying ? "Checking…" : "Check Connection"}
+              {verifying ? "Syncing…" : "Sync now"}
             </button>
           </div>
         </div>

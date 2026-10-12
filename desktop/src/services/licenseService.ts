@@ -42,6 +42,7 @@ import {
   normalizePlanId,
 } from "../lib/subscriptionSourceOfTruth";
 import { getLocalDevPlanOverride } from "./localDevPlanOverride";
+import { capPlanForOffline, getOfflineEntitlementState } from "./offlineEntitlement";
 
 export type { PlanTier } from "./planConfigTypes";
 
@@ -317,7 +318,11 @@ export function getEffectivePlan(user: AuthUser | null): PlanTier {
   }
 
   const userPlan = getUserPlan(user);
-  const plan = userPlan !== "free" ? normalizePlanId(userPlan) : resolveCanonicalPlan({ ...user, plan: userPlan });
+  const resolved = userPlan !== "free" ? normalizePlanId(userPlan) : resolveCanonicalPlan({ ...user, plan: userPlan });
+  // Offline rules: Free once the paid period ends (even offline) or after 21 days without a sync.
+  const plan = String(user.role || "").toLowerCase() === "admin"
+    ? resolved
+    : (capPlanForOffline(resolved, getOfflineEntitlementState()) as PlanTier);
   console.debug(
     "[licenseService] getEffectivePlan=%s (user.plan=%s, trial.active=%s, trial.status=%s, trial.endsAt=%s)",
     plan, user.plan, user.trial?.active, user.trial?.status, user.trial?.endsAt,

@@ -11,6 +11,7 @@ import {
 } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { LOWER_THIRD_SIZE_PRESETS, type BibleTheme } from "../../bible/types";
+import type { DockProductionModuleSettings } from "../../services/productionSettings";
 import {
   calculateReorderTargetIndex,
   extractStructuredTextTitle,
@@ -33,6 +34,7 @@ import DockTranslationControls, {
   type DockTranslationValue,
 } from "../components/DockTranslationControls";
 import DockAutoAdvanceControl from "../components/DockAutoAdvanceControl";
+import { useDockTabLabelMode } from "../useDockTabLabelMode";
 import DockOutputQuickActions, {
   DEFAULT_DOCK_OUTPUT_QUICK_ACTIONS_TOP,
   type DockOutputLineMode,
@@ -55,6 +57,12 @@ import {
   normalizeExplicitOutputFontSettings,
 } from "../lowerThirdQuickSettings";
 import { trackOverlayModeSwitched } from "../../services/tracking";
+import {
+  DOCK_THEMES_REFRESHED_EVENT,
+  findRefreshedTheme,
+  themeUsesLayout,
+  type DockThemesRefreshedDetail,
+} from "../dockThemeRefresh";
 import {
   getDockTranslationSourceSignature,
   getOrderedTranslationParts,
@@ -107,6 +115,8 @@ interface Props {
   isActive?: boolean;
   presentationOutputTarget?: DockPresentationOutputTarget;
   searchPlacement?: DockSearchPlacement;
+  /** Notes themes picked on the app's Themes page ("Use theme" with Notes ticked). */
+  productionDefaults?: DockProductionModuleSettings;
 }
 
 type OverlayMode = DockNotesOverlayMode;
@@ -434,6 +444,9 @@ function getNoteQuickSettings(
       ? fontSize
       : Math.max(LOWER_THIRD_FIT_MIN_FONT_SIZE, fontSize),
     autoFontScale: false,
+    // Shown by the Bold / Italic buttons in the quick panel.
+    fontWeight: quickSettings?.fontWeight ?? theme.settings.fontWeight,
+    fontStyle: quickSettings?.fontStyle ?? theme.settings.fontStyle,
   };
 }
 
@@ -498,7 +511,9 @@ export default function DockNotesTab({
   isActive,
   presentationOutputTarget = "obs",
   searchPlacement = "top",
+  productionDefaults,
 }: Props) {
+  const notesLabel = useDockTabLabelMode("notes");
   const { t } = useTranslation();
   const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
   const [sceneRoute, updateSceneRoute] = useDockSceneRoute("notes");
@@ -871,6 +886,22 @@ export default function DockNotesTab({
       cancelled = true;
     };
   }, []);
+
+  // A theme picked for Notes on the Themes page applies straight away. The first
+  // value is skipped so the Dock's own saved choice wins on start-up.
+  const productionNotesKey = productionDefaults
+    ? `${productionDefaults.fullscreenTheme?.id ?? ""}|${productionDefaults.lowerThirdTheme?.id ?? ""}`
+    : "";
+  const lastProductionNotesKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!productionDefaults || !productionNotesKey) return;
+    const previous = lastProductionNotesKeyRef.current;
+    lastProductionNotesKeyRef.current = productionNotesKey;
+    if (previous === null || previous === productionNotesKey) return;
+    if (productionDefaults.fullscreenTheme) setSelectedFSTheme(productionDefaults.fullscreenTheme);
+    if (productionDefaults.lowerThirdTheme) setSelectedLTTheme(productionDefaults.lowerThirdTheme);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productionNotesKey]);
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
@@ -1257,7 +1288,7 @@ export default function DockNotesTab({
       quickSettingsOverride?: DockFullscreenQuickThemeSettings,
       fitOptions?: DockOverlayFitOptions,
     ) => {
-      void dockObsClient.ensureModuleSourceOpenAndOnTop("notes");
+      void dockObsClient.ensureModuleSourceOpenAndOnTop("notes", overlayMode);
       const payload = buildNoteObsPayload(idx, quickSettingsOverride);
       if (!payload) return;
       const visibilityEpoch = visibilityEpochRef.current;
@@ -1298,7 +1329,7 @@ export default function DockNotesTab({
           setActionError(err instanceof Error ? err.message : String(err));
         });
     },
-    [buildNoteObsPayload, hasSceneRoute, onStage, presentationLinkMode, pushNotesToConfiguredOutput, sceneRoute.syncPresentation],
+    [buildNoteObsPayload, hasSceneRoute, onStage, overlayMode, presentationLinkMode, pushNotesToConfiguredOutput, sceneRoute.syncPresentation],
   );
 
   const handleAutoAdvanceStart = useCallback((startIndex: number) => {
@@ -1532,6 +1563,12 @@ export default function DockNotesTab({
       if (overlayVisible) {
         // Hide locally first so an older push completion cannot repaint Notes.
         setOverlayVisible(false);
+        // Play the overlay's exit animation before the source is hidden.
+        await dockObsClient.animateOutPresentationOverlay("notes", {
+          mode: overlayMode,
+          includePresentation: !hasSceneRoute || sceneRoute.syncPresentation,
+          targets: hasSceneRoute ? sceneRoute.targets : [],
+        }).catch(() => { });
         await clearNotesFromConfiguredOutput();
       } else if (activeSlideIndex !== null) {
         await pushNoteSlide(activeSlideIndex);
@@ -1544,7 +1581,7 @@ export default function DockNotesTab({
       visibilityActionInFlightRef.current = false;
       setVisibilityActionPending(false);
     }
-  }, [overlayVisible, activeSlideIndex, clearNotesFromConfiguredOutput, presentationLinkMode, pushNoteSlide]);
+  }, [overlayVisible, activeSlideIndex, clearNotesFromConfiguredOutput, hasSceneRoute, overlayMode, presentationLinkMode, pushNoteSlide, sceneRoute.syncPresentation, sceneRoute.targets]);
 
   const handleOverlayModeChange = useCallback((nextMode: OverlayMode) => {
     if (nextMode === overlayMode) return;
@@ -1646,7 +1683,14 @@ export default function DockNotesTab({
           ? normalizeExplicitOutputFontSettings(quickSettings, "fullscreen")
           : normalizeExplicitOutputFontSettings(quickSettings, "lower-third");
 
-        if (overlayVisible && activeSlideIndex !== null) {
+        // Only re-send a note that was really projected from this tab and is
+        // still on air (`overlayVisible` starts as true, and Worship may now
+        // be showing on the shared source). Mirrors the Worship tab.
+        const notesIsOnAir = overlayVisible
+          && visibleSlideIdx !== null
+          && activeSlideIndex !== null
+          && !dockObsClient.isSharedWorshipNotesSourceHeldByOther("notes");
+        if (notesIsOnAir) {
           void pushNoteSlide(activeSlideIndex, activeSettings);
         } else {
           const currentThemeSettings = overlayMode === "fullscreen"
@@ -1668,6 +1712,66 @@ export default function DockNotesTab({
     overlayMode,
     overlayVisible,
     pushNoteSlide,
+    visibleSlideIdx,
+  ]);
+
+  // A theme was edited in the app: swap in the new copy of the selected one so bold,
+  // colours, backgrounds and layers show up without reselecting it.
+  useEffect(() => {
+    const handleThemesRefreshed = (event: Event) => {
+      const themes = (event as CustomEvent<DockThemesRefreshedDetail>).detail?.themes ?? [];
+      const freshFS = findRefreshedTheme(selectedFSThemeRef.current, themes, "fullscreen");
+      const freshLT = findRefreshedTheme(selectedLTThemeRef.current, themes, "lower-third");
+      if (!freshFS && !freshLT) return;
+
+      if (freshFS) {
+        setSelectedFSTheme(freshFS);
+        selectedFSThemeRef.current = freshFS;
+        // Layer themes keep the operator's size / background tweaks; classic themes
+        // restart from the edited look because saved quick settings are a copy of the old one.
+        const keep = themeUsesLayout(freshFS, "fullscreen") ? fullscreenQuickSettings : null;
+        if (!keep) setFullscreenQuickSettings(null);
+        liveFullscreenThemeSettingsRef.current = resolveNotesOutputThemeSettings(
+          freshFS,
+          "fullscreen",
+          keep,
+        ) as unknown as Record<string, unknown>;
+      }
+      if (freshLT) {
+        setSelectedLTTheme(freshLT);
+        selectedLTThemeRef.current = freshLT;
+        const keep = themeUsesLayout(freshLT, "lower-third") ? lowerThirdQuickSettings : null;
+        if (!keep) setLowerThirdQuickSettings(null);
+        liveLowerThirdThemeSettingsRef.current = resolveNotesOutputThemeSettings(
+          freshLT,
+          "lower-third",
+          keep,
+        ) as unknown as Record<string, unknown>;
+      }
+
+      // Re-send the note on air with the edited theme, once the new theme state has rendered.
+      const affectsLiveMode = overlayMode === "fullscreen" ? Boolean(freshFS) : Boolean(freshLT);
+      if (
+        affectsLiveMode
+        && overlayVisible
+        && visibleSlideIdx !== null
+        && activeSlideIndex !== null
+        && !dockObsClient.isSharedWorshipNotesSourceHeldByOther("notes")
+      ) {
+        pendingQuickSettingsRefreshRef.current = true;
+        setQuickSettingsRefreshNonce((current) => current + 1);
+      }
+    };
+
+    window.addEventListener(DOCK_THEMES_REFRESHED_EVENT, handleThemesRefreshed);
+    return () => window.removeEventListener(DOCK_THEMES_REFRESHED_EVENT, handleThemesRefreshed);
+  }, [
+    activeSlideIndex,
+    fullscreenQuickSettings,
+    lowerThirdQuickSettings,
+    overlayMode,
+    overlayVisible,
+    visibleSlideIdx,
   ]);
 
   // Escape key handler
@@ -2495,6 +2599,9 @@ export default function DockNotesTab({
               onUpdateImmediatelyChange={setQuickUpdateImmediately}
               overlayMode={overlayMode}
               onOverlayModeChange={handleOverlayModeChange}
+              labelMode={notesLabel.labelMode}
+              labelOptions={notesLabel.labelOptions}
+              onLabelModeChange={notesLabel.setLabelMode}
             />
           </section>
 

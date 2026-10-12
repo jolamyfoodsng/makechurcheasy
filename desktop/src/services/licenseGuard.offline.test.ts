@@ -37,6 +37,8 @@ import {
   OFFLINE_LOCK_DAYS,
   __testSetLastVerifiedMs,
   recordOnlineSuccess,
+  getEffectiveLicensePlan,
+  hasRequiredPlan,
 } from "./licenseGuard";
 
 describe("licenseGuard offline grace period and warnings", () => {
@@ -84,27 +86,29 @@ describe("licenseGuard offline grace period and warnings", () => {
     expect(state.daysOffline).toBe(20);
   });
 
-  it("triggers internet_required lock screen at 21 days (full 3 weeks)", () => {
+  it("pauses paid features at 21 days (full 3 weeks) without locking the app", () => {
     const twentyOneDaysAgo = Date.now() - 21 * DAY_MS;
     __testSetLastVerifiedMs(twentyOneDaysAgo);
 
     const state = getState();
-    expect(state.unlocked).toBe(false);
-    expect(state.lockReason).toBe("internet_required");
-    expect(state.offlineWarning).toBe(false);
+    expect(state.unlocked).toBe(true);
+    expect(state.lockReason).toBeNull();
+    expect(state.offlineWarning).toBe(true);
+    expect(state.paidPausedOffline).toBe(true);
     expect(state.daysOffline).toBe(21);
-
-    const lockConfig = getLockScreenConfig("internet_required", null);
-    expect(lockConfig.title).toBe("Internet Connection Required");
-    expect(lockConfig.description).toContain("3 weeks");
-    expect(lockConfig.primaryAction).toBe("retry");
-    expect(lockConfig.primaryLabel).toBe("Check Connection");
+    expect(getEffectiveLicensePlan()).toBe("free");
+    expect(hasRequiredPlan("basic")).toBe(false);
   });
 
-  it("clears the lock and warning when connection is restored", () => {
+  it("keeps the internet_required lock screen copy for other callers", () => {
+    const lockConfig = getLockScreenConfig("internet_required", null);
+    expect(lockConfig.primaryAction).toBe("retry");
+  });
+
+  it("brings paid features back when the app syncs again", () => {
     const twentyTwoDaysAgo = Date.now() - 22 * DAY_MS;
     __testSetLastVerifiedMs(twentyTwoDaysAgo);
-    expect(getState().unlocked).toBe(false);
+    expect(getState().paidPausedOffline).toBe(true);
 
     recordOnlineSuccess();
     __testSetLastVerifiedMs(Date.now());
@@ -113,6 +117,8 @@ describe("licenseGuard offline grace period and warnings", () => {
     expect(state.unlocked).toBe(true);
     expect(state.lockReason).toBeNull();
     expect(state.offlineWarning).toBe(false);
+    expect(state.paidPausedOffline).toBe(false);
     expect(state.daysOffline).toBe(0);
+    expect(getEffectiveLicensePlan()).toBe("basic");
   });
 });

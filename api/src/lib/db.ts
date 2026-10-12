@@ -747,7 +747,7 @@ const DEFAULT_PLAN_CONFIG: PlanConfig = {
       paystack: { monthlyPlanCode: "", yearlyPlanCode: "" },
       credits: 50,
       entitlements: {
-        songs: 3, images: 2, videos: 1, themes: 1, lowerThirds: 3, devices: 1,
+        songs: 3, images: 2, videos: 1, themes: 2, lowerThirds: 3, devices: 1,
         bibleVersions: 4, multiviewTemplates: 0, tickerThemes: 3, themePresets: 0,
         cloudStorageGB: 0,
         multiview: false, tickers: true, massImport: false, easyWorshipImport: false,

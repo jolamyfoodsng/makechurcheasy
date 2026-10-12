@@ -32,6 +32,10 @@ const DOCK_AUTH_USER_ID_KEY = "mce-dock-auth-user-id";
 
 type LocalAuthStatus = "authenticated" | "unauthenticated" | "unreachable";
 
+/** How long the desktop must report "signed out" before the Dock forgets the account. */
+const SIGNED_OUT_CONFIRM_MS = 90_000;
+let unauthenticatedSince: number | null = null;
+
 function clearDockAuthCache(): void {
   try {
     localStorage.removeItem(getUserScopedKey(PLAN_KEY));
@@ -71,10 +75,19 @@ async function checkLocalAuth(): Promise<LocalAuthStatus> {
     const hasLocalSession = data.authenticated === true && Boolean(data.user) && Boolean(sessionDeviceId);
 
     if (data.authenticated === false || !hasLocalSession) {
-      clearDockAuthCache();
+      // Right after the desktop app starts (for example after an update) its
+      // local server answers "signed out" until the saved session is restored.
+      // Clearing the Dock's user id at that moment switched every user-scoped
+      // key (songs cache, notes, settings) to an empty one, so the Dock looked
+      // wiped. Only forget the account after it has been signed out for a while.
+      if (unauthenticatedSince === null) unauthenticatedSince = Date.now();
+      if (Date.now() - unauthenticatedSince >= SIGNED_OUT_CONFIRM_MS) {
+        clearDockAuthCache();
+      }
       return "unauthenticated";
     }
 
+    unauthenticatedSince = null;
     storeDockAuthUserId(data.user?.id);
     if (sessionDeviceId) {
       try {

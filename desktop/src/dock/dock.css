@@ -30738,6 +30738,52 @@ body.dock-modal-open {
   gap: 8px;
 }
 
+/* "Select Theme" label with a small reload button on the right */
+.dtb-theme-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dtb-theme-section__reload {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  background: var(--dock-input-bg);
+  color: var(--dock-text-dim);
+  cursor: pointer;
+}
+
+.dtb-theme-section__reload:hover:not(:disabled) {
+  color: var(--dock-text);
+  border-color: var(--dock-text-dim);
+}
+
+.dtb-theme-section__reload:disabled {
+  cursor: default;
+}
+
+.dtb-theme-section__reload--spinning svg,
+.dtb-theme-section__reload--spinning .material-icons {
+  animation: dtb-theme-reload-spin 0.8s linear infinite;
+}
+
+@keyframes dtb-theme-reload-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dtb-theme-section__reload--spinning svg,
+  .dtb-theme-section__reload--spinning .material-icons { animation: none; }
+}
+
 .dtb-theme-section__loading,
 .dtb-theme-section__empty {
   font-size: 12px;
@@ -30750,6 +30796,32 @@ body.dock-modal-open {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 4px;
+  /* About two and a half rows, then scroll — the full list (30+ themes) was very long. */
+  max-height: 210px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+
+.dtb-theme-section__search {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  background: var(--dock-input-bg);
+  color: var(--dock-text);
+  font-size: 12px;
+}
+
+.dtb-theme-section__search::placeholder {
+  color: var(--dock-text-tertiary);
+}
+
+.dtb-theme-section__search:focus {
+  outline: none;
+  border-color: var(--dock-accent);
 }
 
 .dtb-theme-section__item {
@@ -37582,7 +37654,11 @@ button.dock-btm-toolbar__clear--inline,
 }
 
 .dock-lt-hidable--open {
-  max-height: 600px;
+  /* No height cap: a fixed max-height (it used to be 600px) clipped any graphic
+     with a long form (Quote, Scripture, etc.), so the last fields could not be
+     reached by scrolling. The tab's own list scrolls instead. */
+  max-height: none;
+  overflow: visible;
 }
 
 /* ── Grid Container ── */
@@ -37955,22 +38031,51 @@ button.dock-btm-toolbar__clear--inline,
   gap: 6px;
 }
 
+/* Text boxes in the graphics editor must read clearly as places to type:
+   a recessed field with a visible border, not a strip that blends into the panel. */
 .dock-lt-field-input {
   flex: 1;
   min-width: 0;
-  height: 23px;
+  height: 32px;
   background: var(--dock-input-bg);
-  border: 1px solid var(--dock-border);
-  border-radius: 2px;
+  background-image: linear-gradient(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.18));
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 6px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
   color: var(--dock-text);
-  font-size: 11px;
+  font-size: 12.5px;
   font-family: inherit;
-  padding: 0 6px;
+  line-height: 1.4;
+  padding: 0 10px;
   outline: none;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.dock-lt-field-input::placeholder {
+  color: var(--dock-text-muted, rgba(255, 255, 255, 0.45));
+  opacity: 1;
+}
+
+.dock-lt-field-input:hover {
+  border-color: rgba(255, 255, 255, 0.34);
 }
 
 .dock-lt-field-input:focus {
   border-color: var(--dock-accent);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 2px rgba(99, 102, 241, 0.35);
+}
+
+textarea.dock-lt-field-input {
+  height: auto;
+  min-height: 130px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+:root.light .dock-lt-field-input {
+  background-image: none;
+  border-color: rgba(15, 23, 42, 0.28);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
 .dock-lt-field-toolbar {
@@ -44240,4 +44345,105 @@ button.dock-btm-toolbar__clear--inline,
   z-index: 6;
   border-radius: 0 0 4px 4px;
   box-shadow: 0 -8px 10px -8px rgba(0, 0, 0, 0.5);
+}
+
+/* Lower-third editor: the saved slots (1–5) and "Reset all" live in the pinned
+   action bar above Send to OBS / Animate out, so they are always visible. */
+.dock-lt-editor-layout__bar {
+  flex-wrap: wrap;
+}
+
+.dock-lt-editor-layout__bar > .dock-lt-panel-bottom--in-bar {
+  flex: 1 1 100%;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.dock-lt-editor-layout__bar > .dock-btn {
+  flex: 1 1 0;
+}
+
+/* The settings list scrolls; never let a flex parent squeeze it to zero. */
+.dock-mv-tab__list {
+  min-height: 0;
+}
+
+/* Preview button in the lower-third action bar: compact next to Send / Animate out. */
+.dock-lt-editor-layout__bar > .dock-lt-preview-btn {
+  flex: 0 0 auto;
+}
+
+/* ── Simple Size panel for ready-made layer themes (LayoutThemeAdjustPanel) ── */
+.dtb-layout-adjust {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 2px 12px;
+}
+
+.dtb-layout-adjust__preview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #273246 0%, #10151f 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dtb-layout-adjust__theme {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dock-text-secondary, rgba(255, 255, 255, 0.7));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dtb-layout-adjust__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dtb-layout-adjust__row .dtb-slider {
+  flex: 1;
+  min-width: 0;
+}
+
+.dtb-layout-adjust__reset {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dtb-layout-adjust__reset:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.dtb-layout-adjust__note {
+  display: flex;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--dock-text-secondary, rgba(255, 255, 255, 0.6));
+}
+
+.dtb-layout-adjust__note > :first-child {
+  flex: none;
+  margin-top: 2px;
 }

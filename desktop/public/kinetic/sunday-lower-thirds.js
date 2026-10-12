@@ -310,8 +310,8 @@
     amb: function (r) { return [gsap.to($$(".leaf", r), { rotation: "+=14", y: function () { return (Math.random() - .5) * 10; }, duration: function () { return 2 + Math.random() * 2; }, repeat: -1, yoyo: true, ease: "sine.inOut", transformOrigin: "50% 50%" })]; } };
 
   T.healing = { cls: "g12", group: "service", tags: SERVICE, color: "#e5352a", hold: 8,
-    name: "Healing & Salvation", tech: "Black title bar and red info strip slide in from opposite sides",
-    fields: [text("day", "Day", "SUNDAY"), text("txt", "Title", "HEALING AND SALVATION"), text("info", "Info strip", "PRAYER SESSION: 1234 5678 | 1234 5678"), color("o", "Day colour", "#f39a2b"), color("r", "Strip colour", "#e5352a")],
+    name: "Title & Info Strip", tech: "Black title bar and red info strip slide in from opposite sides",
+    fields: [text("day", "Day", "SUNDAY"), text("txt", "Title", "YOUR TITLE GOES HERE"), text("info", "Info strip", "ADDITIONAL INFO: 1234 5678 | 1234 5678"), color("o", "Day colour", "#f39a2b"), color("r", "Strip colour", "#e5352a")],
     html: function (v) { return '<div class="g12-bar"><span class="g12-day">' + esc(v.day) + '</span><span class="g12-txt">' + esc(v.txt) + '</span></div><div class="g12-strip"><span class="g12-info">' + esc(v.info) + '</span></div><div class="g12-line"></div>'; },
     seq: [[".g12-strip", "wipeL", 0, { d: .7 }], [".g12-bar", "wipeR", .12, { d: .75 }], [".g12-line", "growX", .3, { d: .8 }], [".g12-day", "maskDown", .4], [".g12-txt", "maskUp", .5], [".g12-info", "up", .8]] };
 

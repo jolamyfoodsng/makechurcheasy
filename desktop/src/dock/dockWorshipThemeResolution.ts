@@ -9,6 +9,7 @@ import { themeSupportsBibleOverlayMode } from "../bible/themeVariantSupport";
 import { readDockPreference } from "../services/dockPreferenceStorage";
 import { loadDockFavoriteBibleThemes } from "./dockThemeData";
 import type { DockFullscreenQuickThemeSettings } from "./components/DockFullscreenThemeQuickSettings";
+import { pickLayoutAdjust } from "../themes/layout/adjust";
 
 export const DOCK_WORSHIP_PREFS_KEY = "ocs-dock-worship-preferences";
 
@@ -70,6 +71,8 @@ export function applyQuickThemeSettingsToWorship(
     ...theme,
     settings: {
       ...theme.settings,
+      // Size / position tweaks for layer themes (ignored by legacy themes).
+      ...pickLayoutAdjust(quickSettings),
       fontSize: quickSettings.fontSize,
       autoFontScale: true,
       fontFamily: quickSettings.fontFamily,

@@ -107,7 +107,7 @@ export const DEFAULT_PLAN_LIMITS: Record<EffectivePlan, PlanLimits> = {
     songs: 1,
     images: 2,
     videos: 2,
-    themes: 1,
+    themes: 2,
     lowerThirds: 3,
     bibleVersions: 3,
     multiviewTemplates: 0,

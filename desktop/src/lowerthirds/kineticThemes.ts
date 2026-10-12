@@ -2274,8 +2274,8 @@ const KINETIC_THEME_DATA: Omit<LowerThirdTheme, "css">[] = [
         "key": "channelName",
         "label": "Channel name",
         "type": "text",
-        "defaultValue": "MAKECHURCHEAZY",
-        "placeholder": "MAKECHURCHEAZY",
+        "defaultValue": "YOUR CHANNEL NAME",
+        "placeholder": "YOUR CHANNEL NAME",
         "group": "Content"
       },
       {
@@ -2885,9 +2885,9 @@ const KINETIC_THEME_DATA: Omit<LowerThirdTheme, "css">[] = [
         "key": "heading",
         "label": "Heading",
         "type": "text",
-        "defaultValue": "Honour moment",
+        "defaultValue": "Your heading here",
         "group": "Content",
-        "placeholder": "Honour moment"
+        "placeholder": "Your heading here"
       },
       {
         "key": "tagline",
@@ -5506,7 +5506,7 @@ const KINETIC_THEME_DATA: Omit<LowerThirdTheme, "css">[] = [
   },
   {
     "id": "lt-sun-healing",
-    "name": "Healing & Salvation",
+    "name": "Title & Info Strip",
     "description": "Black title bar and red info strip slide in from opposite sides.",
     "category": "general",
     "graphicCategory": "service",
@@ -5537,17 +5537,17 @@ const KINETIC_THEME_DATA: Omit<LowerThirdTheme, "css">[] = [
         "key": "txt",
         "label": "Title",
         "type": "text",
-        "defaultValue": "HEALING AND SALVATION",
+        "defaultValue": "YOUR TITLE GOES HERE",
         "group": "Content",
-        "placeholder": "HEALING AND SALVATION"
+        "placeholder": "YOUR TITLE GOES HERE"
       },
       {
         "key": "info",
         "label": "Info strip",
         "type": "text",
-        "defaultValue": "PRAYER SESSION: 1234 5678 | 1234 5678",
+        "defaultValue": "ADDITIONAL INFO: 1234 5678 | 1234 5678",
         "group": "Content",
-        "placeholder": "PRAYER SESSION: 1234 5678 | 1234 5678"
+        "placeholder": "ADDITIONAL INFO: 1234 5678 | 1234 5678"
       },
       {
         "key": "o",

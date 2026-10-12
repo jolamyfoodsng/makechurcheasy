@@ -21,6 +21,7 @@ const {
   getGraphicAvailability,
   getPackageThemes,
 } = await import("./broadcastGraphicsCatalog");
+const { BUNDLED_GRAPHIC_PACKAGES } = await import("../lowerthirds/bundledGraphicPackages");
 
 const pkg = {
   format: "mce-graphic@1",
@@ -52,7 +53,26 @@ describe("broadcastGraphicsCatalog", () => {
   it("keeps every bundled graphic available before the first download", () => {
     expect(getGraphicAvailability("lt-sun-green", null)).toMatchObject({ visible: true, usable: true });
     expect(getBlockedGraphicThemeIds(null)).toEqual([]);
-    expect(getPackageThemes(null)).toEqual([]);
+    // Only the graphics bundled with the app.
+    expect(getPackageThemes(null).map((t) => t.id)).toEqual(BUNDLED_GRAPHIC_PACKAGES.map((p) => `lt-pkg-${p.id}`));
+  });
+
+  it("ships the bundled graphics, lets admin hide them and lets a published package replace them", () => {
+    expect(BUNDLED_GRAPHIC_PACKAGES.map((p) => p.id)).toEqual(
+      expect.arrayContaining(["prayer-bar", "website-bar", "live-social-bar", "arrow-logo-bar", "contact-bar", "testimony-bar", "question-bar"]),
+    );
+    const hidden = catalog([
+      { graphicId: "lt-pkg-prayer-bar", source: "builtin", status: "hidden", tiers: { free: true, paid: true, ambassador: true }, access: "allowed" },
+    ]);
+    expect(getPackageThemes(hidden).map((t) => t.id)).not.toContain("lt-pkg-prayer-bar");
+    expect(getPackageThemes(hidden).map((t) => t.id)).toContain("lt-pkg-website-bar");
+
+    const replaced = catalog([
+      { graphicId: "website-bar", source: "package", status: "active", tiers: { free: true, paid: true, ambassador: true }, access: "allowed", version: 5, package: { ...pkg, id: "website-bar", name: "Website Bar v5" } },
+    ]);
+    const website = getPackageThemes(replaced).filter((t) => t.id === "lt-pkg-website-bar");
+    expect(website).toHaveLength(1);
+    expect(website[0].name).toBe("Website Bar v5");
   });
 
   it("applies paused, hidden and plan-locked graphics", () => {
@@ -70,7 +90,7 @@ describe("broadcastGraphicsCatalog", () => {
 
   it("turns uploaded packages into lower thirds that carry the package", () => {
     const c = catalog([{ graphicId: "welcome-bar", source: "package", status: "active", tiers: { free: true, paid: true, ambassador: true }, access: "allowed", version: 2, package: pkg }]);
-    const [theme] = getPackageThemes(c);
+    const theme = getPackageThemes(c).find((t) => t.id === "lt-pkg-welcome-bar")!;
     expect(theme.id).toBe("lt-pkg-welcome-bar");
     expect(theme.html).toContain('data-kx="pkg-welcome-bar"');
     expect(theme.html).toContain('data-v-title="{{title}}"');

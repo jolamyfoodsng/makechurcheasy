@@ -6,6 +6,12 @@
  */
 
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  DOCK_THEMES_REFRESHED_EVENT,
+  findRefreshedTheme,
+  themeUsesLayout,
+  type DockThemesRefreshedDetail,
+} from "../dockThemeRefresh";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { preloadBibleSearch, searchBible, type SearchResult as BibleKeywordResult } from "../../bible/bibleData";
@@ -61,6 +67,12 @@ import type { BibleHistoryItem } from "./bibleHistoryTypes";
 import type { DockFullscreenQuickThemeSettings } from "../components/DockFullscreenThemeQuickSettings";
 import { addBibleToActiveSchedule, recordPresentationHistory } from "../dockScheduleService";
 import {
+  DOCK_SELECT_BIBLE_VERSE_EVENT,
+  getPendingBibleVerseSelection,
+  setPendingBibleVerseSelection,
+  type DockSelectBibleVerseDetail,
+} from "../dockBibleNavigation";
+import {
   buildDockBackgroundPresetOverrides,
   type DockBackgroundPreset
 } from "../dockConsoleTheme";
@@ -96,6 +108,7 @@ import {
   DOCK_QUICK_SIZE_OPTIONS as LOWER_THIRD_QUICK_SIZE_OPTIONS,
   DOCK_QUICK_SIZE_OPTIONS_FULLSCREEN,
   DOCK_QUICK_SIZE_OPTIONS_LOWER_THIRD,
+  findActiveQuickSizeOption,
   type DockQuickSizeOption,
 } from "../dockQuickSizePresets";
 
@@ -160,6 +173,7 @@ import {
   type ComparePassagePreview,
   type ParsedBiblePassageReference,
 } from "../bibleMultiPassage";
+import { pickLayoutAdjust } from "../../themes/layout/adjust";
 
 const DOCK_CACHED_TRANSLATIONS_KEY = "__mce_dock_cached_translations_v1";
 
@@ -247,6 +261,7 @@ type BibleBrowserQuickSettingsPatch = Partial<Pick<
   | "fontSize"
   | "refFontSize"
   | "fontWeight"
+  | "fontStyle"
   | "refFontWeight"
   | "lineHeight"
   | "refSpacing"
@@ -497,6 +512,8 @@ interface BibleOutputControlsMenuProps {
   onSave?: () => void | Promise<void>;
   onOpenSettings?: () => void;
   onFontSizeStep?: (delta: number) => void;
+  /** Bold / italic for the verse text (hidden when not provided). */
+  onTextStyleChange?: (patch: { fontWeight?: "normal" | "bold"; fontStyle?: "normal" | "italic" }) => void;
   currentFontSize?: number;
   minFontSize?: number;
   maxFontSize?: number;
@@ -530,6 +547,7 @@ function BibleOutputControlsMenu({
   onLineCountChange,
   onOpenSettings,
   onFontSizeStep,
+  onTextStyleChange,
   currentFontSize,
   minFontSize = 14,
   maxFontSize = 200,
@@ -543,12 +561,22 @@ function BibleOutputControlsMenu({
   onVersionShownChange,
 }: BibleOutputControlsMenuProps) {
   const { t } = useTranslation();
+  // "Bold" is on for every heavy weight (bold / extra bold / black).
+  const verseIsBold = ["bold", "extrabold", "black"].includes(String(settings.fontWeight ?? ""));
+  const verseIsItalic = settings.fontStyle === "italic";
 
   const sizeOptions = mode === "fullscreen"
     ? DOCK_QUICK_SIZE_OPTIONS_FULLSCREEN
     : mode === "lower-third"
     ? DOCK_QUICK_SIZE_OPTIONS_LOWER_THIRD
     : LOWER_THIRD_QUICK_SIZE_OPTIONS;
+  // Always show one size as selected: the exact preset if the theme uses one,
+  // otherwise the closest one.
+  const activeSizeOption = findActiveQuickSizeOption(
+    sizeOptions,
+    mode === "fullscreen" ? "fullscreen" : "lower-third",
+    settings,
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -622,9 +650,7 @@ function BibleOutputControlsMenu({
           <div className="dock-output-quick-actions__size-row">
           <div className="dock-bible-reader__size-presets" role="group" aria-label={t("bible.frameSize", "Text size")}>
             {sizeOptions.map((option) => {
-              const isOptionActive = mode === "fullscreen"
-                ? settings.fontSize === option.fontSize || (settings.lowerThirdSize === option.preset && !settings.fontSize)
-                : settings.lowerThirdSize === option.preset || (!settings.lowerThirdSize && settings.fontSize === option.fontSize);
+              const isOptionActive = activeSizeOption?.id === option.id;
               return (
                 <button
                   key={option.id}
@@ -663,6 +689,33 @@ function BibleOutputControlsMenu({
               </button>
             </div>
           )}
+          </div>
+        </div>
+      )}
+      {onTextStyleChange && (
+        <div className="dock-bible-reader__font-size-field">
+          <span className="dock-bible-reader__font-size-field-label">{t("bible.textStyle", "Style")}</span>
+          <div className="dock-bible-reader__size-presets" role="group" aria-label={t("bible.textStyle", "Style")}>
+            <button
+              type="button"
+              className={`dock-bible-reader__size-preset${verseIsBold ? " dock-bible-reader__size-preset--active" : ""}`}
+              onClick={() => onTextStyleChange({ fontWeight: verseIsBold ? "normal" : "bold" })}
+              aria-pressed={verseIsBold}
+              title={verseIsBold ? t("bible.boldOff", "Turn bold off") : t("bible.boldOn", "Make the verse bold")}
+              style={{ fontWeight: 800 }}
+            >
+              {t("bible.bold", "Bold")}
+            </button>
+            <button
+              type="button"
+              className={`dock-bible-reader__size-preset${verseIsItalic ? " dock-bible-reader__size-preset--active" : ""}`}
+              onClick={() => onTextStyleChange({ fontStyle: verseIsItalic ? "normal" : "italic" })}
+              aria-pressed={verseIsItalic}
+              title={verseIsItalic ? t("bible.italicOff", "Turn italic off") : t("bible.italicOn", "Make the verse italic")}
+              style={{ fontStyle: "italic" }}
+            >
+              {t("bible.italic", "Italic")}
+            </button>
           </div>
         </div>
       )}
@@ -1236,6 +1289,8 @@ function applyFullscreenQuickThemeSettings(
       // overlay also receives the asset fields, but this explicit mode prevents
       // a stale theme/background fallback from winning on the next verse.
       backgroundType: bgType,
+      // Size / position tweaks for layer themes (ignored by legacy themes).
+      ...pickLayoutAdjust(quickSettings),
       fontSize: quickSettings.fontSize,
       autoFontScale: true,
       fontFamily: quickSettings.fontFamily,
@@ -2791,6 +2846,16 @@ function DockBibleTab({
           themeSettings: effectiveSelectedLowerThirdTheme.settings,
           liveOverrides: null,
         },
+        // Everything else LM needs to project a verse the same way this tab
+        // does: the mode in use right now, the verse line count per mode and
+        // how the reference is written. `updatedAt` lets LM pick the newest
+        // copy when it also has one stored locally.
+        overlayMode: fullscreenOnlyMode ? "fullscreen" : overlayMode,
+        fullscreenLineCount: fullscreenVerseLineCount,
+        lowerThirdLineCount: lowerThirdVerseLineCount,
+        referenceFormat,
+        referenceVersionVisible,
+        updatedAt: Date.now(),
       },
       timestamp: Date.now(),
     });
@@ -2798,6 +2863,12 @@ function DockBibleTab({
     effectiveSelectedBibleTheme,
     effectiveSelectedLowerThirdTheme,
     fullscreenLiveOverrides,
+    fullscreenOnlyMode,
+    overlayMode,
+    fullscreenVerseLineCount,
+    lowerThirdVerseLineCount,
+    referenceFormat,
+    referenceVersionVisible,
   ]);
 
   const persistDockBiblePreferencesNow = useCallback((overrides: Partial<DockBiblePreferences> = {}) => {
@@ -3814,7 +3885,10 @@ function DockBibleTab({
         compareTranslationsOverride?: { translationA: string; translationB: string };
       },
     ) => {
-      void dockObsClient.ensureModuleSourceOpenAndOnTop("bible");
+      void dockObsClient.ensureModuleSourceOpenAndOnTop(
+        "bible",
+        fullscreenOnlyMode ? "fullscreen" : (options?.overlayMode ?? overlayModeRef.current),
+      );
       const requestId = ++liveVerseRequestIdRef.current;
       const visibilityEpoch = visibilityEpochRef.current;
       const effectiveTranslation = options?.translation ?? activeTranslation;
@@ -4596,6 +4670,66 @@ function DockBibleTab({
     refreshCurrentBibleOutputAfterThemeSave,
   ]);
 
+  // A theme was edited in the app: swap in the new copy of the selected one so bold,
+  // colours, backgrounds and layers show up without reselecting it.
+  useEffect(() => {
+    const handleThemesRefreshed = (event: Event) => {
+      const themes = (event as CustomEvent<DockThemesRefreshedDetail>).detail?.themes ?? [];
+      const freshFS = findRefreshedTheme(selectedBibleThemeRef.current, themes, "fullscreen");
+      const freshLT = findRefreshedTheme(selectedLowerThirdThemeRef.current, themes, "lower-third");
+      if (!freshFS && !freshLT) return;
+      manualThemeSettingsSelectionRef.current = true;
+      let fsSettings: DockFullscreenQuickThemeSettings | null = null;
+      let ltSettings: DockFullscreenQuickThemeSettings | null = null;
+
+      if (freshFS) {
+        setSelectedBibleTheme(freshFS);
+        selectedBibleThemeRef.current = freshFS;
+        // Layer themes keep the operator's size / background tweaks; classic themes restart
+        // from the edited look because their quick settings are a copy of the old one.
+        fsSettings = themeUsesLayout(freshFS, "fullscreen") && fullscreenQuickThemeSettings
+          ? fullscreenQuickThemeSettings
+          : extractThemeQuickSettingsForOverlayMode(freshFS, "fullscreen");
+        setFullscreenQuickThemeSettings(fsSettings);
+        setSavedFullscreenQuickThemeSettings(fsSettings);
+        liveFullscreenThemeSettingsRef.current = applyFullscreenQuickThemeSettings(
+          resolveThemeForOverlayMode(freshFS, "fullscreen"),
+          fsSettings,
+        ).settings;
+      }
+      if (freshLT) {
+        setSelectedLowerThirdTheme(freshLT);
+        selectedLowerThirdThemeRef.current = freshLT;
+        ltSettings = themeUsesLayout(freshLT, "lower-third") && lowerThirdQuickThemeSettings
+          ? lowerThirdQuickThemeSettings
+          : extractThemeQuickSettingsForOverlayMode(freshLT, "lower-third");
+        setLowerThirdQuickThemeSettings(ltSettings);
+        setSavedLowerThirdQuickThemeSettings(ltSettings);
+        liveLowerThirdThemeSettingsRef.current = applyLowerThirdQuickThemeSettings(
+          resolveThemeForOverlayMode(freshLT, "lower-third"),
+          ltSettings,
+        ).settings;
+      }
+
+      // Re-send the verse on air with the edited theme (only when one is really showing).
+      const liveMode = fullscreenOnlyMode ? "fullscreen" : overlayModeRef.current;
+      const liveSettings = liveMode === "fullscreen" ? fsSettings : ltSettings;
+      const liveTheme = liveMode === "fullscreen" ? freshFS : freshLT;
+      if (liveSettings && liveTheme && bibleOverlayVisible && liveVerseRequestIdRef.current > 0) {
+        void refreshCurrentBibleOutputAfterThemeSave(liveMode, liveSettings, { selectedTheme: liveTheme });
+      }
+    };
+
+    window.addEventListener(DOCK_THEMES_REFRESHED_EVENT, handleThemesRefreshed);
+    return () => window.removeEventListener(DOCK_THEMES_REFRESHED_EVENT, handleThemesRefreshed);
+  }, [
+    bibleOverlayVisible,
+    fullscreenOnlyMode,
+    fullscreenQuickThemeSettings,
+    lowerThirdQuickThemeSettings,
+    refreshCurrentBibleOutputAfterThemeSave,
+  ]);
+
 
   const refreshCurrentBibleOutputForLineCount = useCallback((lineCount: number) => {
     if (!bibleOverlayVisible || !selectedBook || !selectedChapter || !selectedVerse) {
@@ -4943,6 +5077,13 @@ function DockBibleTab({
     displayedBrowserFontSettings.fontSize,
     handleSyncBibleBrowserSettings,
   ]);
+
+  // Bold / italic from the quick menu: applies to whichever layout (full screen or
+  // lower third) is active, the same way the size buttons do.
+  const handleBrowserTextStyleChange = useCallback((patch: BibleBrowserQuickSettingsPatch) => {
+    applyBrowserQuickSettingsPatch(patch);
+    setDraftBrowserQuickThemeSettings(null);
+  }, [applyBrowserQuickSettingsPatch]);
 
   const handleBrowserVerseLineCountChange = useCallback((lineCount: number) => {
     const safeLineCount = clampVerseLineCount(lineCount);
@@ -5439,10 +5580,20 @@ function DockBibleTab({
       verse?: number;
       translation?: string;
       pushToPreview?: boolean;
+      markLive?: boolean;
     };
     if (!payload.book || !payload.chapter) return;
 
     focusReference(payload.book, payload.chapter, payload.verse ?? null);
+    if (payload.markLive) {
+      // LM already put this verse on the output using this tab's style. Only
+      // bring this tab in line with it: the list is on the verse (above), the
+      // output counts as visible, and any older push still in flight from
+      // this tab is dropped so it cannot overwrite what LM just sent.
+      liveVerseRequestIdRef.current += 1;
+      setBibleOverlayVisible(true);
+      return;
+    }
     void (async () => {
       if (!payload.pushToPreview) {
         await stageVerse(payload.book!, payload.chapter!, payload.verse ?? 1, {
@@ -5467,6 +5618,29 @@ function DockBibleTab({
       }
     })();
   }, [focusReference, goLiveVerse, presentationLinkMode, stageVerse]);
+
+  // ── Schedule / History go-live: move the verse list to that verse ──
+  // Works whether this tab is already mounted (event) or is mounted a moment
+  // after the Schedule drawer switched to it (pending selection).
+  useEffect(() => {
+    const applySelection = (detail: DockSelectBibleVerseDetail | null | undefined) => {
+      if (!detail?.book || !detail.chapter) return;
+      focusReference(detail.book, detail.chapter, detail.verse ?? null);
+      liveVerseRequestIdRef.current += 1;
+      setBibleOverlayVisible(true);
+    };
+    const pending = getPendingBibleVerseSelection();
+    if (pending) {
+      setPendingBibleVerseSelection(null);
+      applySelection(pending);
+    }
+    const handleSelectEvent = (event: Event) => {
+      setPendingBibleVerseSelection(null);
+      applySelection((event as CustomEvent<DockSelectBibleVerseDetail>).detail);
+    };
+    window.addEventListener(DOCK_SELECT_BIBLE_VERSE_EVENT, handleSelectEvent);
+    return () => window.removeEventListener(DOCK_SELECT_BIBLE_VERSE_EVENT, handleSelectEvent);
+  }, [focusReference]);
 
   useEffect(() => {
     let channel: BroadcastChannel | null = null;
@@ -6192,6 +6366,12 @@ function DockBibleTab({
         // Hide immediately so effects and stale push callbacks cannot repaint
         // the source while OBS finishes the hide batch.
         setBibleOverlayVisible(false);
+        // Play the overlay's exit animation before the source is hidden.
+        await dockObsClient.animateOutPresentationOverlay("bible", {
+          mode: fullscreenOnlyMode ? "fullscreen" : overlayModeRef.current,
+          includePresentation: !hasSceneRoute || sceneRoute.syncPresentation,
+          targets: hasSceneRoute ? sceneRoute.targets : [],
+        }).catch(() => { });
         await clearBibleFromConfiguredOutput();
         return;
       }
@@ -6206,7 +6386,11 @@ function DockBibleTab({
           ? data.overlayMode
           : overlayModeRef.current;
 
-      if (!hasSceneRoute) {
+      // With a verse to show, push first. The push delivers it while the source is
+      // still hidden and only then switches the source on, so it animates in.
+      // Switching the source on first showed the page's previous state for a
+      // moment (show, hide, then animate in).
+      if (!hasSceneRoute && !data) {
         await dockObsClient.bringBibleOverlayForward(mode).catch(() => { });
       }
       if (data) {
@@ -6224,7 +6408,7 @@ function DockBibleTab({
       visibilityActionInFlightRef.current = false;
       setVisibilityActionPending(false);
     }
-  }, [bibleOverlayVisible, clearBibleFromConfiguredOutput, fullscreenOnlyMode, goLiveVerse, hasSceneRoute, onStage, overlayMode, presentationLinkMode, pushBibleToConfiguredOutput, selectedBook, selectedChapter, selectedVerse]);
+  }, [bibleOverlayVisible, clearBibleFromConfiguredOutput, fullscreenOnlyMode, goLiveVerse, hasSceneRoute, onStage, overlayMode, presentationLinkMode, pushBibleToConfiguredOutput, sceneRoute.syncPresentation, sceneRoute.targets, selectedBook, selectedChapter, selectedVerse]);
 
   const handleTranslationAChange = useCallback((newTranslation: string) => {
     if (newTranslation === translationB) {
@@ -8741,6 +8925,7 @@ function DockBibleTab({
                   openThemeSettings("background");
                 }}
                 onFontSizeStep={handleBrowserFontSizeStep}
+                onTextStyleChange={handleBrowserTextStyleChange}
                 currentFontSize={displayedBrowserFontSettings.fontSize || (browserFontMode === "fullscreen" ? 56 : 36)}
                 minFontSize={browserFontSizeMin}
                 maxFontSize={browserFontSizeMax}

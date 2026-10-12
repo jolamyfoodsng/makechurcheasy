@@ -15,6 +15,7 @@
 
 import type { MVSettings, SpeakerProfileSetting } from "../multiview/mvStore";
 import { MV_SETTINGS_UPDATED_EVENT } from "../multiview/mvStore";
+import { contactFromProfile, socialsFromProfile } from "./churchProfileMapping";
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheazy.com";
 
@@ -25,7 +26,19 @@ export interface MinistryData {
   speakers: SpeakerProfileSetting[];
   logoPath: string;
   brandColor: string;
+  /** Details from the website church profile. Empty when the church has not filled them in. */
+  website?: string;
+  phone?: string;
+  email?: string;
+  tagline?: string;
+  address?: string;
+  city?: string;
+  /** Social links by lower-third icon key (facebook, instagram, youtube, x, tiktok, whatsapp, telegram, threads). */
+  socials?: Record<string, string>;
 }
+
+/** Fired (on window) when church details were loaded from the web and changed. */
+export const MINISTRY_DATA_UPDATED_EVENT = "mce-ministry-updated";
 
 const EMPTY: MinistryData = {
   churchName: "",
@@ -34,9 +47,92 @@ const EMPTY: MinistryData = {
   speakers: [],
   logoPath: "",
   brandColor: "#6A34DE",
+  website: "",
+  phone: "",
+  email: "",
+  tagline: "",
+  address: "",
+  city: "",
+  socials: {},
 };
 
 let _cache: MinistryData | null = null;
+
+// ── What the church details used to be ──
+// A lower-third box that was filled in from the church profile still holds the
+// old value after the profile changes. Remembering the last few values lets a
+// box that was never edited by hand follow the profile.
+
+const LAST_KEY = "mce-ministry-last";
+const HISTORY_KEY = "mce-ministry-history";
+const HISTORY_MAX = 6;
+
+/** The parts of the church details that end up as lower-third text. */
+function churchFingerprint(d: MinistryData): string {
+  return JSON.stringify([
+    d.churchName, d.mainPastorName, d.mainPastorRole,
+    d.website ?? "", d.phone ?? "", d.email ?? "", d.tagline ?? "", d.address ?? "", d.city ?? "",
+    d.socials ?? {},
+  ]);
+}
+
+function hasChurchContent(d: MinistryData): boolean {
+  return Boolean(
+    d.churchName || d.mainPastorName || d.website || d.phone || d.email || d.tagline || d.address ||
+    (d.socials && Object.keys(d.socials).length > 0),
+  );
+}
+
+function snapshotOf(d: MinistryData): MinistryData {
+  return { ...d, speakers: [], logoPath: "" };
+}
+
+function readJson<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeJson(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // storage unavailable or full: history is best-effort
+  }
+}
+
+/** Earlier church details (newest first), for refreshing boxes that still hold an old value. */
+export function getMinistryHistory(): MinistryData[] {
+  const list = readJson<MinistryData[]>(HISTORY_KEY);
+  return Array.isArray(list) ? list : [];
+}
+
+/**
+ * Makes `next` the current church details. When they differ from what was
+ * current before, the old details are kept in the history.
+ * Returns true when the church details changed.
+ */
+function commitMinistry(next: MinistryData): boolean {
+  if (!hasChurchContent(next)) {
+    // Nothing to remember (for example an OBS dock with no data yet).
+    _cache = next;
+    return false;
+  }
+  const last = _cache && hasChurchContent(_cache) ? _cache : readJson<MinistryData>(LAST_KEY);
+  const changed = !last || churchFingerprint(last) !== churchFingerprint(next);
+  if (last && changed && hasChurchContent(last)) {
+    const key = churchFingerprint(last);
+    const history = getMinistryHistory().filter((h) => churchFingerprint(h) !== key);
+    history.unshift(snapshotOf(last));
+    writeJson(HISTORY_KEY, history.slice(0, HISTORY_MAX));
+  }
+  if (changed) writeJson(LAST_KEY, snapshotOf(next));
+  _cache = next;
+  return changed;
+}
 
 function readFromStorage(): MinistryData {
   try {
@@ -71,14 +167,32 @@ function readFromStorage(): MinistryData {
       speakers,
       logoPath: s.brandLogoPath || "",
       brandColor: s.brandColor || "#6A34DE",
+      website: s.churchWebsite || "",
+      phone: s.churchPhone || "",
+      email: s.churchEmail || "",
+      tagline: s.churchTagline || "",
+      address: s.churchAddress || "",
+      city: s.churchCity || "",
+      socials: s.churchSocials && typeof s.churchSocials === "object" ? s.churchSocials : {},
     };
   } catch {
     return EMPTY;
   }
 }
 
+/** True in the desktop app, which keeps the church details in its settings; false in the OBS dock. */
+function hasStorageSettings(): boolean {
+  try {
+    return localStorage.getItem("mv-settings") !== null;
+  } catch {
+    return false;
+  }
+}
+
 function refreshCache(): void {
-  _cache = readFromStorage();
+  // The OBS dock has no settings of its own: keep what it fetched from the web.
+  if (!hasStorageSettings() && _cache && hasChurchContent(_cache)) return;
+  commitMinistry(readFromStorage());
 }
 
 /** Get the current ministry data. Reads from cache if available. */
@@ -157,6 +271,7 @@ async function fetchFromOverlayServer(): Promise<MinistryData | null> {
     let churchName = "";
     let logoPath = "";
     let brandColor = "#6A34DE";
+    let contact = contactFromProfile(null);
     if (brandingRes.ok) {
       const branding = await brandingRes.json();
       if (branding && typeof branding === "object") {
@@ -164,6 +279,11 @@ async function fetchFromOverlayServer(): Promise<MinistryData | null> {
         brandColor = branding.brandColor || "#6A34DE";
         const logoFileName = branding.brandLogoFileName || "";
         if (logoFileName) logoPath = `/uploads/${encodeURIComponent(logoFileName)}`;
+        const info = branding.churchInfo;
+        if (info && typeof info === "object") {
+          // dock-branding.json already holds icon keys, so map the links straight through.
+          contact = { ...contactFromProfile(info), socials: socialsFromProfile(info.socials) };
+        }
       }
     }
 
@@ -175,6 +295,13 @@ async function fetchFromOverlayServer(): Promise<MinistryData | null> {
       speakers,
       logoPath,
       brandColor,
+      website: contact.website,
+      phone: contact.phone,
+      email: contact.email,
+      tagline: contact.tagline,
+      address: contact.address,
+      city: contact.city,
+      socials: contact.socials,
     };
   } catch {
     return null;
@@ -210,9 +337,18 @@ async function fetchFromWebApi(): Promise<MinistryData | null> {
     const deviceId = await getDockDeviceId();
     if (!deviceId) return null;
 
-    const res = await fetch(`${API_BASE}/api/device/church-profile`, {
-      headers: { "X-Device-Id": deviceId },
-    });
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), 6000) : null;
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE}/api/device/church-profile`, {
+        headers: { "X-Device-Id": deviceId },
+        cache: "no-store",
+        signal: controller?.signal,
+      });
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
     if (!res.ok) return null;
 
     const profile = await res.json();
@@ -230,6 +366,7 @@ async function fetchFromWebApi(): Promise<MinistryData | null> {
       : [];
 
     const mainSpeaker = speakers.find((s) => s.isMain);
+    const contact = contactFromProfile(profile);
     return {
       churchName: profile.churchName || "",
       mainPastorName: mainSpeaker?.name || "",
@@ -237,6 +374,13 @@ async function fetchFromWebApi(): Promise<MinistryData | null> {
       speakers,
       logoPath: profile.branding?.logoUrl || "",
       brandColor: profile.branding?.primaryColor || "#6A34DE",
+      website: contact.website,
+      phone: contact.phone,
+      email: contact.email,
+      tagline: contact.tagline,
+      address: contact.address,
+      city: contact.city,
+      socials: contact.socials,
     };
   } catch {
     return null;
@@ -244,13 +388,19 @@ async function fetchFromWebApi(): Promise<MinistryData | null> {
 }
 
 /**
- * Fetch ministry data, trying the overlay server first (no auth needed),
- * then falling back to the web API.
+ * Fetch ministry data from the overlay server (no auth needed, works offline)
+ * and the web API. The website is the newest source for the church details, so
+ * it wins when it answers; the overlay copy supplies the downloaded logo path.
  */
 export async function fetchFromApi(): Promise<MinistryData | null> {
-  const fromOverlay = await fetchFromOverlayServer();
-  if (fromOverlay && fromOverlay.speakers.length > 0) return fromOverlay;
-  return fetchFromWebApi();
+  const [overlay, web] = await Promise.all([fetchFromOverlayServer(), fetchFromWebApi()]);
+  if (!overlay) return web;
+  if (!web) return overlay;
+  return {
+    ...web,
+    logoPath: overlay.logoPath || web.logoPath,
+    brandColor: overlay.brandColor || web.brandColor,
+  };
 }
 
 /**
@@ -264,7 +414,7 @@ export async function ensureMinistryData(): Promise<boolean> {
 
   const fromApi = await fetchFromApi();
   if (fromApi && fromApi.speakers.length > 0) {
-    _cache = fromApi;
+    commitMinistry(fromApi);
     return true;
   }
   return false;
@@ -278,32 +428,49 @@ if (typeof window !== "undefined") {
   });
 }
 
-// ── Church details for graphics (church name, main pastor) ──
+// ── Church details for graphics (church name, pastor, website, phone, socials …) ──
 
-let _churchInfoRequest: Promise<boolean> | null = null;
+let _lastRefreshAt = 0;
+let _refreshRequest: Promise<boolean> | null = null;
+/** The dock asks again at most this often; a forced refresh ignores it. */
+const REFRESH_MIN_INTERVAL_MS = 60_000;
 
 /**
- * Makes sure the church name and main pastor are available for graphics.
- * The OBS dock keeps no copy of what the church saved on the website, so this
- * fetches it once (in the background) when nothing is stored yet.
- * Resolves true when new details were loaded, so the caller can read them again.
- * Never throws and is safe to call many times: the lookup only happens once.
+ * Brings the church details up to date for graphics.
+ *
+ * The desktop app keeps its own copy (churchProfileSync); this is for the OBS
+ * dock, which has none, so it asks the overlay server and the website. It can
+ * be called as often as you like: lookups are spaced out and share one request.
+ * Resolves true when the details changed, so the caller can read them again
+ * (a MINISTRY_DATA_UPDATED_EVENT is fired as well). Never throws.
  */
-export function ensureChurchInfo(): Promise<boolean> {
-  const current = getMinistryData();
-  if (current.churchName || current.mainPastorName) return Promise.resolve(false);
-  if (_churchInfoRequest) return _churchInfoRequest;
+export function refreshChurchInfo(options: { force?: boolean } = {}): Promise<boolean> {
+  // The desktop app has its own copy in settings, kept current by churchProfileSync.
+  if (hasChurchContent(readFromStorage())) return Promise.resolve(false);
+  if (_refreshRequest) return _refreshRequest;
+  if (!options.force && Date.now() - _lastRefreshAt < REFRESH_MIN_INTERVAL_MS) return Promise.resolve(false);
+  _lastRefreshAt = Date.now();
 
-  _churchInfoRequest = (async () => {
+  _refreshRequest = (async () => {
     try {
       const fetched = await fetchFromApi();
       if (!fetched) return false;
-      if (!fetched.churchName && !fetched.mainPastorName && fetched.speakers.length === 0) return false;
-      _cache = fetched;
-      return true;
+      if (!hasChurchContent(fetched) && fetched.speakers.length === 0) return false;
+      const changed = commitMinistry(fetched);
+      if (changed && typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent(MINISTRY_DATA_UPDATED_EVENT));
+      }
+      return changed;
     } catch {
       return false;
+    } finally {
+      _refreshRequest = null;
     }
   })();
-  return _churchInfoRequest;
+  return _refreshRequest;
+}
+
+/** Same as refreshChurchInfo(); kept for existing callers. */
+export function ensureChurchInfo(): Promise<boolean> {
+  return refreshChurchInfo();
 }

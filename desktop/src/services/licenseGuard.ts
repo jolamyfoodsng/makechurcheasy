@@ -10,7 +10,9 @@
  * Validation checks:
  *   - Account status (active vs suspended)
  *   - Security/admin flags (device_removed, chargeback, etc.)
- *   - Device internet verification (max 14 days offline)
+ *   - Offline sync (see offlineEntitlement.ts): after 14 days offline the app asks
+ *     to come online; after 21 days paid features pause (the plan runs as Free)
+ *     until it syncs. Being offline never locks the app.
  *
  * Billing expiry (subscription_expired, trial_expired, payment_expired) does
  * NOT lock the application. Instead the user is downgraded to the Free plan
@@ -40,6 +42,15 @@ import {
 import { checkEntitlementSync, type FeatureKey } from "./entitlementClient";
 import { normalizePlanId } from "../lib/subscriptionSourceOfTruth";
 import { refreshSubscriptionState } from "./subscriptionCache";
+import {
+  capPlanForOffline,
+  evaluateOfflineEntitlement,
+  noteServerTime,
+  PAID_PAUSE_DAYS,
+  SYNC_PROMPT_DAYS,
+  trustedNowMs,
+  type OfflineEntitlementState,
+} from "./offlineEntitlement";
 import {
   cacheDesktopBootstrap,
   clearDesktopBootstrapCache,
@@ -83,6 +94,11 @@ export interface LicensePayload {
   trialEndsAt: string | null;
   subscriptionEndsAt: string | null;
   renewalDate: string | null;
+  /**
+   * Last moment paid features are paid for (period end + renewal grace, trial end,
+   * admin / ambassador expiry). null = no end date. Older servers don't send it.
+   */
+  entitledUntil?: string | null;
   paymentStatus: PaymentStatus;
   internetVerificationDays: number;
   verificationIntervalHours: number;
@@ -124,14 +140,23 @@ export interface LicenseGuardState {
   verifying: boolean;
   lastVerifiedAt: number | null;
   daysOffline: number;
+  /** Days left before paid features pause for being offline. */
   offlineDaysRemaining: number;
+  /** 14+ days since the last sync: ask the user to come online. */
   offlineWarning: boolean;
+  /** 21+ days since the last sync: paid features paused until it syncs. */
+  paidPausedOffline: boolean;
+  /** The paid period ended (checked offline against trusted time). */
+  entitlementEnded: boolean;
+  /** When paid access ends (ms), null = no end date. */
+  entitledUntilMs: number | null;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-export const OFFLINE_WARNING_DAYS = 14; // 2 weeks: warning asking user to connect
-export const OFFLINE_LOCK_DAYS = 21;    // 3 weeks: blocking modal requiring connection
+export const OFFLINE_WARNING_DAYS = SYNC_PROMPT_DAYS; // 2 weeks: ask the user to come online
+/** 3 weeks: paid features pause (plan runs as Free) until the app syncs. The app is not locked. */
+export const OFFLINE_LOCK_DAYS = PAID_PAUSE_DAYS;
 const LAST_ONLINE_KEY = "mce-last-online-at";
 const STORAGE_KEY = "ocs-license-cache";
 const DOWNGRADE_NOTIFIED_KEY = "ocs-downgrade-notified";
@@ -166,6 +191,7 @@ let _lockReason: LockReason = null;
 let _verifying = false;
 let _initialized = false;
 let _revalidationTimer: ReturnType<typeof setInterval> | null = null;
+let _offlineTickTimer: ReturnType<typeof setInterval> | null = null;
 let _listeners: Array<(state: LicenseGuardState) => void> = [];
 let _lastVisibilityVerificationAt = 0;
 let _lastSubscriptionCacheRefreshAt = 0;
@@ -442,11 +468,23 @@ function evaluateOfflineValidity(cached: LicenseCache | null): LockReason {
     return null;
   }
 
-  const daysOffline = Math.floor((Date.now() - lastVerifiedMs) / DAY_MS);
-  if (daysOffline >= OFFLINE_LOCK_DAYS) {
-    return "internet_required";
-  }
+  // Being offline no longer locks the app: paid features pause instead
+  // (see offlineEntitlementFor / capPlanForOffline). Nothing to lock here.
   return null;
+}
+
+/** Offline entitlement from the in-memory license cache. */
+function offlineEntitlementFor(cached: LicenseCache | null): OfflineEntitlementState {
+  return evaluateOfflineEntitlement(cached?.payload ?? null, getLastVerifiedMs(cached), trustedNowMs());
+}
+
+/**
+ * The plan features should use: the cached plan, turned into Free when the paid
+ * period ended or the computer has gone 21+ days without syncing.
+ */
+export function getEffectiveLicensePlan(): string {
+  const plan = _cache?.payload?.plan || "free";
+  return capPlanForOffline(plan, offlineEntitlementFor(_cache));
 }
 
 function refreshSubscriptionCacheInBackground(): void {
@@ -492,13 +530,7 @@ function computeState(): void {
 export function getState(): LicenseGuardState {
   const cached = _cache;
   const lastVerified = getLastVerifiedMs(cached) || null;
-  const daysOffline = lastVerified
-    ? Math.max(0, Math.floor((Date.now() - lastVerified) / DAY_MS))
-    : 0;
-  const offlineDaysRemaining = lastVerified
-    ? Math.max(0, Math.ceil((lastVerified + OFFLINE_LOCK_DAYS * DAY_MS - Date.now()) / DAY_MS))
-    : OFFLINE_LOCK_DAYS;
-  const offlineWarning = daysOffline >= OFFLINE_WARNING_DAYS && daysOffline < OFFLINE_LOCK_DAYS;
+  const offline = offlineEntitlementFor(cached);
 
   return {
     unlocked: _lockReason === null,
@@ -506,9 +538,12 @@ export function getState(): LicenseGuardState {
     payload: cached?.payload ?? null,
     verifying: _verifying,
     lastVerifiedAt: lastVerified,
-    daysOffline,
-    offlineDaysRemaining,
-    offlineWarning,
+    daysOffline: offline.daysSinceSync,
+    offlineDaysRemaining: offline.daysUntilPause,
+    offlineWarning: offline.syncDue,
+    paidPausedOffline: offline.paidPaused,
+    entitlementEnded: offline.entitlementEnded,
+    entitledUntilMs: offline.entitledUntilMs,
   };
 }
 
@@ -521,7 +556,7 @@ export function getState(): LicenseGuardState {
  * Example: hasRequiredPlan("growth")
  */
 export function hasRequiredPlan(requiredPlan: string): boolean {
-  const currentPlan = _cache?.payload?.plan || "free";
+  const currentPlan = getEffectiveLicensePlan();
   const current = PLAN_HIERARCHY[currentPlan] ?? 0;
   const required = PLAN_HIERARCHY[requiredPlan] ?? 0;
   return current >= required;
@@ -536,7 +571,7 @@ export function hasRequiredPlan(requiredPlan: string): boolean {
 export function canUseFeature(feature: string): boolean {
   const mappedFeature = FEATURE_ALIAS_MAP[feature];
   if (!mappedFeature) return true;
-  const currentPlan = normalizePlanId(_cache?.payload?.plan || "free");
+  const currentPlan = normalizePlanId(getEffectiveLicensePlan());
   return checkEntitlementSync(mappedFeature, currentPlan).allowed;
 }
 
@@ -701,6 +736,7 @@ export async function verify(): Promise<boolean> {
     };
     writeCache(_cache);
     recordOnlineSuccess();
+    noteServerTime(normalizedPayload.serverTime);
     refreshSubscriptionCacheInBackground();
 
     _lockReason = evaluateLicense(normalizedPayload);
@@ -839,6 +875,14 @@ function startPeriodicVerification(): void {
     await verify();
   }, intervalMs);
 
+  // Offline rules change with time (a plan ends, 14 / 21 days pass): re-check every 5 minutes.
+  if (!_offlineTickTimer) {
+    _offlineTickTimer = setInterval(() => {
+      computeState();
+      emit();
+    }, 5 * 60 * 1000);
+  }
+
   // Re-verify when the user returns to the app (e.g. after sleep/switch)
   document.addEventListener("visibilitychange", _onVisibilityChange);
 }
@@ -865,6 +909,10 @@ export function stopPeriodicVerification(): void {
   if (_revalidationTimer) {
     clearInterval(_revalidationTimer);
     _revalidationTimer = null;
+  }
+  if (_offlineTickTimer) {
+    clearInterval(_offlineTickTimer);
+    _offlineTickTimer = null;
   }
   document.removeEventListener("visibilitychange", _onVisibilityChange);
 }

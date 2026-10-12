@@ -83,9 +83,14 @@ export interface LayerStyle {
   /** [top, right, bottom, left] px */
   padding?: [number, number, number, number];
 
-  // ── Image ──
+  // ── Image / media ──
+  /** Image layers: the picture. Box layers: a picture drawn over the fill (e.g. a theme background). */
   src?: string;
+  /** Image and box layers: play this video (muted, looping) instead of a still. */
+  videoSrc?: string;
   fit?: "cover" | "contain" | "fill";
+  /** Darken the picture / video, percent 0–100 (0 = as is). */
+  dim?: number;
 
   // ── Text ──
   fontFamily?: string;
@@ -106,6 +111,13 @@ export interface LayerStyle {
   /** Show verse numbers inside {text}. Default true. */
   verseNumbers?: boolean;
   verseNumberColor?: string;
+  /** Underline the text (e.g. a centred reference). */
+  underline?: boolean;
+  /**
+   * Text layers only: the box hugs its text (up to `w`) instead of always being
+   * `w` wide — for tabs and labels with a fill behind the words. Use with h "auto".
+   */
+  hug?: boolean;
 }
 
 export interface ThemeLayer {
@@ -123,6 +135,12 @@ export interface ThemeLayer {
   hideWhenEmpty?: boolean;
   /** Nest inside another layer: x/y become relative to the parent's box. */
   parentId?: string;
+  /**
+   * Part of the heading (the reference / label line and the box behind it).
+   * Heading boxes hide with their text when the label is empty or switched off.
+   * Layouts with no flagged layers treat every non-verse token text as heading.
+   */
+  heading?: boolean;
 
   anchor: LayerAnchor;
   x: number;
@@ -154,6 +172,8 @@ export interface ThemeLayout {
    * "all" plays the whole theme out and back in.
    */
   swap?: "content" | "all";
+  /** false hides the heading (reference / label and its box). Default true. */
+  showHeading?: boolean;
 }
 
 /** Live content the overlays already receive (BibleSlide subset). */

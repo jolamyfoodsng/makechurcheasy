@@ -205,8 +205,10 @@ if (isDock) {
     // Asynchronous background syncs (stale-while-revalidate, usage sync, profile sync)
     void (async () => {
       try {
-        const { syncChurchProfile } = await import("./services/churchProfileSync");
+        const { syncChurchProfile, startChurchProfileAutoRefresh } = await import("./services/churchProfileSync");
         void syncChurchProfile();
+        // Pick up changes made on the website while the app stays open.
+        startChurchProfileAutoRefresh();
       } catch { /* best-effort */ }
 
       try {

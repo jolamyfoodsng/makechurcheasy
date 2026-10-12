@@ -227,6 +227,10 @@ export interface ChurchSocialMedia {
   youtube: string;
   twitter: string;
   tiktok: string;
+  /** Also shown as icons in the lower-third graphics. */
+  whatsapp?: string;
+  telegram?: string;
+  threads?: string;
 }
 
 export interface ChurchProfile {

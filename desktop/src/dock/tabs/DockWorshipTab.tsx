@@ -84,6 +84,7 @@ import DockOutputQuickActions, {
   type DockOutputQuickSettingsPatch,
 } from "../components/DockOutputQuickActions";
 import DockSpellcheckTextarea from "../components/DockSpellcheckTextarea";
+import { useDockTabLabelMode } from "../useDockTabLabelMode";
 import { requireEntitlement } from "../dockEntitlement";
 import {
   LOWER_THIRD_FIT_MIN_FONT_SIZE,
@@ -100,6 +101,12 @@ import {
   saveDockPreference,
 } from "../../services/dockPreferenceStorage";
 import { themeSupportsBibleOverlayMode } from "../../bible/themeVariantSupport";
+import {
+  DOCK_THEMES_REFRESHED_EVENT,
+  findRefreshedTheme,
+  themeUsesLayout,
+  type DockThemesRefreshedDetail,
+} from "../dockThemeRefresh";
 import { normalizeCompareThemeSettings } from "../compareThemeConfig";
 import { useDockSceneRoute } from "../dockSceneRouting";
 import { isDockTabVisible } from "../dockTabVisibility";
@@ -116,6 +123,7 @@ import {
 } from "../dockQuickSizePresets";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useTextUndoRedo } from "../useTextUndoRedo";
+import { pickLayoutAdjust } from "../../themes/layout/adjust";
 
 const DocumentSongImport = lazy(() => import("../../../others/SongImportFullprocess"));
 
@@ -123,6 +131,8 @@ interface Props {
   staged: DockStagedItem | null;
   onStage: (item: DockStagedItem | null) => void;
   productionDefaults: DockProductionModuleSettings;
+  /** Themes picked for Notes on the Themes page. */
+  notesProductionDefaults?: DockProductionModuleSettings;
   presentationOutputTarget?: DockPresentationOutputTarget;
   searchPlacement?: DockSearchPlacement;
   fullscreenOnly?: boolean;
@@ -1201,7 +1211,7 @@ function extractQuickThemeSettings(settings: BibleThemeSettings): DockFullscreen
     referenceBackgroundRadius: clampNumber(settings.referenceBackgroundRadius ?? 12, 0, 40),
     lowerThirdPosition: settings.lowerThirdPosition || "center",
     lowerThirdSize: settings.lowerThirdSize || "medium",
-    lowerThirdWidthPreset: settings.lowerThirdWidthPreset || "md",
+    lowerThirdWidthPreset: settings.lowerThirdWidthPreset || "full",
     lowerThirdOffsetX: clampNumber(settings.lowerThirdOffsetX ?? 0, -50, 50),
     backgroundPattern: settings.backgroundPattern ?? "",
     lowerThirdCaptionPosition: settings.lowerThirdCaptionPosition || "bottom",
@@ -1358,7 +1368,7 @@ function sanitizeQuickThemeSettings(
     lowerThirdWidthPreset:
       source.lowerThirdWidthPreset === "full" || source.lowerThirdWidthPreset === "xl" || source.lowerThirdWidthPreset === "lg" || source.lowerThirdWidthPreset === "md" || source.lowerThirdWidthPreset === "sm"
         ? source.lowerThirdWidthPreset
-        : "md",
+        : "full",
     lowerThirdOffsetX: clampNumber(
       Number(source.lowerThirdOffsetX ?? 0),
       -50,
@@ -1424,6 +1434,8 @@ function applyQuickThemeSettings(
     ...theme,
     settings: {
       ...theme.settings,
+      // Size / position tweaks for layer themes (ignored by legacy themes).
+      ...pickLayoutAdjust(quickSettings),
       fontSize: quickSettings.fontSize,
       autoFontScale: true,
       fontFamily: quickSettings.fontFamily,
@@ -1552,6 +1564,7 @@ function DockWorshipTab({
   staged,
   onStage,
   productionDefaults,
+  notesProductionDefaults,
   presentationOutputTarget = "obs",
           searchPlacement = "top",
   fullscreenOnly = false,
@@ -1560,6 +1573,7 @@ function DockWorshipTab({
   compactVerticalNav = false,
   isActive = true,
 }: Props) {
+  const worshipLabel = useDockTabLabelMode("worship");
   const { t } = useTranslation();
   const tabRootRef = useRef<HTMLDivElement>(null);
   const presentationLinkMode = isPresentationLinkTarget(presentationOutputTarget);
@@ -2226,6 +2240,18 @@ function DockWorshipTab({
         return;
       }
       if (msg.type === "state:songs-data" && Array.isArray(msg.payload)) {
+        // While the desktop app is still starting (e.g. right after an update)
+        // it can briefly report an empty library. Don't blank a populated list
+        // on that alone: keep it if the saved library file still has songs.
+        if (msg.payload.length === 0 && rawSongsRef.current.length > 0) {
+          void fetch(`/uploads/dock-worship-songs.json?_=${Date.now()}`, { cache: "no-store" })
+            .then((res) => (res.ok ? res.json() : []))
+            .then((saved) => {
+              if (!Array.isArray(saved) || saved.length === 0) applySongLimit([]);
+            })
+            .catch(() => undefined);
+          return;
+        }
         const nextSongs = mapSongs(msg.payload as Parameters<typeof mapSongs>[0]);
         deferRememberDockSongDefaults(nextSongs);
         applySongLimit(nextSongs);
@@ -2829,7 +2855,7 @@ function DockWorshipTab({
 
   const pushSection = useCallback(
     async (idx: number, options?: { showPresentationMeta?: boolean }) => {
-      void dockObsClient.ensureModuleSourceOpenAndOnTop("worship");
+      void dockObsClient.ensureModuleSourceOpenAndOnTop("worship", fullscreenOnlyMode ? "fullscreen" : overlayMode);
       const payload = buildSectionPayload(idx, options);
       if (!payload) return;
 
@@ -2839,7 +2865,7 @@ function DockWorshipTab({
 
       onStage(payload.stageItem);
     },
-    [buildSectionPayload, onStage],
+    [buildSectionPayload, fullscreenOnlyMode, onStage, overlayMode],
   );
 
   const goLiveSection = useCallback(
@@ -2848,7 +2874,7 @@ function DockWorshipTab({
       quickSettingsOverride?: DockFullscreenQuickThemeSettings;
       awaitFontFit?: boolean;
     }) => {
-      void dockObsClient.ensureModuleSourceOpenAndOnTop("worship");
+      void dockObsClient.ensureModuleSourceOpenAndOnTop("worship", fullscreenOnlyMode ? "fullscreen" : overlayMode);
       const payload = buildSectionPayload(idx, options);
       if (!payload) return;
       const requestId = ++liveSectionRequestIdRef.current;
@@ -2920,7 +2946,7 @@ function DockWorshipTab({
           }
         });
     },
-    [buildSectionPayload, hasSceneRoute, onStage, presentationLinkMode, pushWorshipToConfiguredOutput, sceneRoute.syncPresentation],
+    [buildSectionPayload, fullscreenOnlyMode, hasSceneRoute, onStage, overlayMode, presentationLinkMode, pushWorshipToConfiguredOutput, sceneRoute.syncPresentation],
   );
 
   const saveSongInMainApp = useCallback(
@@ -3344,7 +3370,16 @@ function DockWorshipTab({
 
       const liveOverlayMode = fullscreenOnlyMode ? "fullscreen" : overlayMode;
       if (targetModes.includes(liveOverlayMode) && (sourceTab !== "worship" || sourceMode !== liveOverlayMode)) {
-        if (worshipOverlayVisible && activeSectionIndex !== null) {
+        // Only re-send a section that was really projected from this tab and
+        // is still on air. `worshipOverlayVisible` starts as true and the
+        // restored song/slide is only selected, so without these checks a
+        // quick edit saved in Notes (or Bible) re-published an old song in
+        // Lower third over the Notes slide on the shared Worship/Notes source.
+        const worshipIsOnAir = worshipOverlayVisible
+          && visibleIdx !== null
+          && activeSectionIndex !== null
+          && !dockObsClient.isSharedWorshipNotesSourceHeldByOther("worship");
+        if (worshipIsOnAir) {
           void goLiveSection(activeSectionIndex, {
             quickSettingsOverride: quickSettings,
             awaitFontFit: true,
@@ -3369,6 +3404,78 @@ function DockWorshipTab({
     fullscreenOnlyMode,
     goLiveSection,
     overlayMode,
+    visibleIdx,
+    worshipOverlayVisible,
+  ]);
+
+  // A theme was edited in the app: swap in the new copy of the selected one so bold,
+  // colours, backgrounds and layers show up without reselecting it.
+  useEffect(() => {
+    const handleThemesRefreshed = (event: Event) => {
+      const themes = (event as CustomEvent<DockThemesRefreshedDetail>).detail?.themes ?? [];
+      const freshFS = findRefreshedTheme(selectedFSThemeRef.current, themes, "fullscreen");
+      const freshLT = findRefreshedTheme(selectedLTThemeRef.current, themes, "lower-third");
+      if (!freshFS && !freshLT) return;
+      manualThemeSettingsSelectionRef.current = true;
+
+      if (freshFS) {
+        setSelectedFSTheme(freshFS);
+        selectedFSThemeRef.current = freshFS;
+        // Layer themes keep the operator's size / background tweaks; classic themes
+        // restart from the edited look because their saved quick settings are a copy of the old one.
+        const keep = themeUsesLayout(freshFS, "fullscreen") ? fullscreenQuickThemeSettings : null;
+        if (!keep) {
+          setSavedFullscreenQuickThemeSettings(null);
+          setFullscreenQuickThemeSettings(null);
+        }
+        liveFullscreenThemeSettingsRef.current = keep
+          ? applyQuickThemeSettings(
+            getWorshipThemeVariantForMode(freshFS, "fullscreen"),
+            keep,
+          ).settings as unknown as Record<string, unknown>
+          : null;
+      }
+      if (freshLT) {
+        setSelectedLTTheme(freshLT);
+        selectedLTThemeRef.current = freshLT;
+        const keep = themeUsesLayout(freshLT, "lower-third") ? lowerThirdQuickThemeSettings : null;
+        if (!keep) {
+          setSavedLowerThirdQuickThemeSettings(null);
+          setLowerThirdQuickThemeSettings(null);
+        }
+        liveLowerThirdThemeSettingsRef.current = keep
+          ? applyQuickThemeSettings(
+            getWorshipThemeVariantForMode(freshLT, "lower-third"),
+            normalizeLowerThirdFitSettings(keep),
+          ).settings as unknown as Record<string, unknown>
+          : null;
+      }
+
+      // Re-send what is on air with the edited theme, once the new theme state has rendered.
+      const liveMode = fullscreenOnlyMode ? "fullscreen" : overlayMode;
+      const affectsLiveMode = liveMode === "fullscreen" ? Boolean(freshFS) : Boolean(freshLT);
+      if (
+        affectsLiveMode
+        && worshipOverlayVisible
+        && visibleIdx !== null
+        && activeSectionIndex !== null
+        && !dockObsClient.isSharedWorshipNotesSourceHeldByOther("worship")
+      ) {
+        pendingQuickSettingsRefreshRef.current = true;
+        pendingQuickSettingsOverrideRef.current = null;
+        setQuickSettingsRefreshNonce((current) => current + 1);
+      }
+    };
+
+    window.addEventListener(DOCK_THEMES_REFRESHED_EVENT, handleThemesRefreshed);
+    return () => window.removeEventListener(DOCK_THEMES_REFRESHED_EVENT, handleThemesRefreshed);
+  }, [
+    activeSectionIndex,
+    fullscreenOnlyMode,
+    fullscreenQuickThemeSettings,
+    lowerThirdQuickThemeSettings,
+    overlayMode,
+    visibleIdx,
     worshipOverlayVisible,
   ]);
 
@@ -3969,6 +4076,12 @@ function DockWorshipTab({
       if (worshipOverlayVisible) {
         // Invalidate an older lyric push before the hide batch starts.
         setWorshipOverlayVisible(false);
+        // Play the overlay's exit animation before the source is hidden.
+        await dockObsClient.animateOutPresentationOverlay("worship", {
+          mode: fullscreenOnlyMode ? "fullscreen" : overlayMode,
+          includePresentation: !hasSceneRoute || sceneRoute.syncPresentation,
+          targets: hasSceneRoute ? sceneRoute.targets : [],
+        }).catch(() => { });
         await clearWorshipFromConfiguredOutput();
         return;
       }
@@ -3992,7 +4105,7 @@ function DockWorshipTab({
       visibilityActionInFlightRef.current = false;
       setVisibilityActionPending(false);
     }
-  }, [activeSectionIndex, clearWorshipFromConfiguredOutput, fullscreenOnlyMode, goLiveSection, hasSceneRoute, onStage, overlayMode, presentationLinkMode, worshipOverlayVisible]);
+  }, [activeSectionIndex, clearWorshipFromConfiguredOutput, fullscreenOnlyMode, goLiveSection, hasSceneRoute, onStage, overlayMode, presentationLinkMode, sceneRoute.syncPresentation, sceneRoute.targets, worshipOverlayVisible]);
 
   const handleTogglePresentationMeta = useCallback(async () => {
     const nextShowMeta = !showPresentationMeta;
@@ -5091,6 +5204,9 @@ function DockWorshipTab({
                   onOverlayModeChange={fullscreenOnlyMode ? undefined : handleOverlayModeChange}
                   onToggleOutputVisible={() => { void handleToggleWorshipVisibility(); }}
                   outputVisibilityPending={visibilityActionPending}
+                  labelMode={worshipLabel.labelMode}
+                  labelOptions={worshipLabel.labelOptions}
+                  onLabelModeChange={worshipLabel.setLabelMode}
                 />
               </section>
 
@@ -5359,6 +5475,7 @@ function DockWorshipTab({
               isActive={worshipSubTab === "notes"}
               presentationOutputTarget={presentationOutputTarget}
               searchPlacement={searchPlacement}
+              productionDefaults={notesProductionDefaults}
             />
           </div>
         )}

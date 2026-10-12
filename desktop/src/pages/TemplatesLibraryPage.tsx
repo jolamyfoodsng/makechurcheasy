@@ -31,6 +31,7 @@ import {
 import { deleteCustomTheme } from "../bible/bibleDb";
 import Icon from "../components/Icon";
 import ThemeCreatorModal from "./ThemeCreatorModal";
+import { useThemeCreateGate } from "../hooks/useThemeCreateGate";
 import ThemePreviewSurface from "../components/ThemePreviewSurface";
 
 // ---------------------------------------------------------------------------
@@ -351,6 +352,7 @@ export default function TemplatesLibraryPage() {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showCreator, setShowCreator] = useState(false);
+  const themeGate = useThemeCreateGate();
   const [editThemeData, setEditThemeData] = useState<BibleTheme | null>(null);
   const [showMyThemesOnly, setShowMyThemesOnly] = useState(false);
 
@@ -561,7 +563,8 @@ export default function TemplatesLibraryPage() {
   }, [customThemes]);
 
   // ── Clone any fullscreen theme ──
-  const handleCloneTheme = useCallback((theme: UnifiedTheme) => {
+  const handleCloneTheme = useCallback(async (theme: UnifiedTheme) => {
+    if (!(await themeGate.guard())) return;
     // Find in builtins or custom
     const original =
       BUILTIN_THEMES.find((t) => t.id === theme.id) ||
@@ -576,7 +579,7 @@ export default function TemplatesLibraryPage() {
     };
     setEditThemeData(clone);
     setShowCreator(true);
-  }, [customThemes]);
+  }, [customThemes, themeGate.guard]);
 
   // ── Counts ──
   const totalCount = allThemes.length;
@@ -602,8 +605,11 @@ export default function TemplatesLibraryPage() {
           <button
             className="tlib-create-btn"
             onClick={() => {
-              setEditThemeData(null);
-              setShowCreator(true);
+              void themeGate.guard().then((ok) => {
+                if (!ok) return;
+                setEditThemeData(null);
+                setShowCreator(true);
+              });
             }}
             title="Create">
             <Icon name="add" size={18} />
@@ -1017,6 +1023,7 @@ export default function TemplatesLibraryPage() {
         </div>
       )}
 
+      {themeGate.modal}
       {/* ── Theme Creator Modal ── */}
       {showCreator && (
         <ThemeCreatorModal

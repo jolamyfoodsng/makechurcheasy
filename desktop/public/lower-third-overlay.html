@@ -720,10 +720,53 @@
     /**
      * Replace all {{variable}} placeholders in template HTML
      */
+    // ── Per-text soft styling ("<key>__style": case=upper;size=120;weight=bold;italic=1;spacing=wide).
+    // Keep in step with src/lowerthirds/textStyle.ts.
+    var TS_WEIGHTS = { light: "300", normal: "400", semibold: "600", bold: "700", black: "900" };
+    var TS_SPACING = { tight: "-0.02em", wide: "0.06em", wider: "0.16em" };
+    function parseTextStyle(raw) {
+      var st = { textCase: "none", size: 100, weight: "", italic: false, spacing: "" };
+      var text = typeof raw === "string" ? raw : "";
+      if (!text || text.indexOf("{{") === 0) return st;
+      text.split(";").forEach(function (part) {
+        var kv = part.split("="); var k = (kv[0] || "").trim(); var v = (kv[1] || "").trim();
+        if (k === "case") st.textCase = v;
+        else if (k === "size" && isFinite(Number(v))) st.size = Math.min(180, Math.max(60, Math.round(Number(v))));
+        else if (k === "weight") st.weight = TS_WEIGHTS[v] || "";
+        else if (k === "italic") st.italic = v === "1" || v === "true";
+        else if (k === "spacing") st.spacing = TS_SPACING[v] || "";
+      });
+      return st;
+    }
+    function applyTextCase(text, textCase) {
+      var value = String(text == null ? "" : text);
+      if (textCase === "upper") return value.toUpperCase();
+      if (textCase === "lower") return value.toLowerCase();
+      if (textCase === "title") return value.toLowerCase().replace(/(^|[\s\-/("'\u201c\u2018|])(\p{L})/gu, function (_m, sep, ch) { return sep + ch.toUpperCase(); });
+      if (textCase === "sentence") return value.toLowerCase().replace(/(^\s*|[.!?|]\s+)(\p{L})/gu, function (_m, sep, ch) { return sep + ch.toUpperCase(); });
+      return value;
+    }
+    function textStyleCss(st) {
+      var css = [];
+      if (st.textCase && st.textCase !== "none") css.push("text-transform:none!important");
+      if (st.size !== 100) css.push("font-size:" + st.size + "%!important");
+      if (st.weight) css.push("font-weight:" + st.weight + "!important");
+      if (st.italic) css.push("font-style:italic!important");
+      if (st.spacing) css.push("letter-spacing:" + st.spacing + "!important");
+      return css.join(";");
+    }
+
     function substituteVariables(html, values) {
       if (!values || typeof values !== "object") return html;
-      return html.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-        return values.hasOwnProperty(key) ? escapeHtml(values[key]) : match;
+      return html.replace(/\{\{(\w+)\}\}/g, (match, key, offset) => {
+        if (!values.hasOwnProperty(key)) return match;
+        if (/__style$/.test(key)) return escapeHtml(values[key]);
+        const st = parseTextStyle(values[key + "__style"]);
+        const escaped = escapeHtml(applyTextCase(values[key], st.textCase));
+        const css = textStyleCss(st);
+        // Inside a tag (an attribute such as data-v-name) only the letter case applies.
+        if (!css || html.lastIndexOf("<", offset) > html.lastIndexOf(">", offset)) return escaped;
+        return '<span class="lt-ts" style="' + css + '">' + escaped + "</span>";
       });
     }
 

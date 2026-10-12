@@ -40,6 +40,14 @@ describe("MVSettings Critical Vocabulary & Tab Completeness", () => {
     expect(allTabIds.length).toBe(11);
   });
 
+  it("lists Mobile Companion under Coming soon, not under Production & Stream", () => {
+    const production = SETTINGS_CATEGORIES.find((c) => c.group === "Production & Stream")!;
+    expect(production.items.map((i) => i.id)).not.toContain("mobile");
+    const soon = SETTINGS_CATEGORIES.find((c) => c.group === "Coming soon")!;
+    expect(soon.items.map((i) => i.id)).toEqual(["mobile"]);
+    expect(soon.items.every((i) => i.comingSoon === true)).toBe(true);
+  });
+
   it("includes broadcast and all 11 tabs in validTabs for direct navigation and URL search params", () => {
     expect(mvSettingsSource).toContain('validTabs: SettingsTab[] = ["general", "appearance", "bible", "branding", "obs", "broadcast", "mobile", "automation", "usage", "storage", "audio"]');
     expect(mvSettingsSource).toContain("setActiveTab(tabParam)");

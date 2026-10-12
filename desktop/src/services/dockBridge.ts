@@ -60,7 +60,9 @@ export type DockCommandType =
   // General
   | "ping"
   | "request-state"
-  | "request-library-data";
+  | "request-library-data"
+  // Dock asks the app to re-fetch the account's themes and rewrite the Dock theme files
+  | "themes:sync";
 
 export interface DockCommand {
   type: DockCommandType;

@@ -10,10 +10,10 @@ import { DOCK_FONT_FAMILY_OPTIONS, normalizeDockFontFamily } from "./dockFontFam
 
 describe("tickerThemeCatalog", () => {
   it("includes permanent ticker themes when they are favorited", () => {
-    const options = getDockTickerThemeOptionsForFavorites(new Set(["ticker-social-footer"]));
+    const options = getDockTickerThemeOptionsForFavorites(new Set(["ticker-bottom"]));
 
-    expect(options.map((option) => option.id)).toContain("ticker-social-footer");
-    expect(options.find((option) => option.id === "ticker-social-footer")?.source).toBe("permanent");
+    expect(options.map((option) => option.id)).toContain("ticker-bottom");
+    expect(options.find((option) => option.id === "ticker-bottom")?.source).toBe("permanent");
   });
 
   it("renders permanent ticker themes with live ticker controls", () => {
@@ -116,8 +116,8 @@ describe("tickerThemeCatalog", () => {
     expect(html).toContain("◆");
   });
 
-  it("applies spacing and a creative divider to the social footer ticker", () => {
-    const option = resolveDockTickerThemeOption("ticker-social-footer");
+  it("applies spacing and a creative divider to a permanent HTML ticker", () => {
+    const option = resolveDockTickerThemeOption("ticker-bottom");
     const html = renderDockTickerThemeHtml({
       option: option!,
       heading: "Follow Us",
@@ -131,6 +131,25 @@ describe("tickerThemeCatalog", () => {
 
     expect(html).toContain("gap: calc(22px + 50px)");
     expect(html).toContain('content: "✦";');
+  });
+
+  it("shows the live time in the Sunrise Clock heading and keeps it ticking", () => {
+    const option = resolveDockTickerThemeOption("ticker-sunrise-clock");
+    expect(option?.source).toBe("permanent");
+    const html = renderDockTickerThemeHtml({
+      option: option!,
+      heading: "",
+      messages: ["Welcome"],
+      speed: 50,
+      position: "bottom",
+      loop: true,
+      divider: "theme",
+      messageSpacing: 0,
+    });
+    expect(html).toContain("data-live-clock");
+    expect(html).not.toContain("{{clock}}");
+    expect(html).toMatch(/data-live-clock>\d{1,2}[:.]\d{2}/);
+    expect(html).toContain("setInterval(t,1000)");
   });
 
   it("formats presentation ticker text with the selected divider and spacing", () => {

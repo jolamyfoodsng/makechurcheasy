@@ -11,6 +11,7 @@ import { getDeviceLimitForPlan, evictOtherActiveDevices } from "@/lib/deviceLimi
 import { isDeviceLimitExceeded } from "@/lib/deviceLimitPolicy";
 import { getDesktopConfig } from "@/lib/configService";
 import { getAnnouncementsForUser } from "@/lib/announcements";
+import { computeEntitledUntil } from "@/lib/entitledUntil";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -335,6 +336,20 @@ export async function GET(req: NextRequest) {
       trialEndsAt,
       subscriptionEndsAt,
       renewalDate,
+      // Lets the desktop stop paid features the moment they end, even offline.
+      entitledUntil: computeEntitledUntil({
+        effectivePlan,
+        role: user.role,
+        trialActive,
+        trialEndsAt,
+        subscriptionStatus,
+        subscriptionEndsAt,
+        renewalDate,
+        gracePeriodEndsAt: subscription?.gracePeriodEndsAt ?? null,
+        ambassador: user.ambassador,
+        adminTemporaryPlan: user.adminTemporaryPlan,
+        adminManagedSubscription: user.adminManagedSubscription,
+      }),
       paymentStatus,
       internetVerificationDays,
       verificationIntervalHours,

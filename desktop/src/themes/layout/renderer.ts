@@ -20,6 +20,7 @@ import {
   timing,
   totalDuration,
 } from "./animations";
+import { headingLayers } from "./heading";
 import { fillTokens, hasTokens, isVerseTextPattern, resolveTokens, splitVerseLines, type ResolvedTokens } from "./content";
 import {
   DESIGN_HEIGHT,
@@ -53,6 +54,8 @@ interface LayerNode {
   isVerse: boolean;
   lastValue: string;
   empty: boolean;
+  /** "text" = the reference / label; "decor" = a box or line drawn behind it. */
+  heading: "text" | "decor" | null;
   loopAnims: Animation[];
 }
 
@@ -75,6 +78,8 @@ const BASE_CSS = `
 .mtl-num{font-size:.55em;vertical-align:super;line-height:0;margin-right:.25em;font-weight:inherit;opacity:.85}
 .mtl-w{display:inline-block;white-space:pre}
 .mtl-img{display:block;width:100%;height:100%}
+.mtl-media{position:absolute;left:0;top:0}
+.mtl-dim{position:absolute;inset:0;pointer-events:none}
 .mtl-hidden{display:none!important}
 `;
 
@@ -119,6 +124,11 @@ function nextFrame(): Promise<void> {
   return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
+/** Longest the old layout may take to play out on a Full <-> Lower third switch. */
+const MODE_SWITCH_MAX_OUT_MS = 450;
+/** Stage fade used on a mode switch when the layers have no out animation. */
+const MODE_SWITCH_FALLBACK_FADE_MS = 220;
+
 function finished(anims: Animation[]): Promise<void> {
   return Promise.all(anims.map((a) => a.finished.catch(() => undefined))).then(() => undefined);
 }
@@ -136,7 +146,13 @@ export class ThemeRenderer {
   private visibleState = false;
   private running: Animation[] = [];
   private queue: Promise<void> = Promise.resolve();
-  private pending: { kind: "show"; content: ThemeContent } | { kind: "hide" } | null = null;
+  private pending:
+    | { kind: "show"; content: ThemeContent }
+    | { kind: "hide"; maxOutMs?: number }
+    | { kind: "switch"; layout: ThemeLayout; content: ThemeContent | null }
+    | null = null;
+  /** Bumped every time the layout DOM is rebuilt, so a mode switch can tell it was superseded. */
+  private layoutEpoch = 0;
   private resizeObserver: ResizeObserver | null = null;
   private onWindowResize = () => this.rescale();
   private content: ThemeContent | null = null;
@@ -178,6 +194,9 @@ export class ThemeRenderer {
     const nextHash = hashLayout(layout);
     if (nextHash === this.hash) return false;
     const wasVisible = this.visibleState;
+    this.layoutEpoch++;
+    // An explicit layout change replaces a queued mode switch.
+    if (this.pending?.kind === "switch") this.pending = null;
     this.cancelRunning();
     this.stopLoops();
     this.stage.textContent = "";
@@ -199,9 +218,28 @@ export class ThemeRenderer {
     return this.drain();
   }
 
-  /** Play everything out, then hide. */
-  hide(): Promise<void> {
-    this.pending = { kind: "hide" };
+  /**
+   * Mode switch (Full <-> Lower third): play the current layout out, build the
+   * new layout while nothing is on screen, then play the new one in. With
+   * nothing visible, or an unchanged layout, this is just setLayout + show.
+   */
+  switchLayout(layout: ThemeLayout, content?: ThemeContent | null): Promise<void> {
+    const next = content ?? this.content;
+    if (!this.visibleState || hashLayout(layout) === this.hash) {
+      this.setLayout(layout);
+      return next ? this.show(next) : Promise.resolve();
+    }
+    this.pending = { kind: "switch", layout, content: next };
+    return this.drain();
+  }
+
+  /**
+   * Play everything out, then hide. `maxOutMs` bounds how long the out may take
+   * (and fades the stage if the layers have no out animation), for callers
+   * that must be done by a deadline, like a mode switch.
+   */
+  hide(maxOutMs?: number): Promise<void> {
+    this.pending = { kind: "hide", maxOutMs };
     return this.drain();
   }
 
@@ -240,7 +278,8 @@ export class ThemeRenderer {
         const job = this.pending;
         this.pending = null;
         if (job.kind === "show") await this.runShow(job.content);
-        else await this.runHide();
+        else if (job.kind === "switch") await this.runSwitch(job.layout, job.content);
+        else await this.runHide(job.maxOutMs);
       }
     }).catch((err) => {
       console.error("[ThemeRenderer]", err);
@@ -267,17 +306,53 @@ export class ThemeRenderer {
     }
     const tokens = resolveTokens(content);
     const changed = this.nodes.filter((n) => n.usesTokens && this.valueFor(n, tokens, content) !== n.lastValue);
+    // The heading box goes with its label: out when the label goes blank, in when it comes back.
+    const headingEmpty = this.headingEmpty(tokens, content);
+    changed.push(...this.nodes.filter((n) => n.heading === "decor" && n.empty !== headingEmpty));
     if (!changed.length && prev) return;
     await this.playOut(changed, 0.6);
     this.timeSwap(() => {
       for (const n of changed) this.applyContent(n, tokens, content);
+      this.syncHeadingDecor(headingEmpty);
     });
     await this.playIn(changed.filter((n) => !n.empty), 0.8);
   }
 
-  private async runHide() {
+  private async runSwitch(layout: ThemeLayout, content: ThemeContent | null) {
+    const epoch = this.layoutEpoch;
+    // Keep a live mode switch snappy even if the theme's out is long.
+    if (this.visibleState) await this.playOutWithin(MODE_SWITCH_MAX_OUT_MS);
+    // Something else set a newer layout while we were fading out: it owns the stage now.
+    if (this.layoutEpoch !== epoch) return;
+    this.cancelRunning();
+    this.stopLoops();
+    this.stage.classList.remove("is-visible");
+    this.visibleState = false;
+    this.setLayout(layout);
+    if (content) await this.runShow(content);
+  }
+
+  /** Play the whole layout out within `maxMs`; with no out animation set, fade the stage instead of cutting. */
+  private async playOutWithin(maxMs: number) {
+    const outs = this.nodes.filter((n) => !n.empty).map((n) => n.layer.out);
+    const total = totalDuration(outs);
+    if (total > 0) {
+      await this.playOut(this.nodes, total > maxMs ? maxMs / total : 1);
+      return;
+    }
+    await finished([
+      this.animate(this.stage, [{ opacity: 1 }, { opacity: 0 }], {
+        duration: Math.min(MODE_SWITCH_FALLBACK_FADE_MS, maxMs),
+        easing: "ease-in",
+        fill: "forwards",
+      }),
+    ]);
+  }
+
+  private async runHide(maxOutMs?: number) {
     if (!this.visibleState) return;
-    await this.playOut(this.nodes);
+    if (maxOutMs && maxOutMs > 0) await this.playOutWithin(maxOutMs);
+    else await this.playOut(this.nodes);
     this.cancelRunning();
     this.stopLoops();
     this.stage.classList.remove("is-visible");
@@ -298,9 +373,11 @@ export class ThemeRenderer {
 
   private build(layout: ThemeLayout) {
     const byId = new Map<string, LayerNode>();
+    const heading = headingLayers(layout);
     for (const layer of layout.layers) {
       if (layer.hidden) continue;
       const node = this.createNode(layer);
+      node.heading = heading.text.has(layer.id) ? "text" : heading.decor.has(layer.id) ? "decor" : null;
       byId.set(layer.id, node);
       this.nodes.push(node);
     }
@@ -308,6 +385,55 @@ export class ThemeRenderer {
       const parent = node.layer.parentId ? byId.get(node.layer.parentId) : undefined;
       (parent ? parent.el : this.stage).appendChild(node.pos);
     }
+  }
+
+  /** Adds the layer's video (preferred) or picture. Returns false when neither URL is usable. */
+  private appendMedia(el: HTMLElement, s: ThemeLayer["style"]): boolean {
+    const d = this.doc;
+    const resolve = (v: string) => safeUrl(v ? (this.opts.resolveAsset ? this.opts.resolveAsset(v) : v) : "");
+    const videoSrc = resolve(s.videoSrc || "");
+    const src = resolve(s.src || "");
+    if (videoSrc) {
+      const video = d.createElement("video");
+      video.className = "mtl-img mtl-media";
+      video.muted = true;
+      video.defaultMuted = true;
+      video.loop = true;
+      video.autoplay = true;
+      video.playsInline = true;
+      video.preload = "auto";
+      video.setAttribute("muted", "");
+      video.src = videoSrc;
+      video.style.objectFit = s.fit || "cover";
+      el.appendChild(video);
+      try {
+        const started = video.play();
+        if (started && typeof started.catch === "function") started.catch(() => undefined);
+      } catch {
+        /* autoplay can be blocked in a plain browser; OBS plays it */
+      }
+      return true;
+    }
+    if (src) {
+      const img = d.createElement("img");
+      img.className = "mtl-img mtl-media";
+      img.decoding = "async";
+      img.alt = "";
+      img.src = src;
+      img.style.objectFit = s.fit || "cover";
+      el.appendChild(img);
+      return true;
+    }
+    return false;
+  }
+
+  /** Darkness over a layer's picture / video (style.dim, percent). */
+  private appendDim(el: HTMLElement, s: ThemeLayer["style"]) {
+    if (!(s.src || s.videoSrc) || !s.dim) return;
+    const dim = this.doc.createElement("div");
+    dim.className = "mtl-dim";
+    dim.style.background = `rgba(0,0,0,${Math.min(100, Math.max(0, s.dim)) / 100})`;
+    el.appendChild(dim);
   }
 
   private createNode(layer: ThemeLayer): LayerNode {
@@ -318,10 +444,12 @@ export class ThemeRenderer {
     pos.dataset.layerId = layer.id;
     const [sx, sy] = ANCHOR_SHIFT[layer.anchor] || ANCHOR_SHIFT["top-left"];
     const auto = layer.h === "auto";
+    const hug = layer.type === "text" && s.hug === true;
     Object.assign(pos.style, {
       left: `${layer.x}px`,
       top: `${layer.y}px`,
-      width: `${Math.max(1, layer.w)}px`,
+      width: hug ? "max-content" : `${Math.max(1, layer.w)}px`,
+      maxWidth: hug ? `${Math.max(1, layer.w)}px` : "",
       height: auto ? "auto" : `${Math.max(1, layer.h as number)}px`,
       transform: `translate(${sx}%, ${sy}%)${layer.rotation ? ` rotate(${layer.rotation}deg)` : ""}`,
       opacity: String(layer.opacity ?? 1),
@@ -349,6 +477,11 @@ export class ThemeRenderer {
       surface.style.background = bg;
       el.appendChild(surface);
     }
+    // Box layers can carry a picture or video over their fill (Theme Editor → Background).
+    if (layer.type === "box" && (s.src || s.videoSrc) && this.appendMedia(el, s)) {
+      es.overflow = "hidden";
+    }
+    if (layer.type === "box") this.appendDim(el, s);
     if (layer.loop?.preset === "shimmer") {
       shine = d.createElement("div");
       shine.className = "mtl-shine";
@@ -357,16 +490,8 @@ export class ThemeRenderer {
 
     let text: HTMLDivElement | null = null;
     if (layer.type === "image") {
-      const src = safeUrl(s.src ? (this.opts.resolveAsset ? this.opts.resolveAsset(s.src) : s.src) : "");
-      if (src) {
-        const img = d.createElement("img");
-        img.className = "mtl-img";
-        img.decoding = "async";
-        img.alt = "";
-        img.src = src;
-        img.style.objectFit = s.fit || "cover";
-        el.appendChild(img);
-      }
+      this.appendMedia(el, s);
+      this.appendDim(el, s);
     } else if (layer.type === "text") {
       text = d.createElement("div");
       text.className = "mtl-text";
@@ -384,6 +509,11 @@ export class ThemeRenderer {
       if (s.letterSpacing) ts.letterSpacing = `${s.letterSpacing}px`;
       if (s.textTransform) ts.textTransform = s.textTransform;
       if (s.textShadow) ts.textShadow = s.textShadow;
+      if (s.underline) {
+        ts.textDecoration = "underline";
+        ts.textUnderlineOffset = "0.18em";
+        ts.setProperty("text-decoration-thickness", "0.07em");
+      }
       el.appendChild(text);
     }
 
@@ -398,6 +528,7 @@ export class ThemeRenderer {
       isVerse: layer.type === "text" && isVerseTextPattern(layer.content),
       lastValue: "\u0000",
       empty: false,
+      heading: null,
       loopAnims: [],
     };
   }
@@ -406,6 +537,7 @@ export class ThemeRenderer {
 
   private valueFor(n: LayerNode, tokens: ResolvedTokens, content: ThemeContent): string {
     if (n.layer.type !== "text") return "";
+    if (n.heading === "text" && this.layout?.showHeading === false) return "";
     if (n.isVerse) return `${content.lineCount ?? ""}|${tokens.text}`;
     return fillTokens(n.layer.content || "", tokens);
   }
@@ -413,6 +545,24 @@ export class ThemeRenderer {
   private applyAllContent(content: ThemeContent) {
     const tokens = resolveTokens(content);
     for (const n of this.nodes) this.applyContent(n, tokens, content);
+    this.syncHeadingDecor(this.headingEmpty(tokens, content));
+  }
+
+  /** The heading is empty when it's switched off or every heading text is blank. */
+  private headingEmpty(tokens: ResolvedTokens, content: ThemeContent): boolean {
+    if (this.layout?.showHeading === false) return true;
+    const texts = this.nodes.filter((n) => n.heading === "text");
+    if (!texts.length) return false;
+    return texts.every((n) => n.layer.hideWhenEmpty !== false && this.valueFor(n, tokens, content).trim() === "");
+  }
+
+  /** Boxes / lines behind the heading follow it: hidden with no label, shown with one. */
+  private syncHeadingDecor(empty: boolean) {
+    for (const n of this.nodes) {
+      if (n.heading !== "decor") continue;
+      n.empty = empty;
+      n.pos.classList.toggle("mtl-hidden", empty);
+    }
   }
 
   private applyContent(n: LayerNode, tokens: ResolvedTokens, content: ThemeContent) {
@@ -656,7 +806,7 @@ export class ThemeRenderer {
       if (layer.type === "text" && s.fontFamily && doc.fonts?.load) {
         loads.push(doc.fonts.load(`${s.italic ? "italic " : ""}${s.fontWeight || 400} 32px "${s.fontFamily}"`).catch(() => undefined));
       }
-      if (layer.type === "image" && s.src) {
+      if ((layer.type === "image" || layer.type === "box") && s.src && !s.videoSrc) {
         const src = safeUrl(this.opts.resolveAsset ? this.opts.resolveAsset(s.src) : s.src);
         if (src) {
           const img = new Image();

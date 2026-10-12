@@ -31,7 +31,8 @@ import {
   type CompareTextAlign
 } from "../compareThemeConfig";
 import type { DockBackgroundPreset } from "../dockConsoleTheme";
-import { loadDockFavoriteBibleThemes } from "../dockThemeData";
+import { loadDockFavoriteBibleThemes, loadDockThemesForArea } from "../dockThemeData";
+import { dockAreaFromScope, type DockThemeArea } from "../../services/dockThemeAvailability";
 import {
   LOWER_THIRD_FIT_MIN_FONT_SIZE,
   LOWER_THIRD_FIT_MIN_REFERENCE_FONT_SIZE,
@@ -40,6 +41,10 @@ import {
 } from "../lowerThirdQuickSettings";
 import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuickSettings";
 import { TextEffectsPicker } from "./TextEffectsPicker";
+import LayoutThemeAdjustPanel from "./LayoutThemeAdjustPanel";
+import { BUILTIN_THEMES } from "../../bible/themes/builtinThemes";
+import { DOCK_THEMES_REFRESHED_EVENT, type DockThemesRefreshedDetail } from "../dockThemeRefresh";
+import type { ThemeLayout } from "../../themes/layout/types";
 
 /* ── Types ── */
 type BackgroundType = "off" | "theme" | "color" | "image" | "pattern" | "video";
@@ -244,6 +249,13 @@ function sliderProgress(value: number, min: number, max: number): CSSProperties 
   const safeValue = Number.isFinite(value) ? value : min;
   const progress = Math.min(100, Math.max(0, ((safeValue - min) / (max - min)) * 100));
   return { "--dtb-slider-progress": `${progress}%` } as CSSProperties;
+}
+
+/** The layer layout a theme draws in this mode, if it is a layer (ready-made) theme. */
+function layoutForMode(theme: BibleTheme, mode: "fullscreen" | "lower-third"): ThemeLayout | null {
+  const variant = mode === "lower-third" ? theme.variants?.lowerThird : theme.variants?.fullscreen;
+  const layout = variant?.settings?.layout ?? theme.settings?.layout;
+  return layout && layout.format === mode ? layout : null;
 }
 
 function inferBgTypeFromSettings(qs: DockFullscreenQuickThemeSettings): BackgroundType {
@@ -466,6 +478,48 @@ export default function BackgroundPickerCard({
   const referenceStyleLinkedRef = useRef(referenceStyleLinked);
   referenceStyleLinkedRef.current = referenceStyleLinked;
   const isCompactHeight = pickerHeight > 0 && pickerHeight <= BACKGROUND_PICKER_COMPACT_HEIGHT;
+
+  // Ready-made layer themes bring their own fonts, colours and effects, so the
+  // Text / Layout editors are swapped for a simple size & position panel.
+  const [layerTheme, setLayerTheme] = useState<{ name: string; layout: ThemeLayout } | null>(() => {
+    const builtin = BUILTIN_THEMES.find((theme) => theme.id === _selectedThemeId);
+    const layout = builtin ? layoutForMode(builtin, overlayMode) : null;
+    return builtin && layout ? { name: builtin.name, layout } : null;
+  });
+  useEffect(() => {
+    let cancelled = false;
+    const resolve = async () => {
+      if (!_selectedThemeId) return null;
+      let theme = BUILTIN_THEMES.find((item) => item.id === _selectedThemeId);
+      if (!theme) {
+        try {
+          theme = (await loadDockFavoriteBibleThemes()).find((item) => item.id === _selectedThemeId);
+        } catch {
+          theme = undefined;
+        }
+      }
+      const layout = theme ? layoutForMode(theme, overlayMode) : null;
+      return theme && layout ? { name: theme.name, layout } : null;
+    };
+    void resolve().then((next) => {
+      if (!cancelled) setLayerTheme(next);
+    });
+    // A theme edited in the app: use the fresh copy (new layers / colours) right away.
+    const onRefreshed = (event: Event) => {
+      const fresh = (event as CustomEvent<DockThemesRefreshedDetail>).detail?.themes?.find((item) => item.id === _selectedThemeId);
+      const layout = fresh ? layoutForMode(fresh, overlayMode) : null;
+      if (!cancelled && fresh) setLayerTheme(layout ? { name: fresh.name, layout } : null);
+    };
+    window.addEventListener(DOCK_THEMES_REFRESHED_EVENT, onRefreshed);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(DOCK_THEMES_REFRESHED_EVENT, onRefreshed);
+    };
+  }, [_selectedThemeId, overlayMode]);
+  const simpleLayerMode = Boolean(layerTheme) && displayMode !== "compare";
+  // Full-screen layer themes draw their own background layer; the Background tab swaps it
+  // (colour / image / video / off) and darkens it. Lower thirds have no full-screen background.
+  const layerBackdropMode = simpleLayerMode && layerTheme?.layout.format === "fullscreen";
 
   // Restore scroll position on mount or tab change
   useEffect(() => {
@@ -855,18 +909,19 @@ export default function BackgroundPickerCard({
                   <button
                     type="button"
                     role="tab"
-                    aria-selected={activeTab === "text"}
+                    aria-selected={activeTab === "text" || (simpleLayerMode && activeTab === "layout")}
                     aria-label={t('bgPicker.text')}
                     title={t('bgPicker.text')}
-                    className={`dtb-bg-picker__tab${activeTab === "text" ? " dtb-bg-picker__tab--active" : ""}`}
+                    className={`dtb-bg-picker__tab${activeTab === "text" || (simpleLayerMode && activeTab === "layout") ? " dtb-bg-picker__tab--active" : ""}`}
                     onClick={() => {
                       setActiveTab("text");
                       handleTabChange("text");
                     }}
                   >
-                    <Icon name="text_fields" size={15} />
-                    <span>{t('bgPicker.text')}</span>
+                    <Icon name={simpleLayerMode ? "tune" : "text_fields"} size={15} />
+                    <span>{simpleLayerMode ? t('bgPicker.sizeTab', 'Size') : t('bgPicker.text')}</span>
                   </button>
+                  {!simpleLayerMode && (
                   <button
                     type="button"
                     role="tab"
@@ -882,6 +937,7 @@ export default function BackgroundPickerCard({
                     <Icon name="grid_view" size={15} />
                     <span>{t('bgPicker.layout', 'Layout')}</span>
                   </button>
+                  )}
                 </>
               )}
               {(!hideBackgroundOnCompare || displayMode !== "compare") && (
@@ -942,7 +998,7 @@ export default function BackgroundPickerCard({
                         onChange={(event) => handleTypeChange(event.target.value as BackgroundType)}
                         aria-label={t('bgPicker.background', 'Background type')}
                       >
-                        {BG_OPTIONS.map((option) => (
+                        {BG_OPTIONS.filter((option) => !(layerBackdropMode && option.id === "pattern")).map((option) => (
                           <option key={option.id} value={option.id}>
                             {t(option.label)}
                           </option>
@@ -992,11 +1048,20 @@ export default function BackgroundPickerCard({
                         onThemeSelect={_onThemeSelect}
                         allowedCategories={_allowedCategories}
                         overlayMode={overlayMode}
+                        area={dockAreaFromScope(storageScope)}
                       />
                     )}
                   </div>
 
-                  {(bgType === "image" || bgType === "video" || bgType === "pattern") && (
+                  {layerBackdropMode && bgType !== "off" && (
+                    <LayerBackdropControls
+                      quickSettings={quickSettings}
+                      onQuickSettingsChange={onQuickSettingsChange}
+                      onBackgroundPresetChange={onBackgroundPresetChange}
+                    />
+                  )}
+
+                  {!layerBackdropMode && (bgType === "image" || bgType === "video" || bgType === "pattern") && (
                     <BackgroundAppearanceControls
                       quickSettings={quickSettings}
                       onQuickSettingsChange={onQuickSettingsChange}
@@ -1014,8 +1079,19 @@ export default function BackgroundPickerCard({
                 </>
               )}
 
+              {/* Size tab for layer themes (replaces Text + Layout) */}
+              {simpleLayerMode && layerTheme && (activeTab === "text" || activeTab === "layout") && (
+                <LayoutThemeAdjustPanel
+                  themeName={layerTheme.name}
+                  layout={layerTheme.layout}
+                  quickSettings={quickSettings}
+                  onQuickSettingsChange={onQuickSettingsChange}
+                  scope={storageScope}
+                />
+              )}
+
               {/* Text Tab */}
-              {activeTab === "text" && (
+              {activeTab === "text" && !simpleLayerMode && (
                 <>
 
                   {(
@@ -1178,7 +1254,7 @@ export default function BackgroundPickerCard({
               )}
 
               {/* Layout Tab */}
-              {activeTab === "layout" && (
+              {activeTab === "layout" && !simpleLayerMode && (
                 <>
                   {(
                     <>
@@ -1235,7 +1311,7 @@ export default function BackgroundPickerCard({
                                 </div>
 
                                 {(() => {
-                                  const currentWidth = quickSettings.lowerThirdWidthPreset ?? "md";
+                                  const currentWidth = quickSettings.lowerThirdWidthPreset ?? "full";
                                   const normalizedWidth = currentWidth === "xxl" ? "xl" : currentWidth === "lg" ? "md" : currentWidth;
                                   return (
                                     <div className="dtb-font-weight-row">
@@ -2420,6 +2496,48 @@ function ColorSection({
   );
 }
 
+function LayerBackdropControls({
+  quickSettings,
+  onQuickSettingsChange,
+  onBackgroundPresetChange,
+}: {
+  quickSettings: DockFullscreenQuickThemeSettings;
+  onQuickSettingsChange: (updater: (prev: DockFullscreenQuickThemeSettings) => DockFullscreenQuickThemeSettings) => void;
+  onBackgroundPresetChange?: (preset: DockBackgroundPreset) => void;
+}) {
+  const { t } = useTranslation();
+  const darkness = Math.min(100, Math.max(0, Math.round(quickSettings.layoutBackdropDarkness ?? 0)));
+  return (
+    <div className="dtb-colors__section">
+      <div className="dtb-slider-field">
+        <div className="dtb-slider-field__head">
+          <span>{t("bgPicker.darkness")}</span>
+          <span className="dtb-slider-field__value">{darkness}%</span>
+        </div>
+        <input
+          type="range"
+          className="dtb-slider dtb-slider--filled"
+          min={0}
+          max={100}
+          step={1}
+          value={darkness}
+          style={sliderProgress(darkness, 0, 100)}
+          onChange={(e) => {
+            const value = Number(e.target.value);
+            onQuickSettingsChange((prev) => ({ ...prev, layoutBackdropDarkness: value }));
+            onBackgroundPresetChange?.("theme");
+          }}
+          aria-label={t("bgPicker.darkness")}
+          aria-valuetext={`${darkness} percent`}
+        />
+      </div>
+      <p className="dtb-compare-section__description">
+        {t("bgPicker.layerBackdropHint", "Applies behind this theme's text. Choose Theme to keep the theme's own background.")}
+      </p>
+    </div>
+  );
+}
+
 function BackgroundAppearanceControls({
   quickSettings,
   onQuickSettingsChange,
@@ -2969,35 +3087,37 @@ function ThemeSection({
   onThemeSelect,
   allowedCategories,
   overlayMode,
+  area,
 }: {
   selectedThemeId: string | null;
   onThemeSelect: (theme: BibleTheme) => void;
   allowedCategories?: Array<NonNullable<BibleTheme["category"]>>;
   overlayMode: "fullscreen" | "lower-third";
+  /** Which Dock tab this picker belongs to; the user's own themes can be switched off per tab. */
+  area: DockThemeArea | null;
 }) {
   const [themes, setThemes] = useState<BibleTheme[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reloading, setReloading] = useState(false);
+  const [query, setQuery] = useState("");
+  const gridRef = useRef<HTMLDivElement>(null);
   const { t } = useTranslation();
 
-  const loadThemes = useCallback(async () => {
+  // Callers pass a fresh array every render; key on its contents so a re-render
+  // does not trigger another load.
+  const categoriesKey = (allowedCategories ?? []).join("|");
+  const categories = useMemo(
+    () => (categoriesKey ? (categoriesKey.split("|") as Array<NonNullable<BibleTheme["category"]>>) : undefined),
+    [categoriesKey],
+  );
+
+  /** `fresh` re-reads the favourites from the app too (opening Quick Edits and the reload button). */
+  const loadThemes = useCallback(async (fresh = false) => {
     try {
-      // Load all themes (unified — no templateType filter)
-      const all = await loadDockFavoriteBibleThemes();
-      const allowed = new Set((allowedCategories ?? []).map((c) => c.toLowerCase()));
-      const filtered = allowed.size === 0
-        ? all
-        : all.filter((t) => {
-          const cats = t.categories?.length ? t.categories : t.category ? [t.category] : [];
-          return cats.some((c) => allowed.has(c.toLowerCase()));
-        });
-      const modeFiltered = filtered.filter((theme) => themeSupportsBibleOverlayMode(theme, overlayMode));
-      console.log("[ThemeSection]", {
-        overlayMode,
-        allowedCategories: allowedCategories ?? "ALL",
-        loadedCount: all.length,
-        filteredCount: modeFiltered.length,
-        themeNames: modeFiltered.map((t) => t.name),
-      });
+      // The user's own themes show up here by themselves (unless switched off for this tab);
+      // ready-made ones follow the picker's categories.
+      const available = await loadDockThemesForArea(area, categories, { fresh });
+      const modeFiltered = available.filter((theme) => themeSupportsBibleOverlayMode(theme, overlayMode));
       setThemes(modeFiltered);
     } catch (err) {
       console.error("[ThemeSection] failed to load themes:", err);
@@ -3005,25 +3125,80 @@ function ThemeSection({
     } finally {
       setLoading(false);
     }
-  }, [allowedCategories, overlayMode]);
+  }, [area, categories, overlayMode]);
 
   useEffect(() => {
     let cancelled = false;
-    void loadThemes().catch(() => { });
+    // Opening Quick Edits (this mounts) always asks for the latest themes.
+    void loadThemes(true).catch(() => { });
     const refresh = () => {
       if (!cancelled) void loadThemes().catch(() => { });
     };
     window.addEventListener(FAVORITE_THEMES_UPDATED_EVENT, refresh);
+    // The app tells the Dock when a theme is created, deleted or switched off.
+    const unsubscribe = dockClient.onState((msg) => {
+      if (msg.type === "state:favorite-themes-updated") refresh();
+    });
     return () => {
       cancelled = true;
       window.removeEventListener(FAVORITE_THEMES_UPDATED_EVENT, refresh);
+      unsubscribe();
     };
   }, [loadThemes]);
+
+  const handleReload = useCallback(async () => {
+    setReloading(true);
+    try {
+      // Ask the app to fetch the account's latest themes and rewrite the Dock files;
+      // it answers with an update that refreshes this list again.
+      dockClient.sendCommand({ type: "themes:sync", timestamp: Date.now() });
+      await loadThemes(true);
+    } finally {
+      setReloading(false);
+    }
+  }, [loadThemes]);
+
+  const needle = query.trim().toLowerCase();
+  const shownThemes = needle
+    ? themes.filter((theme) => `${theme.name} ${theme.description ?? ""}`.toLowerCase().includes(needle))
+    : themes;
+
+  // The grid scrolls in a short box: bring the selected theme into view when it opens.
+  useEffect(() => {
+    if (loading || needle) return;
+    const grid = gridRef.current;
+    const active = grid?.querySelector<HTMLElement>(".dtb-theme-section__item--active");
+    if (grid && active) grid.scrollTop = Math.max(0, active.offsetTop - grid.offsetTop - 4);
+  }, [loading, needle, selectedThemeId, themes.length]);
+
+  const themeHeader = (
+    <div className="dtb-theme-section__head">
+      <span className="dtb-colors__label">{t('bgPicker.selectTheme')}</span>
+      <input
+        type="search"
+        className="dtb-theme-section__search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder={t('bgPicker.searchThemes', 'Search themes')}
+        aria-label={t('bgPicker.searchThemes', 'Search themes')}
+      />
+      <button
+        type="button"
+        className={`dtb-theme-section__reload${reloading ? " dtb-theme-section__reload--spinning" : ""}`}
+        onClick={() => void handleReload()}
+        disabled={reloading}
+        title={t('bgPicker.reloadThemes', 'Reload themes')}
+        aria-label={t('bgPicker.reloadThemes', 'Reload themes')}
+      >
+        <Icon name="refresh" size={14} />
+      </button>
+    </div>
+  );
 
   if (loading) {
     return (
       <div className="dtb-theme-section">
-        <span className="dtb-colors__label">{t('bgPicker.selectTheme')}</span>
+        {themeHeader}
         <div className="dtb-theme-section__loading">{t('bgPicker.loadingThemes')}</div>
       </div>
     );
@@ -3032,7 +3207,7 @@ function ThemeSection({
   if (themes.length === 0) {
     return (
       <div className="dtb-theme-section">
-        <span className="dtb-colors__label">{t('bgPicker.selectTheme')}</span>
+        {themeHeader}
         <div className="dtb-theme-section__empty">{t('bgPicker.noThemesFound')}</div>
       </div>
     );
@@ -3040,9 +3215,12 @@ function ThemeSection({
 
   return (
     <div className="dtb-theme-section">
-      <span className="dtb-colors__label">{t('bgPicker.selectTheme')}</span>
-      <div className="dtb-theme-section__grid">
-        {themes.map((theme) => {
+      {themeHeader}
+      {shownThemes.length === 0 && (
+        <div className="dtb-theme-section__empty">{t('bgPicker.noThemesMatch', 'No themes match “{{query}}”', { query: query.trim() })}</div>
+      )}
+      <div className="dtb-theme-section__grid" ref={gridRef}>
+        {shownThemes.map((theme) => {
           const isActive = theme.id === selectedThemeId;
           // Resolve variant for preview — use the active mode's variant, fallback to theme.settings
           const variant = overlayMode === "lower-third"
@@ -3826,7 +4004,7 @@ function CompareSettingsPanel({
             </div>
 
             {(() => {
-              const currentWidth = quickSettings.lowerThirdWidthPreset ?? "md";
+              const currentWidth = quickSettings.lowerThirdWidthPreset ?? "full";
               const normalizedWidth = currentWidth === "xxl" ? "xl" : currentWidth === "lg" ? "md" : currentWidth;
               return (
                 <div className="dtb-font-weight-row">

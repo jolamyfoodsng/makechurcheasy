@@ -99,12 +99,15 @@ export default function AppStatusStrip() {
   const urgent = Boolean(live?.finalDay);
 
   return (
-    <div className="app-status-strip" role="status">
+    <div className={`app-status-strip${isFree ? " app-status-strip--free" : ""}`} role="status">
       <div className="app-status-strip__side">
         {isFree && (
           <div className="app-status-strip__chip app-status-strip__chip--plan">
             <Icon name="star" size={13} />
-            <span className="app-status-strip__label">Free plan</span>
+            <span className="app-status-strip__label">You&apos;re on the Free plan</span>
+            <span className="app-status-strip__limits">
+              1 stream channel · 2 custom themes · 3 graphics · Verse AI 15 min a day
+            </span>
             <button
               type="button"
               className="app-status-strip__action app-status-strip__action--plan"

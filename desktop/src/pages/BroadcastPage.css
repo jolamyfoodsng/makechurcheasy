@@ -1699,3 +1699,40 @@
     gap: 8px;
   }
 }
+
+/* Free plan: one channel, multistream locked */
+.broadcast-free-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--text-primary, #e6e9f0);
+  font-size: 13px;
+}
+.broadcast-free-notice__tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f59e0b;
+  color: #1a1203;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.broadcast-free-notice__text { flex: 1; min-width: 220px; }
+.broadcast-free-notice__cta {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #7b68ee;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.broadcast-free-notice__cta:hover { background: #6a57e0; }

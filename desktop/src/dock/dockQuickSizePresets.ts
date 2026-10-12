@@ -54,3 +54,83 @@ export function getDockQuickSizeOptions(
   }
   return DOCK_QUICK_SIZE_OPTIONS_FULLSCREEN;
 }
+
+const LOWER_THIRD_SIZE_LADDER: readonly string[] = [
+  "smallest",
+  "smaller",
+  "small",
+  "medium",
+  "big",
+  "bigger",
+  "biggest",
+];
+
+function closestByFontSize(
+  options: readonly DockQuickSizeOption[],
+  fontSize: number,
+): DockQuickSizeOption | null {
+  let best: DockQuickSizeOption | null = null;
+  let bestDistance = Infinity;
+  for (const option of options) {
+    const distance = Math.abs(option.fontSize - fontSize);
+    // On a tie keep the earlier (smaller) option.
+    if (distance < bestDistance) {
+      best = option;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
+/**
+ * Which LG / XL / 2XL button to show as selected.
+ *
+ * A button used to light up only when the theme's size matched a preset
+ * exactly. Themes often use other sizes (a lower-third "smaller" or "bigger",
+ * a full-screen 96px), and the +/- text-size buttons move the size off the
+ * presets too, so nothing was selected. Fall back to the closest preset so one
+ * is always selected.
+ */
+export function findActiveQuickSizeOption(
+  options: readonly DockQuickSizeOption[],
+  mode: "fullscreen" | "lower-third",
+  settings: { fontSize?: number | null; lowerThirdSize?: string | null },
+): DockQuickSizeOption | null {
+  if (!options.length) return null;
+  const fontSize = Number(settings.fontSize);
+  const hasFontSize = Number.isFinite(fontSize) && fontSize > 0;
+  const sizeName = typeof settings.lowerThirdSize === "string" ? settings.lowerThirdSize : "";
+
+  if (mode === "fullscreen") {
+    const exact = hasFontSize ? options.find((option) => option.fontSize === fontSize) : undefined;
+    if (exact) return exact;
+    if (!hasFontSize && sizeName) {
+      const byPreset = options.find((option) => option.preset === sizeName);
+      if (byPreset) return byPreset;
+    }
+    return hasFontSize ? closestByFontSize(options, fontSize) : null;
+  }
+
+  const byPreset = sizeName ? options.find((option) => option.preset === sizeName) : undefined;
+  if (byPreset) return byPreset;
+  if (!sizeName && hasFontSize) {
+    const exact = options.find((option) => option.fontSize === fontSize);
+    if (exact) return exact;
+  }
+  if (hasFontSize) return closestByFontSize(options, fontSize);
+
+  const rank = LOWER_THIRD_SIZE_LADDER.indexOf(sizeName);
+  if (rank < 0) return null;
+  let best: DockQuickSizeOption | null = null;
+  let bestDistance = Infinity;
+  for (const option of options) {
+    const optionRank = LOWER_THIRD_SIZE_LADDER.indexOf(option.preset);
+    if (optionRank < 0) continue;
+    const distance = Math.abs(optionRank - rank);
+    if (distance < bestDistance) {
+      best = option;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}

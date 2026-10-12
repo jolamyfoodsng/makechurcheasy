@@ -370,6 +370,13 @@ export interface BibleThemeSettings {
    * the fixed legacy layout. Absent on legacy themes.
    */
   layout?: ThemeLayout;
+
+  /** Dock tweaks for layout themes (see themes/layout/adjust.ts): percent sizes and lower-third offset. */
+  layoutTextScale?: number;
+  layoutRefScale?: number;
+  layoutOffsetY?: number;
+  /** Dock: how much to darken the background of a full-screen layout theme, percent (0 = as designed). */
+  layoutBackdropDarkness?: number;
 }
 
 export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
@@ -430,7 +437,7 @@ export const DEFAULT_THEME_SETTINGS: BibleThemeSettings = {
   lowerThirdSize: "medium",
   lowerThirdPosition: "center",
   lowerThirdHeight: 0,
-  lowerThirdWidthPreset: "md",
+  lowerThirdWidthPreset: "full",
   lowerThirdOffsetX: 0,
   lowerThirdCaptionPosition: "bottom",
   lowerThirdEdge: "bottom",

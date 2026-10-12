@@ -9,7 +9,7 @@
  */
 
 import { getDeviceId, getDeviceSecret } from "./authService";
-import { getLicensePayload, isUnlocked } from "./licenseGuard";
+import { getEffectiveLicensePlan, getLicensePayload, isUnlocked } from "./licenseGuard";
 import { checkEntitlementSync } from "./entitlementClient";
 import { normalizePlanId } from "../lib/subscriptionSourceOfTruth";
 
@@ -125,7 +125,8 @@ function fallbackToCachedLicense(feature: PremiumFeature): AccessCheckResult {
   // the cached license is within the offline grace period.
   if (isUnlocked()) {
     const payload = getLicensePayload();
-    const plan = normalizePlanId(payload?.plan || "free");
+    // Offline: the plan turns Free when it ended or the computer is 21+ days without a sync.
+    const plan = normalizePlanId(getEffectiveLicensePlan());
     const mappedFeature = mapPremiumFeature(feature);
     const entitlement = checkEntitlementSync(mappedFeature, plan);
 

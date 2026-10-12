@@ -124,10 +124,32 @@ describe("dock scene routing", () => {
     const methodEnd = obsClientSource.indexOf("\n  /** Apply the operator's MCE-only visibility preference", methodStart);
     const methodSource = obsClientSource.slice(methodStart, methodEnd);
     const stateCheckIndex = methodSource.indexOf("this._activeMceOverlayStateByScene[targetScene] === stateSignature");
-    const firstOrderingIndex = methodSource.indexOf("await this.ensureTickerAboveSource(targetScene, primary)");
+    const firstOrderingIndex = methodSource.indexOf("await this.ensureTickerAboveSource(targetScene, primary,");
 
     expect(stateCheckIndex).toBeGreaterThan(-1);
     expect(firstOrderingIndex).toBeGreaterThan(stateCheckIndex);
+  });
+
+  it("hides the sources to hide first and shows the new one in the same step", () => {
+    const methodStart = obsClientSource.indexOf("private async ensureActiveMceOverlaySource(");
+    const methodEnd = obsClientSource.indexOf("\n  /** Apply the operator's MCE-only visibility preference", methodStart);
+    const methodSource = obsClientSource.slice(methodStart, methodEnd);
+
+    // Stacking the new source must not switch it on early.
+    expect(methodSource).toContain("await this.ensureTickerAboveSource(targetScene, primary, { leaveVisibility: true })");
+    // Hides come first, then the show, applied in one serial-frame batch.
+    expect(methodSource).toContain("const requests = [...hideRequests, ...showRequests];");
+    expect(methodSource).toContain("this.callBatch(requests, 1)");
+    expect(methodSource.indexOf("[...hideRequests, ...showRequests]")).toBeGreaterThan(-1);
+  });
+
+  it("does not show a source before its first packet lands on a cold start", () => {
+    const methodStart = obsClientSource.indexOf("async ensureModuleSourceOpenAndOnTop(");
+    const methodEnd = obsClientSource.indexOf("async reconcileMcePresentationVisibility", methodStart);
+    const methodSource = obsClientSource.slice(methodStart, methodEnd);
+
+    expect(methodSource).toContain("const coldStart");
+    expect(methodSource).toContain("coldStart ? 3000 : 450");
   });
 
   it("removes legacy single-Bible content before compare output is shown", () => {
@@ -378,5 +400,27 @@ describe("dock scene routing", () => {
     expect(methodSource).toContain("overlayPacket: parsed.payload");
     expect(methodSource).toContain('overlayTab: "lower-third"');
     expect(methodSource).toContain("this.rememberCssOverlayTransport(sourceName, parsed.payload, parsed.baseUrl, \"\", \"lower-third\")");
+  });
+
+  it.each([
+    ["Bible", bibleOverlaySource],
+    ["Worship", worshipOverlaySource],
+    ["Notes", notesOverlaySource],
+  ])("%s overlay never starts in a stale mode or fades from the old mode while hidden", (_name, source) => {
+    // The URL mode and the packet in the URL hash come before the cached packet.
+    const readInitialMode = source.slice(
+      source.indexOf("function readInitialMode()"),
+      source.indexOf("const initialMode = readInitialMode();"),
+    );
+    expect(readInitialMode.indexOf("get('mode')")).toBeGreaterThan(-1);
+    expect(readInitialMode.indexOf("get('mode')")).toBeLessThan(readInitialMode.indexOf("window.location.hash"));
+    expect(readInitialMode.indexOf("window.location.hash")).toBeLessThan(readInitialMode.indexOf("localStorage.getItem(_storageKey)"));
+    // The first reveal never replaces a mode a live packet already chose.
+    expect(source).toContain("const revealMode = activeMode || packetMode || initialMode;");
+    expect(source).toContain("if (!activeMode) setActiveLayer(revealMode);");
+    expect(source).not.toContain("setActiveLayer(initialMode);");
+    // A mode switch while the source is hidden snaps instead of cross-fading.
+    expect(source).toContain("obsSourceVisibleChanged");
+    expect(source).toContain("const snapToLayer = Boolean(activeMode) && (document.hidden || !_mceSourceVisible);");
   });
 });

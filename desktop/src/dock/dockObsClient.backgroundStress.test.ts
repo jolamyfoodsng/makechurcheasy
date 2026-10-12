@@ -1050,7 +1050,7 @@ describe("dockObsClient background reflection stress", () => {
     {
       label: "Notes",
       tab: "notes",
-      sourceName: "Notes - MCE Presentation",
+      sourceName: "Worship - MCE Presentation", // Worship and Notes share one source
       baseUrl: "http://overlay.test/mce-note.html",
       initializedKey: "_notesInitialized",
       fastMethod: "pushNotesOverlayFast",
@@ -1126,7 +1126,7 @@ describe("dockObsClient background reflection stress", () => {
     },
     {
       label: "Notes",
-      sourceName: "Notes - MCE Presentation",
+      sourceName: "Worship - MCE Presentation", // Worship and Notes share one source
       initializedKey: "_notesInitialized",
       lastModeKey: "_lastOverlayMode",
       fastMethod: "pushNotesOverlayFast",
@@ -1191,7 +1191,7 @@ describe("dockObsClient background reflection stress", () => {
     },
     {
       label: "Notes",
-      sourceName: "Notes - MCE Presentation",
+      sourceName: "Worship - MCE Presentation", // Worship and Notes share one source
       baseUrl: "http://overlay.test/mce-note.html",
       initializedKey: "_notesInitialized",
       primeMethod: "primeNotesOverlay",
@@ -1346,12 +1346,12 @@ describe("dockObsClient background reflection stress", () => {
         c.method === "PressInputPropertiesButton" &&
         c.payload.propertyName === "refreshnocache",
     );
-    // There are 4 fullscreen scene defs (bible, worship, notes, countdown)
-    expect(refreshCalls.length).toBeGreaterThanOrEqual(4);
+    // Bible, Worship (shared with Notes) and Countdown each have a browser source
+    expect(refreshCalls.length).toBeGreaterThanOrEqual(3);
     const inputNames = refreshCalls.map((c) => c.payload.inputName);
     expect(inputNames).toContain("Bible - MCE Presentation");
     expect(inputNames).toContain("Worship - MCE Presentation");
-    expect(inputNames).toContain("Notes - MCE Presentation");
+    expect(inputNames).not.toContain("Notes - MCE Presentation");
     expect(inputNames).toContain("Countdown - MCE Presentation");
   });
 });

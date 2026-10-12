@@ -1,3 +1,4 @@
+import { formatTickerClock, hasTickerClock, TICKER_CLOCK_SCRIPT } from "../data/tickerClock";
 import {
   TICKER_THEMES as DOCK_TICKER_THEMES,
   generateTickerHTML,
@@ -398,6 +399,7 @@ ${buildPermanentTickerOverrides(options.position, options.loop, Boolean(options.
 </head>
 <body>
 ${html}
+${hasTickerClock(html) ? TICKER_CLOCK_SCRIPT : ""}
 </body>
 </html>`;
 }
@@ -469,6 +471,7 @@ function resolvePermanentTickerValues(
     ...defaults,
     state: "in",
     speed: speedToDuration(context.speed),
+    clock: formatTickerClock(),
   };
   if (!values.badge) values.badge = context.heading || theme.badge || "";
   if (!values.tickerText) values.tickerText = context.joinedMessages || theme.tickerText || "";

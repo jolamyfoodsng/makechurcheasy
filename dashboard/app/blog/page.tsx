@@ -30,6 +30,7 @@ async function getPublishedPosts(): Promise<{ posts: BlogPostFeedItem[]; unavail
       const data = await res.json();
       return { posts: data.posts || [], unavailable: false };
     }
+    console.warn(`Blog list request to ${BACKEND_URL} failed with status ${res.status}`);
   } catch (err) {
     console.warn("Failed to fetch blog posts from backend:", err);
   }

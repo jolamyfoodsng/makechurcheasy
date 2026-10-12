@@ -45,6 +45,11 @@ import {
   DOCK_SELECT_NOTE_EVENT,
 } from "../dockScheduleService";
 import { resolveDockWorshipPresentationSettings } from "../dockWorshipThemeResolution";
+import {
+  DOCK_SELECT_BIBLE_VERSE_EVENT,
+  extractBibleVerseFromPayload,
+  setPendingBibleVerseSelection,
+} from "../dockBibleNavigation";
 import { resolveDockNotesPresentationSettings } from "../dockNotesStorage";
 import { isDockFreePlan, showUpgradeModal } from "../dockEntitlement";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -352,6 +357,15 @@ export default function DockScheduleDrawer({ initialSnapshot, onSelectTab }: Pro
           ...payload,
           overlayMode,
         };
+        // Move the Bible tab's verse list to this verse straight away (it
+        // selects and scrolls to it), without waiting for the OBS push.
+        const bibleVerse = extractBibleVerseFromPayload(payload, item.label);
+        if (bibleVerse) {
+          setPendingBibleVerseSelection(bibleVerse);
+          window.dispatchEvent(
+            new CustomEvent(DOCK_SELECT_BIBLE_VERSE_EVENT, { detail: bibleVerse }),
+          );
+        }
         await dockObsClient.pushBible(biblePayload as unknown as Parameters<typeof dockObsClient.pushBible>[0]);
         onSelectTab?.("bible");
       } else if (item.type === "worship") {

@@ -5,7 +5,9 @@ import Icon from "../DockIcon";
 export type DockOutputQuickTextSettings = Pick<
   DockFullscreenQuickThemeSettings,
   "fontSize" | "autoFontScale"
->;
+> & Partial<Pick<DockFullscreenQuickThemeSettings, "fontWeight" | "fontStyle">>;
+
+const BOLD_WEIGHTS = new Set(["bold", "extrabold", "black"]);
 
 export type DockOutputQuickSettingsPatch = Partial<DockFullscreenQuickThemeSettings>;
 
@@ -58,6 +60,13 @@ interface DockOutputQuickActionsProps {
   /** Show / Hide the text on the output without clearing the selection (hidden when not provided). */
   onToggleOutputVisible?: () => void;
   outputVisibilityPending?: boolean;
+  /**
+   * Label line for Worship / Notes themes (the slot Bible uses for the reference):
+   * a title, a section name, both, or nothing. Hidden when not provided.
+   */
+  labelMode?: string;
+  labelOptions?: readonly { id: string; label: string; hint?: string }[];
+  onLabelModeChange?: (mode: string) => void;
 }
 
 interface QuickActionDragState {
@@ -161,6 +170,9 @@ export default function DockOutputQuickActions({
   onOverlayModeChange,
   onToggleOutputVisible,
   outputVisibilityPending = false,
+  labelMode,
+  labelOptions,
+  onLabelModeChange,
 }: DockOutputQuickActionsProps) {
   // Every change goes straight to the output. (The old "Update Immediately"
   // checkbox + Save step confused operators mid-service.)
@@ -188,6 +200,9 @@ export default function DockOutputQuickActions({
     ? maxFontSize as number
     : Number.POSITIVE_INFINITY;
   const areManualFontSizesDisabled = false;
+  // "Bold" is on for every heavy weight (bold / extra bold / black).
+  const isBold = BOLD_WEIGHTS.has(String(displayedSettings.fontWeight ?? ""));
+  const isItalic = displayedSettings.fontStyle === "italic";
   const renderedTop = dragPosition?.top ?? top;
   const renderedLeft = dragPosition?.left ?? left;
   const menuOnRight = renderedLeft !== null && renderedLeft < 210;
@@ -412,6 +427,29 @@ export default function DockOutputQuickActions({
             </div>
           )}
 
+          {labelOptions && labelOptions.length > 0 && onLabelModeChange && (
+            <div className="dock-bible-reader__font-size-field">
+              <span className="dock-bible-reader__font-size-field-label">Heading</span>
+              <small>The reference / label line and the box behind it. Off hides the whole heading.</small>
+              <div className="dock-bible-reader__size-presets" role="group" aria-label="Heading">
+                {labelOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    className={`dock-bible-reader__size-preset${
+                      (labelMode ?? "auto") === option.id ? " dock-bible-reader__size-preset--active" : ""
+                    }`}
+                    onClick={() => onLabelModeChange(option.id)}
+                    aria-pressed={(labelMode ?? "auto") === option.id}
+                    title={option.hint}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {sizePresets && sizePresets.length > 0 && getSizePresetPatch && (
             <div className="dock-bible-reader__font-size-field">
               <span className="dock-bible-reader__font-size-field-label">Text size</span>
@@ -457,6 +495,32 @@ export default function DockOutputQuickActions({
                 title={`Increase ${textLabel.toLowerCase()} size`}
               >
                 <Icon name="add" size={11} />
+              </button>
+            </div>
+          </div>
+
+          <div className="dock-bible-reader__font-size-field">
+            <span className="dock-bible-reader__font-size-field-label">Style</span>
+            <div className="dock-bible-reader__size-presets" role="group" aria-label="Text style">
+              <button
+                type="button"
+                className={`dock-bible-reader__size-preset${isBold ? " dock-bible-reader__size-preset--active" : ""}`}
+                onClick={() => applySettingsPatch({ fontWeight: isBold ? "normal" : "bold" })}
+                aria-pressed={isBold}
+                title={isBold ? "Turn bold off" : "Make the text bold"}
+                style={{ fontWeight: 800 }}
+              >
+                Bold
+              </button>
+              <button
+                type="button"
+                className={`dock-bible-reader__size-preset${isItalic ? " dock-bible-reader__size-preset--active" : ""}`}
+                onClick={() => applySettingsPatch({ fontStyle: isItalic ? "normal" : "italic" })}
+                aria-pressed={isItalic}
+                title={isItalic ? "Turn italic off" : "Make the text italic"}
+                style={{ fontStyle: "italic" }}
+              >
+                Italic
               </button>
             </div>
           </div>

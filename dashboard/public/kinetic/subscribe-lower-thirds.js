@@ -316,7 +316,7 @@ build(root,P){
   var templates = SAMPLES.map(function (s) {
     var fields = s.fields.map(function (f) {
       var key = KEY_FOR[f.k] || f.k;
-      var def = f.k === 'name' ? 'MAKECHURCHEAZY' : f.d;
+      var def = f.k === 'name' ? 'YOUR CHANNEL NAME' : f.d;
       return [f.k, key, f.l, def];
     });
     if (s.avatar) fields.push(['avatar', 'avatarImage', 'Channel photo', '']);

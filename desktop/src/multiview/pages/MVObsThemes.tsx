@@ -1,6 +1,6 @@
 import { type CSSProperties, type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BUILTIN_THEMES } from "../../bible/themes/builtinThemes";
+import { BUILTIN_THEMES, DEFAULT_BUILTIN_THEME_ID } from "../../bible/themes/builtinThemes";
 import { deleteCustomTheme, getCustomThemes, saveCustomTheme } from "../../bible/bibleDb";
 import { DEFAULT_THEME_SETTINGS, type BibleTheme, type BibleThemeSettings } from "../../bible/types";
 import Icon from "../../components/Icon";
@@ -87,7 +87,7 @@ export function MVObsThemes() {
 
   const [obsThemes, setObsThemes] = useState<BibleTheme[]>(BUILTIN_FULLSCREEN_THEMES);
   const [selectedObsThemeId, setSelectedObsThemeId] = useState<string>(
-    BUILTIN_FULLSCREEN_THEMES[0]?.id ?? "classic-dark",
+    BUILTIN_FULLSCREEN_THEMES[0]?.id ?? DEFAULT_BUILTIN_THEME_ID,
   );
   const [obsThemeName, setObsThemeName] = useState("");
   const [obsThemeDescription, setObsThemeDescription] = useState("");
@@ -138,12 +138,12 @@ export function MVObsThemes() {
       setObsThemes(merged);
       setSelectedObsThemeId((prev) => {
         if (merged.some((theme) => theme.id === prev)) return prev;
-        return merged[0]?.id ?? "classic-dark";
+        return merged[0]?.id ?? DEFAULT_BUILTIN_THEME_ID;
       });
     } catch (error) {
       console.warn("[MVObsThemes] Failed to load Broadcast themes:", error);
       setObsThemes(BUILTIN_FULLSCREEN_THEMES);
-      setSelectedObsThemeId(BUILTIN_FULLSCREEN_THEMES[0]?.id ?? "classic-dark");
+      setSelectedObsThemeId(BUILTIN_FULLSCREEN_THEMES[0]?.id ?? DEFAULT_BUILTIN_THEME_ID);
     }
   }, []);
 

@@ -31,7 +31,7 @@ export interface GraphicTiers {
 
 export const GRAPHIC_CATEGORIES = [
   "speaker", "service", "welcome", "giving", "subscribe", "announcements",
-  "countdown", "social", "branding", "scripture", "others",
+  "countdown", "social", "branding", "scripture", "quotes", "others",
 ] as const;
 
 type JsonRecord = Record<string, unknown>;
@@ -171,6 +171,7 @@ export function validateGraphicPackage(raw: unknown): GraphicPackage {
       default: str(f.default ?? f.defaultValue, "", 600_000),
     };
     if (f.shades === true) out.shades = true;
+    if (f.multiline === true) out.multiline = true;
     if (f.options === "icons" || f.options === "brands") out.options = f.options;
     else if (Array.isArray(f.options)) {
       out.options = f.options.slice(0, 100).map((o) => (isRecord(o)

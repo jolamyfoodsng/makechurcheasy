@@ -45,6 +45,7 @@ import { getStoredUser } from "../services/authService";
 import { getEffectivePlan } from "../services/licenseService";
 import { useAuth } from "../contexts/AuthContext";
 import UpgradeModal from "../components/UpgradeModal";
+import PlanLimitModal from "../components/PlanLimitModal";
 import { BroadcastHowItWorksModal } from "../components/BroadcastHowItWorksModal";
 import {
   Plus,
@@ -338,6 +339,18 @@ export default function BroadcastPage() {
   const [obsTestingConnection, setObsTestingConnection] = useState(false);
 
   const { allocation } = useCurrentPlanAllocation();
+  // Free plan: one profile and one channel, streamed straight from OBS (no cloud multistream).
+  const multistreamLocked = !allocation.allowed;
+  const [planLimit, setPlanLimit] = useState<{ title: string; message: string; reason: string } | null>(null);
+  const showMultistreamLimit = useCallback((what: "profile" | "channel" | "enable") => {
+    setPlanLimit({
+      title: what === "profile" ? "One profile on the Free plan" : "Multistream is a paid feature",
+      message: what === "profile"
+        ? "The Free plan includes one streaming profile with one channel. Upgrade to save more profiles and stream to several platforms at once."
+        : "The Free plan streams to one channel straight from OBS. Upgrade to Basic to go live on YouTube, Facebook, Instagram, TikTok and more at the same time (10 hours a month).",
+      reason: what === "profile" ? "multistream_profile_limit" : "multistream_channel_limit",
+    });
+  }, []);
   const [usageInfo, setUsageInfo] = useState<MultistreamUsageInfo>(() =>
     getMultistreamUsageInfo(allocation.hours),
   );
@@ -719,6 +732,11 @@ export default function BroadcastPage() {
 
   // Profile modal
   const openNewPersonModal = () => {
+    if (multistreamLocked && store.profiles.length >= 1) {
+      setOpenProfileMenuId(null);
+      showMultistreamLimit("profile");
+      return;
+    }
     setEditingPerson(null);
     setPersonNameInput("");
     setPersonNicknameInput("");
@@ -769,6 +787,12 @@ export default function BroadcastPage() {
 
   // Channel modal
   const openNewChannelModalWithPlatform = (personId: string, platform: BroadcastPlatform = "youtube") => {
+    const owner = store.profiles.find((p) => p.id === personId);
+    if (multistreamLocked && owner && owner.channels.length >= 1) {
+      setOpenChannelMenuId(null);
+      showMultistreamLimit("channel");
+      return;
+    }
     setEditingChannel({ personId, channel: null });
     setChannelPlatformInput(platform);
     const platLabel = PLATFORM_INFO[platform]?.label || platform;
@@ -871,6 +895,15 @@ export default function BroadcastPage() {
 
   const handleToggleChannelEnabled = async (profileId: string, channelId: string) => {
     if (isStreaming) return;
+    if (multistreamLocked) {
+      // Free: only one channel can be on. Turning a second one on asks to upgrade.
+      const owner = store.profiles.find((p) => p.id === profileId);
+      const target = owner?.channels.find((c) => c.id === channelId);
+      if (owner && target && !target.enabled && owner.channels.some((c) => c.enabled && c.id !== channelId)) {
+        showMultistreamLimit("enable");
+        return;
+      }
+    }
     const updatedStore = toggleChannelEnabled(profileId, channelId);
     setStore(updatedStore);
 
@@ -1001,6 +1034,18 @@ export default function BroadcastPage() {
           <ObsMultiStreamDiagram />
         </div>
       </div>
+
+      {multistreamLocked && (
+        <div className="broadcast-free-notice" role="status">
+          <span className="broadcast-free-notice__tag">Free plan</span>
+          <span className="broadcast-free-notice__text">
+            You can stream to <strong>one channel</strong> straight from OBS. Multistream to several platforms at once is on Basic and up.
+          </span>
+          <button type="button" className="broadcast-free-notice__cta" onClick={() => showMultistreamLimit("channel")}>
+            Unlock multistream
+          </button>
+        </div>
+      )}
 
       {/* ── Main Layout: Sidebar on Left, Content on Right (Stacked in Small Width) ── */}
       <div className="broadcast-main-container">
@@ -2118,6 +2163,16 @@ export default function BroadcastPage() {
           setShowHowItWorksModal(false);
           setShowUpgradeModal(true);
         }}
+      />
+
+      {/* ── MODAL: FREE PLAN LIMIT ── */}
+      <PlanLimitModal
+        open={planLimit !== null}
+        onClose={() => setPlanLimit(null)}
+        title={planLimit?.title ?? ""}
+        message={planLimit?.message ?? ""}
+        requiredPlan="basic"
+        reason={planLimit?.reason}
       />
 
       {/* ── MODAL: UPGRADE ── */}

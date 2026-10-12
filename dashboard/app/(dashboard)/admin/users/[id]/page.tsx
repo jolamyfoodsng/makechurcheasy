@@ -55,6 +55,7 @@ import {
   Footprints,
   Gift,
   Search,
+  RotateCw,
 } from "lucide-react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -701,6 +702,35 @@ export default function AdminUserDetailPage() {
       setUserEmailsLoading(false);
     }
   }, [params.id]);
+
+  const [resendingEmailId, setResendingEmailId] = useState<string | null>(null);
+  const [resendResults, setResendResults] = useState<Record<string, { ok: boolean; message: string }>>({});
+
+  const resendUserEmail = useCallback(async (emailId: string) => {
+    if (!params.id || resendingEmailId) return;
+    setResendingEmailId(emailId);
+    try {
+      const res = await fetch(`/api/admin/users/${params.id}/emails/${emailId}/resend`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      setResendResults((prev) => ({
+        ...prev,
+        [emailId]: res.ok && data.ok
+          ? { ok: true, message: `Resent to ${data.to || "the user"}` }
+          : { ok: false, message: data.error || `Resend failed (${res.status})` },
+      }));
+      await fetchUserEmails();
+    } catch (err) {
+      setResendResults((prev) => ({
+        ...prev,
+        [emailId]: { ok: false, message: err instanceof Error ? err.message : "Resend failed" },
+      }));
+    } finally {
+      setResendingEmailId(null);
+    }
+  }, [params.id, resendingEmailId, fetchUserEmails]);
 
   const fetchUserReferrals = useCallback(async () => {
     if (!params.id) return;
@@ -3826,9 +3856,34 @@ export default function AdminUserDetailPage() {
                           {email.previewText}
                         </p>
                       )}
+
+                      {email.status !== "sent" && email.error && (
+                        <p className="text-xs text-rose-300/90 break-words max-w-2xl">
+                          Why it failed: {String(email.error)}
+                        </p>
+                      )}
+
+                      {resendResults[email.id] && (
+                        <p
+                          role="status"
+                          className={`text-xs ${resendResults[email.id].ok ? "text-emerald-300" : "text-rose-300"}`}
+                        >
+                          {resendResults[email.id].message}
+                        </p>
+                      )}
                     </div>
 
-                    <div className="shrink-0">
+                    <div className="shrink-0 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => resendUserEmail(email.id)}
+                        disabled={Boolean(resendingEmailId) || !email.html}
+                        title={email.html ? "Send this email to the user again" : "This email has no saved content"}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <RotateCw className={`w-3.5 h-3.5 text-indigo-400 ${resendingEmailId === email.id ? "animate-spin" : ""}`} />
+                        {resendingEmailId === email.id ? "Resending…" : "Resend"}
+                      </button>
                       <button
                         type="button"
                         onClick={() => setSelectedEmailPreview(email)}

@@ -10,6 +10,13 @@ import ThemeLayoutPreview from "../themes/layout/ThemeLayoutPreview";
 import { getThemeLayout } from "../themes/layout/presetThemes";
 import { dockBridge } from "../services/dockBridge";
 import {
+  type DockThemeOptOuts,
+  isThemeHiddenFromDock,
+  loadDockThemeOptOuts,
+  setThemeHiddenFromDock,
+  withThemeHidden,
+} from "../services/dockThemeAvailability";
+import {
   type DockProductionSettingsPayload,
   type ProductionSettings,
   getDefaultProductionSettings,
@@ -19,9 +26,7 @@ import {
   saveProductionSettings,
   syncProductionSettingsToDock,
 } from "../services/productionSettings";
-import { checkEntitlementSync } from "../services/entitlementClient";
-import { useAuth } from "../contexts/AuthContext";
-import { getEffectivePlan } from "../services/licenseService";
+import { useThemeCreateGate } from "../hooks/useThemeCreateGate";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -65,7 +70,28 @@ function toPlainSettings(payload: DockProductionSettingsPayload): ProductionSett
       fullscreenThemeId: payload.worship.fullscreenTheme.id,
       lowerThirdThemeId: payload.worship.lowerThirdTheme.id,
     },
+    notes: {
+      defaultMode: (payload.notes ?? payload.worship).defaultMode,
+      fullscreenThemeId: (payload.notes ?? payload.worship).fullscreenTheme.id,
+      lowerThirdThemeId: (payload.notes ?? payload.worship).lowerThirdTheme.id,
+    },
   };
+}
+
+type ThemeTarget = "bible" | "worship" | "notes";
+const THEME_TARGETS: ThemeTarget[] = ["bible", "worship", "notes"];
+type ThemeSort = "newest" | "oldest" | "name" | "in-use";
+
+function themeTime(theme: BibleTheme): number {
+  const time = new Date(theme.createdAt || theme.updatedAt || 0).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function matchesThemeSearch(theme: BibleTheme, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [theme.name, theme.description ?? "", ...(theme.categories ?? [])]
+    .some((value) => value.toLowerCase().includes(q));
 }
 
 function alignSettingsToThemes(
@@ -75,13 +101,36 @@ function alignSettingsToThemes(
   return toPlainSettings(resolveProductionSettings(settings, themes));
 }
 
-function themeCategories(theme: BibleTheme): string {
-  const categories = theme.categories?.length
-    ? theme.categories
-    : theme.category
-    ? [theme.category]
-    : [];
-  return categories.length > 0 ? categories.join(", ") : "uncategorized";
+/** Lower third or full screen, also for layout themes (their layout says which). */
+function themeFormat(theme: BibleTheme): "lower-third" | "fullscreen" {
+  const layout = getThemeLayout(theme);
+  if (layout) return layout.format;
+  return theme.templateType === "lower-third" ? "lower-third" : "fullscreen";
+}
+
+type ThemeLook = "lower-third" | "fullscreen";
+type ThemeSlot = "lowerThirdThemeId" | "fullscreenThemeId";
+
+/** True when the theme has both a full-screen and a lower-third look. */
+function hasBothLooks(theme: BibleTheme): boolean {
+  return Boolean(theme.variants?.fullscreen && theme.variants?.lowerThird);
+}
+
+/** Can this theme be shown in the given look? */
+function themeHasLook(theme: BibleTheme, look: ThemeLook): boolean {
+  return hasBothLooks(theme) || themeFormat(theme) === look;
+}
+
+/** The layout to preview for a look (layout themes only). */
+function themeLayoutFor(theme: BibleTheme, look: ThemeLook) {
+  const variant = look === "fullscreen" ? theme.variants?.fullscreen : theme.variants?.lowerThird;
+  return variant?.settings?.layout ?? getThemeLayout(theme);
+}
+
+/** Settings slots a theme fills when picked: both looks when it has them. */
+function themeSlots(theme: BibleTheme): ThemeSlot[] {
+  if (hasBothLooks(theme)) return ["lowerThirdThemeId", "fullscreenThemeId"];
+  return [themeFormat(theme) === "lower-third" ? "lowerThirdThemeId" : "fullscreenThemeId"];
 }
 
 function themePreviewBackground(theme: BibleTheme): string {
@@ -94,8 +143,7 @@ function themePreviewBackground(theme: BibleTheme): string {
 
 export default function ProductionThemeSettingsPage() {
   const { t } = useTranslation();
-  const { user } = useAuth();
-  const effectivePlan = getEffectivePlan(user);
+  const themeGate = useThemeCreateGate();
 
   const [loading, setLoading] = useState(true);
   const [themes, setThemes] = useState<BibleTheme[]>([]);
@@ -141,10 +189,72 @@ export default function ProductionThemeSettingsPage() {
     [themes],
   );
 
-  // Built-in layout lower thirds (Chapter Number, Caption Rule, Accent Card…)
-  const builtinLayoutThemes = useMemo(
-    () => themes.filter((theme) => theme.source !== "custom" && Boolean(getThemeLayout(theme))),
-    [themes],
+  // Every built-in theme: the layout lower thirds (Chapter Number, Caption Rule,
+  // Scripture Tab…) first, then the classic ones.
+  const builtinThemes = useMemo(() => {
+    const builtins = themes.filter((theme) => theme.source !== "custom");
+    const layout = builtins.filter((theme) => Boolean(getThemeLayout(theme)));
+    const classic = builtins.filter((theme) => !getThemeLayout(theme));
+    return [...layout, ...classic];
+  }, [themes]);
+
+  // Every ready-made theme has both looks; this only picks which one the cards show.
+  const [previewLook, setPreviewLook] = useState<ThemeLook>("lower-third");
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<ThemeSort>("newest");
+  // Your own themes are in the Dock's Bible, Worship and Notes tabs from the moment they exist.
+  // Nothing to switch on: this only holds the ones someone chose to hide.
+  const [dockOptOuts, setDockOptOuts] = useState<DockThemeOptOuts>({});
+  useEffect(() => {
+    let cancelled = false;
+    void loadDockThemeOptOuts().then((stored) => {
+      if (!cancelled) setDockOptOuts(stored);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const setHiddenFromDock = useCallback(
+    async (themeId: string, hidden: boolean) => {
+      // Show the change at once; the saved list replaces it when the write finishes.
+      setDockOptOuts((current) => withThemeHidden(current, themeId, hidden));
+      try {
+        setDockOptOuts(await setThemeHiddenFromDock(themeId, hidden));
+      } catch (err) {
+        console.error("[ProductionThemeSettingsPage] Failed to save Dock theme visibility:", err);
+        setDockOptOuts(await loadDockThemeOptOuts());
+        setStatus({
+          tone: "error",
+          text: t("themes.dockVisibilityFailed", "Could not change whether this theme shows in the Dock"),
+        });
+      }
+    },
+    [t],
+  );
+
+  const isThemeInUse = (theme: BibleTheme, target: ThemeTarget): boolean =>
+    themeSlots(theme).every((slot) => settings[target]?.[slot] === theme.id);
+
+  const sortThemes = (list: BibleTheme[]): BibleTheme[] => {
+    // Array.sort is stable, so ties keep the curated order.
+    const sorted = [...list];
+    if (sortBy === "newest") sorted.sort((a, b) => themeTime(b) - themeTime(a));
+    else if (sortBy === "oldest") sorted.sort((a, b) => themeTime(a) - themeTime(b));
+    else if (sortBy === "name") sorted.sort((a, b) => a.name.localeCompare(b.name));
+    else {
+      const used = (theme: BibleTheme) => THEME_TARGETS.some((target) => isThemeInUse(theme, target)) ? 0 : 1;
+      sorted.sort((a, b) => used(a) - used(b));
+    }
+    return sorted;
+  };
+
+  const visibleBuiltinThemes = sortThemes(
+    builtinThemes.filter((theme) => themeHasLook(theme, previewLook) && matchesThemeSearch(theme, searchQuery)),
+  );
+  const visibleCustomThemes = sortThemes(
+    customThemes.filter((theme) => matchesThemeSearch(theme, searchQuery)),
   );
 
   // ---------------------------------------------------------------------------
@@ -228,6 +338,160 @@ export default function ProductionThemeSettingsPage() {
     }
   }, [pendingDeleteTheme, persistSettings, settings, themes, t]);
 
+  const startCustomising = async (theme: BibleTheme) => {
+    if (!(await themeGate.guard())) return;
+    setEditingTheme({
+      ...theme,
+      id: `custom-${theme.id}-${Date.now().toString(36)}`,
+      name: t("themes.copyName", { name: theme.name, defaultValue: `${theme.name} (my copy)` }),
+      source: "custom",
+    });
+    setShowCreator(true);
+  };
+
+  const renderThemeCard = (theme: BibleTheme) => {
+    const look: ThemeLook = themeHasLook(theme, previewLook) ? previewLook : themeFormat(theme);
+    const layout = themeLayoutFor(theme, look);
+    const inUse = THEME_TARGETS.filter((target) => isThemeInUse(theme, target));
+    return (
+      <article key={theme.id} className="production-theme-card">
+        <ThemePreviewSurface
+          className="production-theme-card__preview"
+          videoSrc={theme.settings.backgroundVideo}
+          posterSrc={theme.settings.backgroundImage}
+          style={{
+            background: layout
+              ? "linear-gradient(135deg, #273246 0%, #10151f 100%)"
+              : themePreviewBackground(theme),
+            color: theme.settings.fontColor,
+            fontFamily: theme.settings.fontFamily,
+          }}
+        >
+          {layout ? (
+            <ThemeLayoutPreview layout={layout} style={{ position: "absolute", inset: 0 }} />
+          ) : (
+            <>
+              <div className="production-theme-card__preview-overlay" />
+              <div className="production-theme-card__preview-copy">
+                <span
+                  className="production-theme-card__preview-text"
+                  style={{
+                    fontWeight: theme.settings.fontWeight,
+                    textTransform: theme.settings.textTransform,
+                    textShadow: theme.settings.textShadow,
+                  }}
+                >
+                  {t("themes.sampleScripture", "For God so loved the world...")}
+                </span>
+                <span
+                  className="production-theme-card__preview-ref"
+                  style={{
+                    color: theme.settings.refFontColor,
+                    fontWeight: theme.settings.refFontWeight,
+                  }}
+                >
+                  {t("themes.sampleRef", "John 3:16")}
+                </span>
+              </div>
+            </>
+          )}
+        </ThemePreviewSurface>
+
+        <div className="production-theme-card__body">
+          <div className="production-theme-card__head">
+            <div className="production-theme-card__copy">
+              <strong>{theme.name}</strong>
+              <span>
+                {theme.description?.trim() ||
+                  t("themes.customProductionTheme", "Bible & Worship Theme")}
+              </span>
+            </div>
+            <span className="production-theme-card__type">
+              {hasBothLooks(theme)
+                ? t("themes.bothLooks", "Full Screen + Lower Third")
+                : themeFormat(theme) === "lower-third"
+                ? t("themes.lowerThird", "Lower Third")
+                : t("themes.fullscreen", "Full Screen")}
+            </span>
+          </div>
+
+          <div className="production-theme-card__meta">
+            {inUse.map((target) => (
+              <span key={target} className="production-theme-card__meta-pill production-theme-card__meta-pill--inuse">
+                <Icon name="check" size={14} />{" "}
+                {target === "bible"
+                  ? t("themes.inUseBible", "Bible")
+                  : target === "worship"
+                  ? t("themes.inUseWorship", "Worship")
+                  : t("themes.inUseNotes", "Notes")}
+              </span>
+            ))}
+            {isThemeHiddenFromDock(dockOptOuts, theme.id) && (
+              <span className="production-theme-card__meta-pill production-theme-card__meta-pill--hidden">
+                <Icon name="visibility_off" size={14} />{" "}
+                {t("themes.hiddenFromDock", "Hidden from Dock")}
+              </span>
+            )}
+            <span className="production-theme-card__meta-pill production-theme-card__meta-pill--muted">
+              {theme.source === "custom"
+                ? t("themes.sourceCustom", "Custom")
+                : t("themes.sourceBuiltin", "Built-in")}
+            </span>
+          </div>
+
+          <div className="production-theme-card__actions production-theme-card__actions--wrap">
+            <button
+              className="production-btn production-btn--ghost"
+              onClick={() => void setHiddenFromDock(theme.id, !isThemeHiddenFromDock(dockOptOuts, theme.id))}
+              title={
+                isThemeHiddenFromDock(dockOptOuts, theme.id)
+                  ? t("themes.unhideFromDockHint", "This theme is hidden from the Dock. Click to show it there again.")
+                  : t("themes.hideFromDockHint", "Every theme shows in the Dock (Bible, Worship, Notes). Click to hide this one from the Dock.")
+              }
+            >
+              <Icon name={isThemeHiddenFromDock(dockOptOuts, theme.id) ? "visibility" : "visibility_off"} size={16} />
+              {isThemeHiddenFromDock(dockOptOuts, theme.id)
+                ? t("themes.unhideFromDock", "Unhide")
+                : t("themes.hideFromDock", "Hide from Dock")}
+            </button>
+            {theme.source === "custom" ? (
+              <>
+                <button
+                  className="production-btn production-btn--ghost"
+                  onClick={() => {
+                    setEditingTheme(theme);
+                    setShowCreator(true);
+                  }}
+                  title={t("themes.edit", "Edit")}
+                >
+                  <Icon name="edit" size={16} />
+                  {t("themes.edit", "Edit")}
+                </button>
+                <button
+                  className="production-btn production-btn--danger"
+                  onClick={() => handleDeleteTheme(theme)}
+                  title={t("themes.delete", "Delete")}
+                >
+                  <Icon name="delete" size={16} />
+                  {t("themes.delete", "Delete")}
+                </button>
+              </>
+            ) : (
+              <button
+                className="production-btn production-btn--ghost"
+                onClick={() => startCustomising(theme)}
+                title={t("themes.customizeHint", "Make your own copy of this theme to edit")}
+              >
+                <Icon name="tune" size={16} />
+                {t("themes.customize", "Customize")}
+              </button>
+            )}
+          </div>
+        </div>
+      </article>
+    );
+  };
+
   if (loading) {
     return <LoadingScreen variant="page" label={t("themes.loading", "Loading themes...")} />;
   }
@@ -250,14 +514,11 @@ export default function ProductionThemeSettingsPage() {
             <button
               className="production-btn production-btn--primary"
               onClick={() => {
-                const { allowed } = checkEntitlementSync(
-                  "themes",
-                  effectivePlan,
-                  customThemes.length,
-                );
-                if (!allowed) return;
-                setEditingTheme(null);
-                setShowCreator(true);
+                void themeGate.guard().then((ok) => {
+                  if (!ok) return;
+                  setEditingTheme(null);
+                  setShowCreator(true);
+                });
               }}
               title={t("themes.createTheme", "+ Create Theme")}
             >
@@ -278,173 +539,134 @@ export default function ProductionThemeSettingsPage() {
         )}
 
         {/* ════════════════════════════════════════════════════════════════════ */}
-        {/* Bible & Worship Themes                                              */}
+        {/* Ready-made themes — every built-in, so people can go live without   */}
+        {/* designing anything, then My Themes (their own and customised ones). */}
         {/* ════════════════════════════════════════════════════════════════════ */}
+        <section className="production-panel production-theme-toolbar">
+          <label className="production-theme-search">
+            <Icon name="search" size={16} />
+            <input
+              type="search"
+              className="production-input"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={t("themes.searchPlaceholder", "Search themes…")}
+              aria-label={t("themes.searchPlaceholder", "Search themes…")}
+            />
+          </label>
+
+          <label className="production-theme-sort">
+            <span>{t("themes.sortLabel", "Sort")}</span>
+            <select
+              className="production-input"
+              value={sortBy}
+              onChange={(event) => setSortBy(event.target.value as ThemeSort)}
+            >
+              <option value="newest">{t("themes.sortNewest", "Just created")}</option>
+              <option value="oldest">{t("themes.sortOldest", "Oldest first")}</option>
+              <option value="name">{t("themes.sortName", "Name A–Z")}</option>
+              <option value="in-use">{t("themes.sortInUse", "In use first")}</option>
+            </select>
+          </label>
+        </section>
+
         <section className="production-panel">
           <div className="production-card-head">
             <div>
-              <h2>{t("themes.tabCustom", "Bible & Worship Themes")}</h2>
+              <h2>{t("themes.readyMadeTitle", "Ready-made themes")}</h2>
               <p>
                 {t(
-                  "themes.customDescription",
-                  "Themes used to display scriptures and worship songs across full screens and lower thirds.",
+                  "themes.readyMadeDescription",
+                  "Every theme here shows in the Dock (Bible, Worship, Notes). Click Hide from Dock on any you don't want there, or Customize to make your own copy.",
                 )}
               </p>
             </div>
             <span className="production-count-pill">
               {t("themes.customCount", {
-                count: customThemes.length + builtinLayoutThemes.length,
-                defaultValue: `${customThemes.length + builtinLayoutThemes.length} Themes`,
+                count: visibleBuiltinThemes.length,
+                defaultValue: `${visibleBuiltinThemes.length} Themes`,
               })}
             </span>
           </div>
 
-          {customThemes.length === 0 && builtinLayoutThemes.length === 0 ? (
+          <div className="production-filter-chips" role="group" aria-label={t("themes.previewLookLabel", "Preview look")}>
+            {(["lower-third", "fullscreen"] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                className={`production-filter-chip${previewLook === key ? " production-filter-chip--active" : ""}`}
+                aria-pressed={previewLook === key}
+                onClick={() => setPreviewLook(key)}
+              >
+                {key === "lower-third"
+                  ? t("themes.previewLowerThird", "Preview lower third")
+                  : t("themes.previewFullscreen", "Preview full screen")}
+              </button>
+            ))}
+          </div>
+
+          {visibleBuiltinThemes.length === 0 ? (
+            <div className="production-empty">
+              <Icon name="search_off" size={18} />
+              <div>
+                <strong>{t("themes.noSearchMatches", "No themes match your search")}</strong>
+              </div>
+            </div>
+          ) : (
+            <div className="production-theme-card-grid">
+              {visibleBuiltinThemes.map((theme) => renderThemeCard(theme))}
+            </div>
+          )}
+        </section>
+
+        <section className="production-panel">
+          <div className="production-card-head">
+            <div>
+              <h2>{t("themes.myThemesTitle", "My Themes")}</h2>
+              <p>
+                {t(
+                  "themes.myThemesDescription",
+                  "Themes you created or customised. Edit them any time.",
+                )}
+              </p>
+            </div>
+            <span className="production-count-pill">
+              {t("themes.customCount", {
+                count: customThemes.length,
+                defaultValue: `${customThemes.length} Themes`,
+              })}
+            </span>
+          </div>
+
+          {customThemes.length > 0 && visibleCustomThemes.length === 0 ? (
+            <div className="production-empty">
+              <Icon name="search_off" size={18} />
+              <div>
+                <strong>{t("themes.noSearchMatches", "No themes match your search")}</strong>
+              </div>
+            </div>
+          ) : customThemes.length === 0 ? (
             <div className="production-empty">
               <Icon name="palette" size={18} />
               <div>
-                <strong>{t("themes.noCustomThemesYet", "No themes yet")}</strong>
+                <strong>{t("themes.startFromReadyMade", "Start from one of the ready-made themes")}</strong>
                 <p>
                   {t(
-                    "themes.noCustomThemesHint",
-                    "Click + Create Theme above to create your first Bible or worship theme.",
+                    "themes.startFromReadyMadeHint",
+                    "Click Customise on any theme above to make your own copy, or + Create Theme to start from scratch.",
                   )}
                 </p>
               </div>
             </div>
           ) : (
             <div className="production-theme-card-grid">
-              {[...sortThemesForDisplay(customThemes), ...builtinLayoutThemes].map((theme) => (
-                <article key={theme.id} className="production-theme-card">
-                  <ThemePreviewSurface
-                    className="production-theme-card__preview"
-                    videoSrc={theme.settings.backgroundVideo}
-                    posterSrc={theme.settings.backgroundImage}
-                    style={{
-                      background: getThemeLayout(theme)
-                        ? "linear-gradient(135deg, #273246 0%, #10151f 100%)"
-                        : themePreviewBackground(theme),
-                      color: theme.settings.fontColor,
-                      fontFamily: theme.settings.fontFamily,
-                    }}
-                  >
-                    {getThemeLayout(theme) ? (
-                      <ThemeLayoutPreview
-                        layout={getThemeLayout(theme)!}
-                        style={{ position: "absolute", inset: 0 }}
-                      />
-                    ) : (
-                      <>
-                        <div className="production-theme-card__preview-overlay" />
-                        <div className="production-theme-card__preview-copy">
-                          <span
-                            className="production-theme-card__preview-text"
-                            style={{
-                              fontWeight: theme.settings.fontWeight,
-                              textTransform: theme.settings.textTransform,
-                              textShadow: theme.settings.textShadow,
-                            }}
-                          >
-                            {t("themes.sampleScripture", "For God so loved the world...")}
-                          </span>
-                          <span
-                            className="production-theme-card__preview-ref"
-                            style={{
-                              color: theme.settings.refFontColor,
-                              fontWeight: theme.settings.refFontWeight,
-                            }}
-                          >
-                            {t("themes.sampleRef", "John 3:16")}
-                          </span>
-                        </div>
-                      </>
-                    )}
-                  </ThemePreviewSurface>
-
-                  <div className="production-theme-card__body">
-                    <div className="production-theme-card__head">
-                      <div className="production-theme-card__copy">
-                        <strong>{theme.name}</strong>
-                        <span>
-                          {theme.description?.trim() ||
-                            t("themes.customProductionTheme", "Bible & Worship Theme")}
-                        </span>
-                      </div>
-                      <span className="production-theme-card__type">
-                        {theme.templateType === "lower-third"
-                          ? t("themes.lowerThird", "Lower Third")
-                          : t("themes.fullscreen", "Full Screen")}
-                      </span>
-                    </div>
-
-                    <div className="production-theme-card__meta">
-                      <span className="production-theme-card__meta-pill">
-                        {themeCategories(theme) === "uncategorized"
-                          ? t("themes.uncategorized", "General")
-                          : themeCategories(theme)}
-                      </span>
-                      <span className="production-theme-card__meta-pill production-theme-card__meta-pill--muted">
-                        {theme.source === "custom"
-                          ? t("themes.sourceCustom", "Custom")
-                          : t("themes.sourceBuiltin", "Built-in")}
-                      </span>
-                    </div>
-
-                    <div className="production-theme-card__actions">
-                      {theme.source === "custom" ? (
-                        <>
-                          <button
-                            className="production-btn production-btn--ghost"
-                            onClick={() => {
-                              setEditingTheme(theme);
-                              setShowCreator(true);
-                            }}
-                            title={t("themes.edit", "Edit")}
-                          >
-                            <Icon name="edit" size={16} />
-                            {t("themes.edit", "Edit")}
-                          </button>
-                          <button
-                            className="production-btn production-btn--danger"
-                            onClick={() => handleDeleteTheme(theme)}
-                            title={t("themes.delete", "Delete")}
-                          >
-                            <Icon name="delete" size={16} />
-                            {t("themes.delete", "Delete")}
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          className="production-btn production-btn--ghost"
-                          onClick={() => {
-                            const { allowed } = checkEntitlementSync(
-                              "themes",
-                              effectivePlan,
-                              customThemes.length,
-                            );
-                            if (!allowed) return;
-                            setEditingTheme({
-                              ...theme,
-                              id: `custom-${theme.id}-${Date.now().toString(36)}`,
-                              source: "custom",
-                            });
-                            setShowCreator(true);
-                          }}
-                          title={t("themes.customize", "Customize")}
-                        >
-                          <Icon name="edit" size={16} />
-                          {t("themes.customize", "Customize")}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </article>
-              ))}
+              {visibleCustomThemes.map((theme) => renderThemeCard(theme))}
             </div>
           )}
         </section>
 
         {/* ── Modals ── */}
+        {themeGate.modal}
         {showCreator && (
           <ThemeCreatorModal
             editTheme={editingTheme}

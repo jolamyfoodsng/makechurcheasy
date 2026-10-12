@@ -36,6 +36,10 @@ export interface ChurchSocialMedia {
   youtube: string;
   twitter: string;
   tiktok: string;
+  /** Also shown as icons in the lower-third graphics. */
+  whatsapp?: string;
+  telegram?: string;
+  threads?: string;
 }
 
 export interface ChurchProfile {
@@ -45,12 +49,17 @@ export interface ChurchProfile {
   tagline: string;
   website: string;
   email: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
   country: string;
   timezone: string;
   churchSize: string;
   branding: ChurchBranding;
   presentationDefaults: ChurchPresentationDefaults;
-  speakers: { name: string; role: string; isMain?: boolean }[];
+  speakers: { name: string; role: string; imageUrl?: string; isMain?: boolean }[];
   socialMedia: ChurchSocialMedia;
   createdAt: string;
   updatedAt: string;

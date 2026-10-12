@@ -56,7 +56,6 @@ describe("Dock Free Plan Cleanup & Source Filtering", () => {
       expect(DockObsClient.isMCESource("Audio - MCE Presentation")).toBe(true);
       expect(DockObsClient.isMCESource("Image - MCE Presentation")).toBe(true);
       expect(DockObsClient.isMCESource("Pattern - MCE Presentation")).toBe(true);
-      expect(DockObsClient.isMCESource("Text - MCE Presentation")).toBe(true);
       expect(DockObsClient.isMCESource("Template - MCE Presentation")).toBe(true);
       expect(DockObsClient.isMCESource("Remote - MCE Presentation")).toBe(true);
       expect(DockObsClient.isMCESource("Lower Third - MCE Presentation")).toBe(true);

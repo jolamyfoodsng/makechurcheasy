@@ -309,7 +309,7 @@ export function MVTemplatesDashboard() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [obsThemes, setObsThemes] = useState<BibleTheme[]>(BUILTIN_FULLSCREEN_OBS_THEMES);
   const [selectedObsThemeId, setSelectedObsThemeId] = useState<string>(
-    BUILTIN_FULLSCREEN_OBS_THEMES[0]?.id ?? "classic-dark",
+    BUILTIN_FULLSCREEN_OBS_THEMES[0]?.id ?? "preset-caption-rule",
   );
   const [obsThemeName, setObsThemeName] = useState<string>("");
   const [obsThemeDescription, setObsThemeDescription] = useState<string>("");
@@ -379,12 +379,12 @@ export function MVTemplatesDashboard() {
       setObsThemes(merged);
       setSelectedObsThemeId((prev) => {
         if (merged.some((theme) => theme.id === prev)) return prev;
-        return merged[0]?.id ?? "classic-dark";
+        return merged[0]?.id ?? "preset-caption-rule";
       });
     } catch (error) {
       console.warn("[MVTemplatesDashboard] Failed to load Broadcast themes:", error);
       setObsThemes(BUILTIN_FULLSCREEN_OBS_THEMES);
-      setSelectedObsThemeId(BUILTIN_FULLSCREEN_OBS_THEMES[0]?.id ?? "classic-dark");
+      setSelectedObsThemeId(BUILTIN_FULLSCREEN_OBS_THEMES[0]?.id ?? "preset-caption-rule");
     }
   }, []);
 

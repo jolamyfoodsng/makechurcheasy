@@ -4,337 +4,40 @@
 
 import type { BibleTheme, BibleThemeSettings } from "../types";
 import { DEFAULT_THEME_SETTINGS } from "../types";
-import { LAYOUT_PRESET_THEMES } from "../../themes/layout/presetThemes";
+import { LAYOUT_PRESET_THEMES, STARTER_DEFAULT_THEME_ID } from "../../themes/layout/presetThemes";
 
 // ---------------------------------------------------------------------------
-// Default Dark Fullscreen
+// Retired classic themes (Oct 2026): Default Dark Fullscreen / Lower Third,
+// Classic Dark, Modern Lower Third, Cinematic and Clean Minimal were plain
+// placeholder looks. Saved selections that still point at them fall back to
+// the starter theme (see resolveBuiltinThemeId).
 // ---------------------------------------------------------------------------
 
-const defaultDarkFullscreenSettings: BibleThemeSettings = {
-  ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans", sans-serif',
-  fontSize: 56,
-  fontWeight: "black",
-  fontColor: "#F7F8FB",
-  lineHeight: 1.58,
-  textAlign: "center",
-  textShadow: "4px 5px 2px rgba(0, 0, 0, 0.95)",
-  textOutline: true,
-  textOutlineColor: "#000000",
-  textOutlineWidth: 4,
+export const RETIRED_BUILTIN_THEME_IDS: readonly string[] = [
+  "default-dark-fullscreen",
+  "default-dark-lower-third",
+  "classic-dark",
+  "modern-lower-third",
+  "cinematic",
+  "clean-minimal",
+];
 
-  refFontSize: 38,
-  refFontColor: "#F7F8FB",
-  refFontWeight: "black",
-  refPosition: "bottom",
-
-  backgroundColor: "#06070B",
-  backgroundImage: "",
-  backgroundVideo: "",
-  backgroundOpacity: 1,
-  fullscreenShadeColor: "#05060A",
-  fullscreenShadeOpacity: 0.46,
-  fullscreenShadeEnabled: true,
-
-  logoUrl: "",
-  logoPosition: "bottom-right",
-  logoSize: 54,
-
-  padding: 88,
-  safeArea: 48,
-  borderRadius: 0,
-  boxBackground: "transparent",
-  boxOpacity: 0,
-  boxBackgroundImage: "",
-
-  animation: "fade",
-  animationDuration: 420,
+// Retired layer themes (Oct 2026): the Violet Split list entry became the Violet
+// Praise starter, and Crimson Texture was removed.
+const REPLACED_BUILTIN_THEME_IDS: Record<string, string> = {
+  "preset-violet-split": "starter-violet-praise",
+  "preset-crimson-texture": STARTER_DEFAULT_THEME_ID,
 };
 
-const defaultDarkFullscreen: BibleTheme = {
-  id: "default-dark-fullscreen",
-  name: "Default Dark Fullscreen",
-  description:
-    "Clean dark fullscreen theme for first-time setups with bright verse text and calm contrast.",
-  source: "builtin",
-  templateType: "fullscreen",
-  category: "general",
-  categories: ["bible", "worship", "general"],
-  settings: defaultDarkFullscreenSettings,
-  createdAt: "2026-04-19T00:00:00Z",
-  updatedAt: "2026-04-19T00:00:00Z",
-};
+/** Theme every module uses until someone picks one (also replaces retired ids). */
+export const DEFAULT_BUILTIN_THEME_ID = STARTER_DEFAULT_THEME_ID;
 
-// ---------------------------------------------------------------------------
-// Default Dark Lower Third
-// ---------------------------------------------------------------------------
-
-const defaultDarkLowerThirdSettings: BibleThemeSettings = {
-  ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans", sans-serif',
-  fontSize: 40,
-  fontWeight: "black",
-  fontColor: "#F6F8FC",
-  lineHeight: 1.42,
-  textAlign: "center",
-  textShadow: "4px 5px 2px rgba(0, 0, 0, 0.95)",
-  textOutline: true,
-  textOutlineColor: "#000000",
-  textOutlineWidth: 4,
-
-  refFontSize: 28,
-  refFontColor: "#F6F8FC",
-  refFontWeight: "black",
-  refPosition: "bottom",
-
-  backgroundColor: "#0B0E14",
-  backgroundImage: "",
-  backgroundVideo: "",
-  backgroundOpacity: 1,
-  fullscreenShadeColor: "#06080C",
-  fullscreenShadeOpacity: 0.28,
-  fullscreenShadeEnabled: true,
-
-  logoUrl: "",
-  logoPosition: "bottom-right",
-  logoSize: 44,
-
-  padding: 28,
-  safeArea: 34,
-  borderRadius: 10,
-  boxBackground: "rgba(10, 12, 18, 0.88)",
-  boxOpacity: 0.94,
-  boxBackgroundImage: "",
-
-  animation: "slide-up",
-  animationDuration: 320,
-};
-
-const defaultDarkLowerThird: BibleTheme = {
-  id: "default-dark-lower-third",
-  name: "Default Dark Lower Third",
-  description:
-    "Dark lower-third theme with a restrained panel and strong readability for live production.",
-  source: "builtin",
-  templateType: "lower-third",
-  category: "general",
-  categories: ["bible", "worship", "general"],
-  settings: defaultDarkLowerThirdSettings,
-  createdAt: "2026-04-19T00:00:00Z",
-  updatedAt: "2026-04-19T00:00:00Z",
-};
-
-// ---------------------------------------------------------------------------
-// Classic Dark
-// ---------------------------------------------------------------------------
-
-const classicDarkSettings: BibleThemeSettings = {
-  ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans", sans-serif',
-  fontSize: 52,
-  fontWeight: "black",
-  fontColor: "#FFFFFF",
-  lineHeight: 1.7,
-  textAlign: "center",
-  textShadow: "4px 5px 2px rgba(0, 0, 0, 0.95)",
-  textOutline: true,
-  textOutlineColor: "#000000",
-  textOutlineWidth: 4,
-
-  refFontSize: 36,
-  refFontColor: "#FFFFFF",
-  refFontWeight: "black",
-  refPosition: "bottom",
-
-  backgroundColor: "#0a0a14",
-  backgroundImage: "",
-  backgroundVideo: "",
-  backgroundOpacity: 1,
-
-  logoUrl: "",
-  logoPosition: "bottom-right",
-  logoSize: 60,
-
-  padding: 80,
-  safeArea: 50,
-  borderRadius: 0,
-  boxBackground: "transparent",
-  boxOpacity: 0,
-
-  animation: "fade",
-  animationDuration: 500,
-};
-
-const classicDark: BibleTheme = {
-  id: "classic-dark",
-  name: "Classic Dark",
-  description:
-    "Traditional white-on-dark presentation style. High contrast, highly legible for all congregation sizes.",
-  source: "builtin",
-  templateType: "fullscreen",
-  settings: classicDarkSettings,
-  createdAt: "2025-01-01T00:00:00Z",
-  updatedAt: "2025-01-01T00:00:00Z",
-};
-
-// ---------------------------------------------------------------------------
-// Modern Light
-// ---------------------------------------------------------------------------
-
-const modernLightSettings: BibleThemeSettings = {
-  ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans", sans-serif',
-  fontSize: 44,
-  fontWeight: "bold",
-  fontColor: "#FFFFFF",
-  lineHeight: 1.5,
-  textAlign: "center",
-  textShadow: "0 1px 4px rgba(0,0,0,0.5)",
-  textOutline: false,
-  textOutlineColor: "#000000",
-  textOutlineWidth: 0,
-
-  refFontSize: 32,
-  refFontColor: "#FFFFFF",
-  refFontWeight: "bold",
-  refPosition: "bottom",
-
-  backgroundColor: "#0F172A",
-  backgroundImage: "",
-  backgroundVideo: "",
-  backgroundOpacity: 1,
-
-  logoUrl: "",
-  logoPosition: "bottom-right",
-  logoSize: 60,
-
-  padding: 40,
-  safeArea: 30,
-  borderRadius: 12,
-  boxBackground: "rgba(26, 26, 46, 0.85)",
-  boxOpacity: 0.9,
-
-  animation: "slide-up",
-  animationDuration: 400,
-};
-
-const modernLight: BibleTheme = {
-  id: "modern-lower-third",
-  name: "Modern Lower Third",
-  description:
-    "Contemporary lower-third overlay with semi-transparent box. Great for modern worship and youth services.",
-  source: "builtin",
-  templateType: "lower-third",
-  settings: modernLightSettings,
-  createdAt: "2025-01-01T00:00:00Z",
-  updatedAt: "2025-01-01T00:00:00Z",
-};
-
-// ---------------------------------------------------------------------------
-// Cinematic
-// ---------------------------------------------------------------------------
-
-const cinematicSettings: BibleThemeSettings = {
-  ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans Bold", "CMG Sans", sans-serif',
-  fontSize: 56,
-  fontWeight: "black",
-  fontColor: "#FFFFFF",
-  lineHeight: 1.8,
-  textAlign: "center",
-  textShadow: "4px 5px 2px rgba(0, 0, 0, 0.95)",
-  textOutline: true,
-  textOutlineColor: "#000000",
-  textOutlineWidth: 4,
-
-  refFontSize: 38,
-  refFontColor: "#FFFFFF",
-  refFontWeight: "black",
-  refPosition: "bottom",
-
-  backgroundColor: "#000000",
-  backgroundImage: "",
-  backgroundVideo: "",
-  backgroundOpacity: 1,
-
-  logoUrl: "",
-  logoPosition: "bottom-right",
-  logoSize: 60,
-
-  padding: 100,
-  safeArea: 60,
-  borderRadius: 0,
-  boxBackground: "transparent",
-  boxOpacity: 0,
-
-  animation: "fade",
-  animationDuration: 800,
-};
-
-const cinematic: BibleTheme = {
-  id: "cinematic",
-  name: "Cinematic",
-  description:
-    "Bold cinematic look with heavy shadows and gold reference text. Makes scripture feel epic.",
-  source: "builtin",
-  templateType: "fullscreen",
-  settings: cinematicSettings,
-  createdAt: "2025-01-01T00:00:00Z",
-  updatedAt: "2025-01-01T00:00:00Z",
-};
-
-// ---------------------------------------------------------------------------
-// Clean Minimal
-// ---------------------------------------------------------------------------
-
-const cleanMinimalSettings: BibleThemeSettings = {
-  ...DEFAULT_THEME_SETTINGS,
-  fontFamily: '"Charis SIL", "Noto Sans", "CMG Sans Light", "CMG Sans", sans-serif',
-  fontSize: 40,
-  fontWeight: "bold",
-  fontColor: "#333333",
-  lineHeight: 1.6,
-  textAlign: "center",
-  textShadow: "none",
-  textOutline: false,
-  textOutlineColor: "#000000",
-  textOutlineWidth: 0,
-
-  refFontSize: 28,
-  refFontColor: "#333333",
-  refFontWeight: "bold",
-  refPosition: "bottom",
-
-  backgroundColor: "#f8f8f8",
-  backgroundImage: "",
-  backgroundVideo: "",
-  backgroundOpacity: 1,
-
-  logoUrl: "",
-  logoPosition: "bottom-right",
-  logoSize: 50,
-
-  padding: 80,
-  safeArea: 50,
-  borderRadius: 0,
-  boxBackground: "transparent",
-  boxOpacity: 0,
-
-  animation: "fade",
-  animationDuration: 300,
-};
-
-const cleanMinimal: BibleTheme = {
-  id: "clean-minimal",
-  name: "Clean Minimal",
-  description:
-    "Light, clean design with minimal decoration. Good for projectors and bright environments.",
-  source: "builtin",
-  templateType: "fullscreen",
-  settings: cleanMinimalSettings,
-  createdAt: "2025-01-01T00:00:00Z",
-  updatedAt: "2025-01-01T00:00:00Z",
-};
+/** A saved theme id, with retired built-ins swapped for the default theme. */
+export function resolveBuiltinThemeId(id: string | null | undefined): string {
+  if (!id || RETIRED_BUILTIN_THEME_IDS.includes(id)) return DEFAULT_BUILTIN_THEME_ID;
+  if (REPLACED_BUILTIN_THEME_IDS[id]) return REPLACED_BUILTIN_THEME_IDS[id];
+  return id;
+}
 
 // ---------------------------------------------------------------------------
 // Curated Reference Lower Thirds
@@ -554,18 +257,12 @@ const cyanWaveBroadcast: BibleTheme = {
 // ---------------------------------------------------------------------------
 
 export const BUILTIN_THEMES: BibleTheme[] = [
-  defaultDarkFullscreen,
-  defaultDarkLowerThird,
-  classicDark,
-  modernLight,
-  cinematic,
-  cleanMinimal,
+  // Layer themes first: the six starters (Caption Rule is the default), then
+  // the reference sets, so they lead the Themes page and the Dock pickers.
+  ...LAYOUT_PRESET_THEMES,
   sageForestBadge,
   obsidianFloatingHeader,
   midnightPlumCrest,
   cobaltCompactCard,
   cyanWaveBroadcast,
-  // Layout-based lower thirds (Aurora Glass, Chapter Number, Caption Rule,
-  // Accent Card…), so they show on the Themes page and in the Dock pickers.
-  ...LAYOUT_PRESET_THEMES,
 ];

@@ -43,7 +43,7 @@ export const SpeakerLowerThirdPreview: React.FC = () => {
         name="Speaker Lower Third"
         from={15}
         durationInFrames={180}
-        speakerName="Pastor Henry Odewale"
+        speakerName="Pastor Name here"
         roleOrTitle="Lead Pastor"
         organization="MakeChurchEazy Church"
         topic="Forceful Advancement"

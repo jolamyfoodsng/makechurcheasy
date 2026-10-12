@@ -1268,7 +1268,7 @@ describe("Active OBS Bible overlay wiring", () => {
   it("provides card position (left, center, right) and card width default in theme layout controls", () => {
     expect(backgroundPickerSource).toContain("t('bgPicker.cardPosition', 'Card position')");
     expect(backgroundPickerSource).toContain("t('bgPicker.positionCenter', 'Center')");
-    expect(backgroundPickerSource).toContain('currentWidth = quickSettings.lowerThirdWidthPreset ?? "md"');
+    expect(backgroundPickerSource).toContain('currentWidth = quickSettings.lowerThirdWidthPreset ?? "full"');
     expect(backgroundPickerSource).toContain('currentPos = quickSettings.lowerThirdPosition ?? "center"');
     expect(backgroundPickerSource).toContain('if (prev.lowerThirdWidthPreset === "full" && (value === "left" || value === "right"))');
     expect(backgroundPickerSource).toContain('nextPatch.lowerThirdWidthPreset = "xl"');

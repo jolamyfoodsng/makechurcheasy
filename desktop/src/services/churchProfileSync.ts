@@ -9,8 +9,9 @@
  * branding fields with the web values.
  */
 
-import { updateSettings } from "../multiview/mvStore";
+import { getSettings, updateSettings } from "../multiview/mvStore";
 import { getSession, initAuthStore } from "./authService";
+import { contactFromProfile } from "./churchProfileMapping";
 import { applyInterfaceLanguagePreference } from "./interfaceLanguage";
 
 const API_BASE = import.meta.env.VITE_AUTH_API_URL || "https://api.makechurcheazy.com";
@@ -33,7 +34,16 @@ interface ChurchSpeaker {
 
 interface ChurchProfile {
   churchName: string;
+  tagline?: string;
+  website?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  state?: string;
   country?: string;
+  socialMedia?: Record<string, string> | null;
+  updatedAt?: string;
   branding: ChurchBranding;
   speakers: ChurchSpeaker[];
   presentationDefaults?: {
@@ -47,6 +57,14 @@ export interface SyncResult {
   profileFound: boolean;
 }
 
+export interface SyncOptions {
+  /**
+   * Skip the work (image downloads, settings writes) when the profile has not
+   * changed since the last sync. Used by the background refresh.
+   */
+  onlyIfChanged?: boolean;
+}
+
 let _syncing = false;
 
 /**
@@ -56,7 +74,7 @@ let _syncing = false;
  * Tries the device-authenticated endpoint first, then falls back to
  * the regular userId-based endpoint.
  */
-export async function syncChurchProfile(): Promise<SyncResult> {
+export async function syncChurchProfile(options: SyncOptions = {}): Promise<SyncResult> {
   if (_syncing) return { success: false, message: "Sync already in progress", profileFound: false };
   _syncing = true;
 
@@ -115,9 +133,27 @@ export async function syncChurchProfile(): Promise<SyncResult> {
     }
 
 
+    if (
+      options.onlyIfChanged
+      && profile.updatedAt
+      && profile.updatedAt === getSettings().churchProfileUpdatedAt
+    ) {
+      return { success: true, message: "Profile is already up to date.", profileFound: true };
+    }
+
+    const contact = contactFromProfile(profile);
     const patch: Record<string, unknown> = {
       // Web is the source of truth, so overwrite even with empty values.
       churchName: profile.churchName || "",
+      churchWebsite: contact.website,
+      churchPhone: contact.phone,
+      churchEmail: contact.email,
+      churchTagline: contact.tagline,
+      churchAddress: contact.address,
+      churchCity: contact.city,
+      churchCountry: contact.country,
+      churchSocials: contact.socials,
+      churchProfileUpdatedAt: profile.updatedAt || "",
       brandColor: profile.branding?.primaryColor || "",
       brandSecondaryColor: profile.branding?.secondaryColor || "",
       brandAccentColor: profile.branding?.accentColor || "",
@@ -167,6 +203,35 @@ export async function syncChurchProfile(): Promise<SyncResult> {
   } finally {
     _syncing = false;
   }
+}
+
+const AUTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const AUTO_REFRESH_MIN_GAP_MS = 60 * 1000;
+let _autoRefreshStarted = false;
+let _lastAutoRefreshAt = 0;
+
+/**
+ * Keeps the local church details in step with the website while the app stays
+ * open: checks every few minutes and whenever the window comes back to the
+ * front. A profile that has not changed costs one small request and nothing
+ * else. Safe to call more than once.
+ */
+export function startChurchProfileAutoRefresh(): void {
+  if (_autoRefreshStarted || typeof window === "undefined") return;
+  _autoRefreshStarted = true;
+
+  const run = () => {
+    const now = Date.now();
+    if (now - _lastAutoRefreshAt < AUTO_REFRESH_MIN_GAP_MS) return;
+    _lastAutoRefreshAt = now;
+    void syncChurchProfile({ onlyIfChanged: true }).catch(() => { /* best-effort */ });
+  };
+
+  window.setInterval(run, AUTO_REFRESH_INTERVAL_MS);
+  window.addEventListener("focus", run);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") run();
+  });
 }
 
 /**

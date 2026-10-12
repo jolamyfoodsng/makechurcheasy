@@ -3512,3 +3512,77 @@ body.light .sidebar-nav-chevron-btn:hover {
         font-size: 1rem;
     }
 }
+
+/* ── Free plan cues (sidebar) ── */
+.sidebar-plan-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: #f59e0b;
+    color: #1a1203;
+    font-size: 0.625rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    vertical-align: middle;
+}
+
+.sidebar-nav-lock {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: auto;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid rgba(245, 158, 11, 0.5);
+    color: #fbbf24;
+    font-size: 0.6875rem;
+    font-weight: 700;
+}
+
+.sidebar-nav-lock--collapsed {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    padding: 2px;
+    border: 0;
+    background: rgba(245, 158, 11, 0.2);
+}
+
+.sidebar-free-card {
+    margin: 0.5rem 0.75rem;
+    padding: 0.75rem;
+    border-radius: 10px;
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    background: linear-gradient(160deg, rgba(245, 158, 11, 0.14), rgba(123, 104, 238, 0.12));
+}
+
+.sidebar-free-card__head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #fbbf24;
+    font-size: 0.8125rem;
+    font-weight: 700;
+}
+
+.sidebar-free-card__text {
+    margin: 0.35rem 0 0.6rem;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
+
+.sidebar-free-card__cta {
+    width: 100%;
+    padding: 0.45rem 0;
+    border: 0;
+    border-radius: 8px;
+    background: #7b68ee;
+    color: #fff;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.sidebar-free-card__cta:hover { background: #6a57e0; }

@@ -123,154 +123,6 @@ body { font-family: "Montserrat", sans-serif; }
       },
     ],
   },
-  {
-    id: "ticker-social-footer",
-    name: "Social Footer Banner",
-    description: "Full-width social banner with animated ticker motion for church social media handles.",
-    accentColor: "#1D4ED8",
-    badge: "Follow Us",
-    tickerText: "",
-    speed: "20s",
-    html: `<div class="s5 s5-pos-full" data-state="{{state}}">
-  <div class="s5-panel s5-enter s5-banner" data-state="{{state}}" style="--speed:{{speed}};">
-    <span class="s5-label"><i class="fas fa-share-nodes" aria-hidden="true"></i>{{label}}</span>
-    <div class="s5-track" data-state="{{state}}">
-      <div class="s5-move" data-state="{{state}}">
-        <span class="s5-facebook"><i class="fab fa-facebook-f" aria-hidden="true"></i> {{facebook}}</span>
-        <span class="s5-twitter"><i class="fab fa-x-twitter" aria-hidden="true"></i> {{xHandle}}</span>
-        <span class="s5-instagram"><i class="fab fa-instagram" aria-hidden="true"></i> {{instagram}}</span>
-        <span class="s5-youtube"><i class="fab fa-youtube" aria-hidden="true"></i> {{youtube}}</span>
-        <span class="s5-facebook"><i class="fab fa-facebook-f" aria-hidden="true"></i> {{facebook}}</span>
-        <span class="s5-twitter"><i class="fab fa-x-twitter" aria-hidden="true"></i> {{xHandle}}</span>
-        <span class="s5-instagram"><i class="fab fa-instagram" aria-hidden="true"></i> {{instagram}}</span>
-        <span class="s5-youtube"><i class="fab fa-youtube" aria-hidden="true"></i> {{youtube}}</span>
-      </div>
-    </div>
-  </div>
-</div>`,
-    css: `
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
-body { font-family: "Montserrat", sans-serif; }
-
-@keyframes s5Ticker {
-  0% { transform: translateX(0%); }
-  100% { transform: translateX(-50%); }
-}
-
-.s5 {
-  position: fixed;
-  z-index: 70;
-  pointer-events: none;
-  color: #0f172a;
-}
-
-.s5-pos-full { left: 0; right: 0; bottom: 0; }
-
-.s5-panel {
-  border: 1px solid rgba(15, 23, 42, 0.14);
-  background: rgba(255, 255, 255, 0.96);
-  border-radius: 14px;
-  box-shadow: 0 12px 38px rgba(0,0,0,.24);
-}
-
-.s5-banner {
-  width: min(1880px, calc(100vw - 10px));
-  margin: 0 auto 8px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-radius: 12px;
-  padding: 9px 10px;
-}
-
-.s5-label {
-  border-radius: 999px;
-  background: #1d4ed8;
-  color: #fff;
-  text-transform: uppercase;
-  letter-spacing: .11em;
-  font-size: 11px;
-  font-weight: 800;
-  padding: 8px 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-}
-
-.s5-track {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.s5-move {
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-  gap: 22px;
-  padding-left: 18px;
-  animation: s5Ticker var(--speed, 20s) linear infinite;
-}
-
-.s5-move span {
-  font-size: clamp(17px, 1.25vw, 28px);
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.s5-facebook i { color: #1877F2; }
-.s5-twitter i { color: #111827; }
-.s5-instagram i { color: #E1306C; }
-.s5-youtube i { color: #FF0000; }`,
-    fontImports: [
-      "/fonts/google/google-fonts.css",
-      "/fonts/fontawesome/all.min.css",
-    ],
-    variables: [
-      {
-        key: "label",
-        label: "Label",
-        type: "text",
-        defaultValue: "Follow Us",
-        placeholder: "Label text",
-        group: "Header",
-      },
-      {
-        key: "facebook",
-        label: "Facebook",
-        type: "text",
-        defaultValue: "@YourChurchExample",
-        placeholder: "Facebook handle",
-        group: "Content",
-      },
-      {
-        key: "xHandle",
-        label: "X / Twitter",
-        type: "text",
-        defaultValue: "@YourChurchExample",
-        placeholder: "X/Twitter handle",
-        group: "Content",
-      },
-      {
-        key: "instagram",
-        label: "Instagram",
-        type: "text",
-        defaultValue: "@YourChurchExample",
-        placeholder: "Instagram handle",
-        group: "Content",
-      },
-      {
-        key: "youtube",
-        label: "YouTube",
-        type: "text",
-        defaultValue: "@YourChurchExample",
-        placeholder: "YouTube handle",
-        group: "Content",
-      },
-    ],
-  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -296,6 +148,8 @@ interface PillTickerOptions {
   glow: string;
   extraCss?: string;
   badgeDot?: boolean;
+  /** Show the live local time in the heading instead of the heading text. */
+  clock?: boolean;
 }
 
 /** First hex colour in a CSS value (so gradients show a representative swatch in the colour picker). */
@@ -321,7 +175,7 @@ function pillTicker(o: PillTickerOptions): TickerTheme {
     speed: "26s",
     html: `<div class="lt pos-full-bottom" data-state="{{state}}">
   <div class="ticker-shell">
-    <div class="ticker-badge">${dot}<span>{{badge}}</span></div>
+    <div class="ticker-badge">${dot}${o.clock ? '<span class="pill-clock" data-live-clock>{{clock}}</span>' : "<span>{{badge}}</span>"}</div>
     <div class="ticker-track">
       <div class="ticker-move" style="--speed:{{speed}};">
         <span>{{tickerText}}</span>
@@ -351,6 +205,7 @@ body { font-family: ${o.font}; }
   font-family: ${o.badgeFont ?? o.font}; font-size: 17px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase;
   animation: pillGlow 2.4s ease-in-out infinite;
 }
+.pill-clock { font-size: 21px; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
 .pill-dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; animation: pillDot 1.4s ease-in-out infinite; }
 .ticker-track { flex: 1; min-width: 0; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent); mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent); }
 .ticker-move { display: inline-flex; gap: 60px; white-space: nowrap; font-size: 24px; font-weight: 600; animation: tickerMove var(--speed, 26s) linear infinite; }
@@ -377,6 +232,21 @@ export const pillTickerThemes: TickerTheme[] = [
     badgeBg: "#FFF7ED",
     badgeText: "#9A3412",
     glow: "rgba(249,115,22,.55)",
+  }),
+  pillTicker({
+    id: "ticker-sunrise-clock",
+    name: "Sunrise Clock",
+    description: "The Sunrise pill bar with the live time in the heading instead of a title.",
+    accentColor: "#F97316",
+    badge: "Time",
+    tickerText: SAMPLE_TEXT,
+    font: '"Montserrat", sans-serif',
+    shellBg: "linear-gradient(90deg, #7C2D12 0%, #C2410C 45%, #F97316 100%)",
+    shellText: "#FFFFFF",
+    badgeBg: "#FFF7ED",
+    badgeText: "#9A3412",
+    glow: "rgba(249,115,22,.55)",
+    clock: true,
   }),
   pillTicker({
     id: "ticker-ocean",

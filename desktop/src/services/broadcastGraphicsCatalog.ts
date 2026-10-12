@@ -16,6 +16,7 @@
 import { getEnvConfig } from "./envConfig";
 import { getUserScopedKey } from "./userScopedStorage";
 import { packageThemeId, packageToTheme, type GraphicPackage } from "../lowerthirds/graphicPackages";
+import { BUNDLED_GRAPHIC_PACKAGES } from "../lowerthirds/bundledGraphicPackages";
 import type { LowerThirdTheme } from "../lowerthirds/types";
 import type { TickerTheme } from "../data/tickerThemes";
 
@@ -206,13 +207,24 @@ export function describeGraphicTiers(tiers: GraphicTiers): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** Lower thirds for the admin-published packages that are not hidden. */
+/**
+ * Lower thirds built from graphic packages: the ones bundled with the app, then the
+ * admin-published ones. A published package with the same id replaces the bundled one,
+ * and a hidden catalog entry removes it.
+ */
 export function getPackageThemes(catalog = getBroadcastGraphicsCatalog()): LowerThirdTheme[] {
-  if (!catalog) return [];
-  return catalog.graphics
+  const published = (catalog?.graphics ?? [])
     .filter((g) => g.kind !== "ticker" && g.source === "package" && g.package && g.status !== "hidden")
-    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-    .map((g) => packageToTheme({ ...(g.package as GraphicPackage), id: g.graphicId, version: g.version ?? g.package?.version, updatedAt: g.updatedAt }));
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const publishedIds = new Set(published.map((g) => g.graphicId));
+  const bundled = BUNDLED_GRAPHIC_PACKAGES
+    .filter((pkg) => !publishedIds.has(pkg.id))
+    .filter((pkg) => getGraphicAvailability(packageThemeId(pkg.id), catalog).visible)
+    .map((pkg) => packageToTheme(pkg, { tags: ["Built-in"] }));
+  return [
+    ...bundled,
+    ...published.map((g) => packageToTheme({ ...(g.package as GraphicPackage), id: g.graphicId, version: g.version ?? g.package?.version, updatedAt: g.updatedAt })),
+  ];
 }
 
 /** Turn an uploaded ticker into the app's HTML ticker theme. */

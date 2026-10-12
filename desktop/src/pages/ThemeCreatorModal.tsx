@@ -17,6 +17,7 @@ import {
 import { createPortal } from "react-dom";
 import type { ChangeEvent } from "react";
 import Icon from "../components/Icon";
+import { useThemeCreateGate } from "../hooks/useThemeCreateGate";
 import {
   X,
   ChevronDown,
@@ -67,7 +68,12 @@ import { saveLibraryMediaFile, MEDIA_FILE_ACCEPT } from "../library/MediaTab";
 import { resolveOverlayAssetUrl } from "../services/overlayUrl";
 import { getBibleThemePreviewHtml } from "../bible/bibleThemes";
 import { LAYOUT_PRESET_THEMES } from "../themes/layout/presetThemes";
+import { fullscreenFromLowerThird, lowerThirdFromFullscreen } from "../themes/layout/companions";
 import ThemeLayoutPreview from "../themes/layout/ThemeLayoutPreview";
+import LayerPanel from "../themes/layout/editor/LayerPanel";
+import LayerCanvasOverlay from "../themes/layout/editor/LayerCanvasOverlay";
+import { getLayer, nudgeLayer, removeLayer, updateLayer } from "../themes/layout/editor/layoutOps";
+import type { ThemeContent, ThemeLayer, ThemeLayout } from "../themes/layout/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -97,6 +103,25 @@ interface PreviewOptions {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
+
+/** What the layer editor previews: a verse, a song section or a sermon note. */
+const LAYER_PREVIEW_SAMPLES: Record<"verse" | "song" | "note", { label: string; content: ThemeContent }> = {
+  verse: {
+    label: "Verse",
+    content: {
+      text: "[16] For God so loved the world that He gave His only begotten Son, that whoever believes in Him should not perish but have everlasting life.",
+      reference: "John 3:16 (NKJV)",
+    },
+  },
+  song: {
+    label: "Song",
+    content: { text: "Amazing grace, how sweet the sound\nThat saved a wretch like me", reference: "Amazing Grace · Verse 1", lineCount: 1 },
+  },
+  note: {
+    label: "Note",
+    content: { text: "Faith grows when we act on what we already know.", reference: "Point 1", lineCount: 1 },
+  },
+};
 
 const CATEGORY_OPTIONS: Array<{ value: BibleThemeCategory; label: string; icon: string }> = [
   { value: "bible", label: "Bible", icon: "auto_stories" },
@@ -299,7 +324,9 @@ function normalizeCategories(values: Array<BibleThemeCategory | null | undefined
       set.add(value);
     }
   }
-  if (set.size === 0) set.add("bible");
+  // A theme with no category is for every area; it used to default to Bible only, which
+  // kept new themes out of Worship and Notes.
+  if (set.size === 0) for (const value of ordered) set.add(value);
   return ordered.filter((value) => set.has(value));
 }
 
@@ -518,6 +545,7 @@ interface Props {
 
 export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initialCategory }: Props) {
   const isEditing = !!editTheme;
+  const themeGate = useThemeCreateGate();
 
   // Hide the app sidebar while this modal is open
   useEffect(() => {
@@ -535,12 +563,8 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   const [activeVariant, setActiveVariant] = useState<VariantType>(
     editTheme?.templateType === "lower-third" ? "lower-third" : "fullscreen"
   );
-  const [enabledVariants, setEnabledVariants] = useState<Set<VariantType>>(() => {
-    if (editTheme?.enabledVariants && editTheme.enabledVariants.length > 0) {
-      return new Set(editTheme.enabledVariants as VariantType[]);
-    }
-    return new Set<VariantType>(["fullscreen", "lower-third"]);
-  });
+  // Every theme has both looks — full screen and lower third.
+  const enabledVariants = useMemo(() => new Set<VariantType>(["fullscreen", "lower-third"]), []);
 
   // ── Per-variant settings ──
   const initFsSettings = useMemo(() => {
@@ -645,37 +669,23 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
 
   const handleSwitchVariant = useCallback((variant: VariantType) => {
     setActiveVariant(variant);
-    setEnabledVariants((prev) => {
-      if (prev.has(variant)) return prev;
-      const next = new Set(prev);
-      next.add(variant);
-      return next;
-    });
     undoStackRef.current = [];
     redoStackRef.current = [];
     setCanUndo(false);
     setCanRedo(false);
   }, []);
 
-  const handleToggleVariant = useCallback((variant: VariantType) => {
-    setEnabledVariants((prev) => {
-      const next = new Set(prev);
-      if (next.has(variant)) {
-        if (next.size <= 1) return prev;
-        next.delete(variant);
-        if (activeVariant === variant) {
-          const remaining = variant === "fullscreen" ? "lower-third" : "fullscreen";
-          handleSwitchVariant(remaining);
-        }
-      } else {
-        next.add(variant);
-      }
-      return next;
-    });
-  }, [activeVariant, handleSwitchVariant]);
-
   const handleSyncVariant = useCallback(() => {
     const source = activeVariant === "fullscreen" ? fullscreenSettings : lowerThirdSettings;
+    if (source.layout) {
+      // Layer themes: rebuild the other look from this one's colours, fonts and labels.
+      if (activeVariant === "fullscreen") {
+        setLowerThirdSettings(normalizeThemeSettings({ ...lowerThirdSettings, layout: lowerThirdFromFullscreen(source.layout) }));
+      } else {
+        setFullscreenSettings(normalizeThemeSettings({ ...fullscreenSettings, layout: fullscreenFromLowerThird(source.layout) }));
+      }
+      return;
+    }
     if (activeVariant === "fullscreen") {
       const ltLayout = {
         boxBackground: lowerThirdSettings.boxBackground,
@@ -733,6 +743,21 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   }, [themeLibrary, librarySearch, activeVariant]);
 
   const handleLoadTheme = useCallback((theme: BibleTheme) => {
+    const fsVariant = theme.variants?.fullscreen;
+    const ltVariant = theme.variants?.lowerThird;
+    if (fsVariant && ltVariant) {
+      setFullscreenSettings(normalizeThemeSettings({ ...DEFAULT_THEME_SETTINGS, ...fsVariant.settings }));
+      setFullscreenRawTemplate(fsVariant.rawTemplate || null);
+      setLowerThirdSettings(normalizeThemeSettings({ ...DEFAULT_THEME_SETTINGS, ...ltVariant.settings }));
+      setLowerThirdRawTemplate(ltVariant.rawTemplate || null);
+      if (theme.name) setName(theme.name);
+      if (theme.categories) setCategories(normalizeCategories(theme.categories));
+      undoStackRef.current = [];
+      redoStackRef.current = [];
+      setCanUndo(false);
+      setCanRedo(false);
+      return;
+    }
     const incomingSettings = normalizeThemeSettings({ ...DEFAULT_THEME_SETTINGS, ...theme.settings });
     const incomingRawTemplate = theme.rawTemplate || null;
     const layoutFormat = theme.settings.layout?.format;
@@ -759,8 +784,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     setFullscreenRawTemplate(null);
     setLowerThirdRawTemplate(null);
     setName("Untitled Theme");
-    setCategories(["bible"]);
-    setEnabledVariants(new Set(["fullscreen", "lower-third"]));
+    setCategories(normalizeCategories([]));
     setActiveVariant("fullscreen");
     undoStackRef.current = [];
     redoStackRef.current = [];
@@ -825,9 +849,6 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
               setLowerThirdRawTemplate(imported.variants.lowerThird.rawTemplate || null);
             }
           }
-          if (imported.enabledVariants) {
-            setEnabledVariants(new Set(imported.enabledVariants as VariantType[]));
-          }
         }
       } catch { /* silent */ }
     };
@@ -845,6 +866,13 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   const [fitScale, setFitScale] = useState(0.4);
   const [showSafeArea, setShowSafeArea] = useState(false);
   const [showGrid, setShowGrid] = useState(false);
+
+  // ── Layer editor (themes built from layers) ──
+  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
+  const [draftLayout, setDraftLayout] = useState<ThemeLayout | null>(null);
+  const [layerSample, setLayerSample] = useState<"verse" | "song" | "note">("verse");
+  const [layerPlaying, setLayerPlaying] = useState(0);
+  const layerCanvasRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     const el = previewWrapperRef.current;
@@ -972,6 +1000,52 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     });
   }, [setActiveSettings]);
 
+  const activeLayout = settings.layout ?? null;
+  const previewLayout = draftLayout ?? activeLayout;
+
+  const commitLayout = useCallback((next: ThemeLayout) => {
+    setDraftLayout(null);
+    patch({ layout: next });
+  }, [patch]);
+
+  // Selection belongs to the layout on screen; drop it when the layer is gone.
+  useEffect(() => {
+    if (selectedLayerId && (!activeLayout || !getLayer(activeLayout, selectedLayerId))) setSelectedLayerId(null);
+  }, [activeLayout, selectedLayerId]);
+
+  const playLayerAnimation = useCallback(() => {
+    setSelectedLayerId(null);
+    setLayerPlaying((n) => n + 1);
+    window.setTimeout(() => setLayerPlaying(0), 3200);
+  }, []);
+
+  // Arrow keys nudge the selected layer (Shift = 10 px); Delete removes it.
+  useEffect(() => {
+    if (!activeLayout || !selectedLayerId) return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
+      const layer = getLayer(activeLayout, selectedLayerId);
+      if (!layer) return;
+      const step = e.shiftKey ? 10 : 1;
+      const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+      if (moves[e.key]) {
+        if (layer.locked) return;
+        e.preventDefault();
+        const [dx, dy] = moves[e.key];
+        commitLayout(updateLayer(activeLayout, layer.id, nudgeLayer(layer, dx, dy)));
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        commitLayout(removeLayer(activeLayout, layer.id));
+        setSelectedLayerId(null);
+      } else if (e.key === "Escape") {
+        setSelectedLayerId(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeLayout, selectedLayerId, commitLayout]);
+
   const refreshBackgroundMediaLibrary = useCallback(async () => {
     try {
       const items = await getAllMedia();
@@ -986,6 +1060,12 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
       setTemplateVideoAssets(assets);
     } catch { /* silent */ }
   }, [activeVariant]);
+
+  // Layer themes: the Background picker in the layer panel lists the Media Library.
+  useEffect(() => {
+    if (activeLayout) refreshBackgroundMediaLibrary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [Boolean(activeLayout), refreshBackgroundMediaLibrary]);
 
   useEffect(() => {
     if (!showBackgroundModal) return;
@@ -1075,8 +1155,15 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     }
   }, [name, description, categories, activeVariant, enabledVariants, fullscreenSettings, fullscreenRawTemplate, lowerThirdSettings, lowerThirdRawTemplate, onSaved, onClose, isEditing, editTheme, loadThemeLibrary, settings, activeRawTemplate]);
 
-  const handleSave = useCallback(() => { saveTheme(false); }, [saveTheme]);
-  const handleDuplicate = useCallback(() => { saveTheme(true); }, [saveTheme]);
+  // A new or duplicated theme counts against the plan (Free = 2); editing one you own never does.
+  const guardNewTheme = themeGate.guard;
+  const handleSave = useCallback(() => {
+    if (isEditing) { void saveTheme(false); return; }
+    void guardNewTheme().then((ok) => { if (ok) void saveTheme(false); });
+  }, [isEditing, saveTheme, guardNewTheme]);
+  const handleDuplicate = useCallback(() => {
+    void guardNewTheme().then((ok) => { if (ok) void saveTheme(true); });
+  }, [saveTheme, guardNewTheme]);
 
   const handleDelete = useCallback(async () => {
     if (isEditing && editTheme) {
@@ -1164,33 +1251,17 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
             ))}
           </div>
 
-          {/* Variant Enable Toggles */}
-          <div className="tc-variant-toggles">
-            {(["fullscreen", "lower-third"] as VariantType[]).map((v) => (
-              <label key={v} className="tc-variant-toggle" title={`Enable ${v === "fullscreen" ? "Fullscreen" : "Lower Third"} variant`}>
-                <input
-                  type="checkbox"
-                  checked={enabledVariants.has(v)}
-                  onChange={() => handleToggleVariant(v)}
-                />
-                <span className="tc-variant-toggle-label">{v === "fullscreen" ? "FS" : "LT"}</span>
-              </label>
-            ))}
-          </div>
-
           {/* Sync Button */}
-          {enabledVariants.size === 2 && (
-            <button
-              className="tc-toolbar-btn tc-sync-btn"
-              onClick={handleSyncVariant}
-              title={`Sync style from ${activeVariant === "fullscreen" ? "Fullscreen \u2192 Lower Third" : "Lower Third \u2192 Fullscreen"}`}
-            >
-              <ArrowRightLeft size={14} />
-              <span className="tc-sync-label">
-                {activeVariant === "fullscreen" ? "FS \u2192 LT" : "LT \u2192 FS"}
-              </span>
-            </button>
-          )}
+          <button
+            className="tc-toolbar-btn tc-sync-btn"
+            onClick={handleSyncVariant}
+            title={`Sync style from ${activeVariant === "fullscreen" ? "Fullscreen \u2192 Lower Third" : "Lower Third \u2192 Fullscreen"}`}
+          >
+            <ArrowRightLeft size={14} />
+            <span className="tc-sync-label">
+              {activeVariant === "fullscreen" ? "FS \u2192 LT" : "LT \u2192 FS"}
+            </span>
+          </button>
         </div>
 
         <div className="tc-toolbar-right">
@@ -1343,6 +1414,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
 
               <div
                 className="preview-canvas"
+                ref={layerCanvasRef}
                 style={{
                   width: "1920px",
                   height: "1080px",
@@ -1353,8 +1425,28 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                   transform: `scale(${currentScale})`,
                 }}
               >
-                {settings.layout ? (
-                  <ThemeLayoutPreview layout={settings.layout} animate style={{ width: "1920px", height: "1080px" }} />
+                {previewLayout ? (
+                  <>
+                    <ThemeLayoutPreview
+                      key={layerPlaying ? `play-${layerPlaying}` : "still"}
+                      layout={previewLayout}
+                      content={LAYER_PREVIEW_SAMPLES[layerSample].content}
+                      animate={layerPlaying > 0}
+                      style={{ width: "1920px", height: "1080px" }}
+                    />
+                    {!layerPlaying && (
+                      <LayerCanvasOverlay
+                        canvasRef={layerCanvasRef}
+                        layout={previewLayout}
+                        scale={currentScale}
+                        selectedId={selectedLayerId}
+                        contentKey={layerSample}
+                        onSelect={setSelectedLayerId}
+                        onDraft={(id, change: Partial<ThemeLayer>) => activeLayout && setDraftLayout(updateLayer(activeLayout, id, change))}
+                        onCommit={(id, change: Partial<ThemeLayer>) => activeLayout && commitLayout(updateLayer(activeLayout, id, change))}
+                      />
+                    )}
+                  </>
                 ) : (
                 <iframe
                   key={previewFrameKey}
@@ -1394,6 +1486,27 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
           </div>
 
           <div className="tc-output-bar">
+            {activeLayout && (
+              <>
+                <span className="tc-output-info">Preview with</span>
+                <span className="le-sample-chips">
+                  {(Object.keys(LAYER_PREVIEW_SAMPLES) as Array<keyof typeof LAYER_PREVIEW_SAMPLES>).map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      className={`tc-zoom-btn${layerSample === key ? " active" : ""}`}
+                      onClick={() => setLayerSample(key)}
+                    >
+                      {LAYER_PREVIEW_SAMPLES[key].label}
+                    </button>
+                  ))}
+                </span>
+                <button type="button" className="tc-zoom-btn" onClick={playLayerAnimation} title="Play the in-animation">
+                  ▶ Play
+                </button>
+                <div className="tc-output-separator" />
+              </>
+            )}
             <span className="tc-output-info">1920 x 1080</span>
             <span className="tc-output-info">16:9</span>
             <div className="tc-output-separator" />
@@ -1427,6 +1540,19 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
             </span>
           </div>
 
+          {activeLayout ? (
+            <div className="tc-inspector-content">
+              <LayerPanel
+                layout={activeLayout}
+                selectedId={selectedLayerId}
+                onSelect={setSelectedLayerId}
+                onChange={commitLayout}
+                mediaItems={backgroundMediaLibrary}
+                mediaPreviewSrc={(item) => resolveMediaPreviewSrc(item as MediaItem)}
+              />
+            </div>
+          ) : (
+          <>
           <div className="tc-inspector-tabs">
             {INSPECTOR_TABS.map((t) => (
               <button key={t.key} className={`tc-inspector-tab${inspectorTab === t.key ? " active" : ""}`} onClick={() => setInspectorTab(t.key)}>
@@ -1771,6 +1897,8 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
               </div>
             )}
           </div>
+          </>
+          )}
         </aside>
       </div>
 
@@ -1874,6 +2002,6 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   );
 
   return typeof document !== "undefined"
-    ? createPortal(modalContent, document.body)
+    ? createPortal(<>{modalContent}{themeGate.modal}</>, document.body)
     : modalContent;
 }

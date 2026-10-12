@@ -58,6 +58,9 @@ const EMPTY_SOCIAL_MEDIA: ChurchSocialMedia = {
   youtube: "",
   twitter: "",
   tiktok: "",
+  whatsapp: "",
+  telegram: "",
+  threads: "",
 };
 
 const EMPTY_PROFILE: Partial<ChurchProfileType> = {
@@ -117,6 +120,9 @@ const SOCIAL_FIELDS: {
     { key: "youtube", label: "YouTube", placeholder: "https://youtube.com/@yourchurch" },
     { key: "twitter", label: "X (Twitter)", placeholder: "https://x.com/yourchurch" },
     { key: "tiktok", label: "TikTok", placeholder: "https://tiktok.com/@yourchurch" },
+    { key: "whatsapp", label: "WhatsApp", placeholder: "https://wa.me/234XXXXXXXXXX" },
+    { key: "telegram", label: "Telegram", placeholder: "https://t.me/yourchurch" },
+    { key: "threads", label: "Threads", placeholder: "https://threads.net/@yourchurch" },
   ];
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -805,7 +811,8 @@ export default function ChurchProfile() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Church Profile</h1>
           <p className="text-slate-500 mt-1 text-sm">
-            Manage your church information, branding and team.
+            Manage your church information, branding and team. What you save here fills your lower thirds in
+            MakeChurchEazy (church name, pastor, website, phone, email and social icons), usually within a few minutes.
           </p>
         </div>
       </div>
@@ -1236,7 +1243,7 @@ export default function ChurchProfile() {
             <div>
               <h2 className="text-lg font-bold text-slate-900">Social Media</h2>
               <p className="text-sm text-slate-500 mt-0.5">
-                Used in announcements and church information graphics.
+                Used in announcements, church information graphics and the social icons in your lower thirds.
               </p>
             </div>
             <SectionSaveButton

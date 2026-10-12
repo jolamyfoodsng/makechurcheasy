@@ -6,6 +6,7 @@ import { normalizeCompareThemeSettings } from "./compareThemeConfig";
 import { loadDockFavoriteBibleThemes } from "./dockThemeData";
 import { getUserScopedKey } from "../services/userScopedStorage";
 import { readNativeDockSetting, writeNativeDockSetting } from "../services/localDockSettings";
+import { pickLayoutAdjust } from "../themes/layout/adjust";
 
 export type DockNotesOverlayMode = "fullscreen" | "lower-third";
 
@@ -160,6 +161,8 @@ export function applyQuickSettingsToNotesTheme(
     ...theme,
     settings: {
       ...theme.settings,
+      // Size / position tweaks for layer themes (ignored by legacy themes).
+      ...pickLayoutAdjust(quickSettings),
       fontSize: quickSettings.fontSize ?? theme.settings.fontSize,
       autoFontScale: true,
       fontFamily: quickSettings.fontFamily ?? theme.settings.fontFamily,
@@ -261,12 +264,27 @@ export function applyQuickSettingsToNotesTheme(
 
 export function loadDockNotes(): DockNote[] {
   if (typeof localStorage === "undefined") return [];
-  const parsed = safeJsonParse<unknown>(readScopedStorage(DOCK_NOTES_KEY), []);
-  return normalizeDockNotes(parsed);
+  const parsed = normalizeDockNotes(safeJsonParse<unknown>(readScopedStorage(DOCK_NOTES_KEY), []));
+  if (parsed.length > 0) return parsed;
+
+  // Browser storage in the OBS Dock is not durable (it can be reset or read
+  // under a different key while the app restarts after an update). The notes
+  // are also kept in the app's on-disk Dock settings, so recover from there.
+  const durable = normalizeDockNotes(readNativeDockSetting<unknown>(DOCK_NOTES_KEY));
+  if (durable.length > 0) {
+    try {
+      localStorage.setItem(getUserScopedKey(DOCK_NOTES_KEY), JSON.stringify(durable));
+    } catch {
+      // Ignore storage failures inside OBS/browser dock contexts.
+    }
+  }
+  return durable;
 }
 
 export function saveDockNotes(items: DockNote[], notify = true): void {
   if (typeof localStorage === "undefined") return;
+  // Durable copy on disk (SQLite via the desktop app) so notes survive updates.
+  void writeNativeDockSetting(DOCK_NOTES_KEY, items);
   try {
     localStorage.setItem(getUserScopedKey(DOCK_NOTES_KEY), JSON.stringify(items));
     if (notify) {
@@ -291,6 +309,10 @@ export async function loadDockNotesFromDockData(): Promise<DockNote[]> {
 }
 
 export async function syncDockNotesToDock(notes: DockNote[] = loadDockNotes()): Promise<void> {
+  // The desktop window usually has no notes of its own (they are written in the
+  // OBS Dock). Never replace the shared file with an empty list on startup —
+  // that wiped the Dock's recovery copy every time the app restarted.
+  if (notes.length === 0) return;
   try {
     const { invoke } = await import("@tauri-apps/api/core");
     await invoke("save_dock_data", {

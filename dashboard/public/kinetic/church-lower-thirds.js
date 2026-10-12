@@ -270,7 +270,7 @@
     id: "ch-moment-timer", name: "Moment + Timer", tech: "Live local time, title bar and a serif tagline for honour, testimony or prayer moments",
     category: "general", tags: ["Church", "Graphics", "Announcement", "Clock", "Motion", "Animated"], color: "#f6bba5", H: 300, hold: 0,
     fields: [select("clockPeriod", "AM/PM display", "ampm", [{ label: "Show AM/PM", value: "ampm" }, { label: "Hide AM/PM", value: "hidden" }]),
-      text("heading", "Heading", "Honour moment"), text("tagline", "Tagline", "Share Your Memories On Social Media"),
+      text("heading", "Heading", "Your heading here"), text("tagline", "Tagline", "Share Your Memories On Social Media"),
       text("handles", "Hashtags / handles", "#YourHashtag @YourChurch"), color("colTagline", "Tagline bar colour", "#f6bba5", "c1")],
     bind: { heading: "title", tagline: "line", handles: "tags" },
     init: function (sec, P, ctx) {

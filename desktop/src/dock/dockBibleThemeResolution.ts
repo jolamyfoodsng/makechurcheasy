@@ -25,6 +25,7 @@ import {
 } from "./lowerThirdQuickSettings";
 import { readNativeDockSetting } from "../services/localDockSettings";
 import { readUserScopedStorage } from "../services/userScopedStorage";
+import { pickLayoutAdjust } from "../themes/layout/adjust";
 
 export type DockBibleOverlayMode = "fullscreen" | "lower-third";
 export type DockBibleReferenceFormat = "full" | "short" | "hidden";
@@ -38,6 +39,11 @@ export interface DockBibleOutputPreferences {
   lowerThirdQuickThemeSettingsLinkedToFullscreen?: boolean;
   referenceFormat?: DockBibleReferenceFormat;
   referenceVersionVisible?: boolean;
+  /** Saved by the Bible tab; lets other tabs (LM) follow the Bible tab's mode and line count. */
+  overlayMode?: DockBibleOverlayMode;
+  verseLineCount?: number;
+  fullscreenVerseLineCount?: number;
+  lowerThirdVerseLineCount?: number;
 }
 
 export interface DockBibleResolvedOutputTheme {
@@ -559,6 +565,8 @@ export function applyFullscreenQuickThemeSettings(
     settings: {
       ...theme.settings,
       backgroundType: bgType,
+      // Size / position tweaks for layer themes (ignored by legacy themes).
+      ...pickLayoutAdjust(quickSettings),
       fontSize: quickSettings.fontSize,
       autoFontScale: true,
       fontFamily: quickSettings.fontFamily,

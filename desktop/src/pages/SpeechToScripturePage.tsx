@@ -30,12 +30,11 @@ import {
   Search,
   ShieldAlert,
   StopCircle,
-  Volume2,
   Wifi,
   X,
   Zap
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { usePerformanceMonitor } from "../dock/usePerformanceMonitor";
@@ -1313,39 +1312,42 @@ export default function SpeechToScripturePage() {
               </div>
             </div>
             <div className="sts3-header-mic-status">
-              <div className="sts3-footer-item">
-                <Mic size={14} />
-                <span className={`sts3-footer-dot ${isListening ? "sts3-footer-dot--green" : ""}`} />
-                {isListening ? t("verseAi.listening") : t("verseAi.stopped")}
+              <div className="sts3-status-pills">
+                <span className={`sts3-pill${isListening ? " sts3-pill--on" : ""}`}>
+                  <span className="sts3-pill__dot" />
+                  {isListening ? t("verseAi.listening") : t("verseAi.stopped")}
+                </span>
+                <span className={`sts3-pill${isBroadcastConnected ? " sts3-pill--on" : " sts3-pill--warn"}`}>
+                  <Radio size={12} />
+                  {isBroadcastConnected ? t("verseAi.broadcastConnected") : t("verseAi.broadcastDisconnected")}
+                </span>
               </div>
-              <div className="sts3-footer-item">
-                <Radio size={14} className={isBroadcastConnected ? "sts3-footer-icon--green" : ""} />
-                {isBroadcastConnected ? t("verseAi.broadcastConnected") : t("verseAi.broadcastDisconnected")}
-              </div>
-              <div className="sts3-gain-control" title={t("verseAi.micGainTitle", "Microphone Sensitivity / Boost (50% - 400%)")}>
-                <Volume2 size={13} />
-                <span style={{ minWidth: 38 }}>{inputGain}%</span>
-                <input
-                  type="range"
-                  min="50"
-                  max="400"
-                  step="25"
-                  value={inputGain}
-                  onChange={(e) => handleGainChange(Number(e.target.value))}
-                  className="sts3-gain-slider"
-                  aria-label="Microphone Sensitivity Boost"
-                />
-                {isListening && (
-                  <div className="sts3-mini-meter" title={`Mic Level: ${levelPercent}%`}>
-                    <div
-                      className="sts3-mini-meter-fill"
-                      style={{
-                        width: `${levelPercent}%`,
-                        backgroundColor: levelPercent > 80 ? "var(--error, #ef4444)" : levelPercent > 50 ? "var(--warning, #f59e0b)" : "var(--success, #10b981)",
-                      }}
-                    />
-                  </div>
-                )}
+              <div className="sts3-sens" title={t("verseAi.micGainTitle", "Microphone Sensitivity / Boost (50% - 400%)")}>
+                <div className="sts3-sens__row">
+                  <Mic size={13} className="sts3-sens__icon" />
+                  <span className="sts3-sens__label">{t("verseAi.micSensitivity", "Mic sensitivity")}</span>
+                  <input
+                    type="range"
+                    min="50"
+                    max="400"
+                    step="25"
+                    value={inputGain}
+                    onChange={(e) => handleGainChange(Number(e.target.value))}
+                    className="sts3-gain-slider"
+                    style={{ "--sts3-fill": `${((inputGain - 50) / 350) * 100}%` } as CSSProperties}
+                    aria-label="Microphone Sensitivity Boost"
+                  />
+                  <span className="sts3-sens__value">{inputGain}%</span>
+                </div>
+                <div className="sts3-sens__meter" title={`Mic Level: ${isListening ? levelPercent : 0}%`}>
+                  <div
+                    className="sts3-sens__meter-fill"
+                    style={{
+                      width: `${isListening ? levelPercent : 0}%`,
+                      backgroundColor: levelPercent > 80 ? "var(--error, #ef4444)" : levelPercent > 50 ? "var(--warning, #f59e0b)" : "var(--success, #10b981)",
+                    }}
+                  />
+                </div>
               </div>
             </div>
 

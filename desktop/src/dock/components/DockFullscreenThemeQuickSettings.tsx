@@ -73,6 +73,10 @@ export type DockFullscreenQuickThemeSettings = Pick<
     | "borderRadius"
     | "padding"
     | "safeArea"
+    | "layoutTextScale"
+    | "layoutRefScale"
+    | "layoutOffsetY"
+    | "layoutBackdropDarkness"
   >
 > & Partial<CompareThemeSettings> & {
   /** Dock-only: persisted background mode (off/theme/color/image/pattern/video) */
@@ -136,7 +140,7 @@ const PRESETS: ThemePreset[] = [
       referenceBackgroundRadius: 12,
       lowerThirdPosition: "center",
       lowerThirdSize: "medium",
-      lowerThirdWidthPreset: "md",
+      lowerThirdWidthPreset: "full",
       lowerThirdOffsetX: 0,
       lowerThirdCaptionPosition: "bottom",
       lowerThirdEdge: "bottom",
@@ -188,7 +192,7 @@ const PRESETS: ThemePreset[] = [
       referenceBackgroundRadius: 12,
       lowerThirdPosition: "center",
       lowerThirdSize: "medium",
-      lowerThirdWidthPreset: "md",
+      lowerThirdWidthPreset: "full",
       lowerThirdOffsetX: 0,
       lowerThirdCaptionPosition: "bottom",
       lowerThirdEdge: "bottom",
@@ -240,7 +244,7 @@ const PRESETS: ThemePreset[] = [
       referenceBackgroundRadius: 20,
       lowerThirdPosition: "center",
       lowerThirdSize: "medium",
-      lowerThirdWidthPreset: "md",
+      lowerThirdWidthPreset: "full",
       lowerThirdOffsetX: 0,
       lowerThirdCaptionPosition: "bottom",
       lowerThirdEdge: "bottom",
@@ -292,7 +296,7 @@ const PRESETS: ThemePreset[] = [
       referenceBackgroundRadius: 4,
       lowerThirdPosition: "center",
       lowerThirdSize: "medium",
-      lowerThirdWidthPreset: "md",
+      lowerThirdWidthPreset: "full",
       lowerThirdOffsetX: 0,
       lowerThirdCaptionPosition: "bottom",
       lowerThirdEdge: "bottom",
@@ -347,7 +351,7 @@ const PRESETS: ThemePreset[] = [
       referenceBackgroundRadius: 12,
       lowerThirdPosition: "center",
       lowerThirdSize: "medium",
-      lowerThirdWidthPreset: "md",
+      lowerThirdWidthPreset: "full",
       lowerThirdOffsetX: 0,
       lowerThirdCaptionPosition: "bottom",
       lowerThirdEdge: "bottom",

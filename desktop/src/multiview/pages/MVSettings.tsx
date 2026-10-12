@@ -120,6 +120,8 @@ export interface SettingsNavCategory {
     label: string;
     icon: typeof Settings;
     description: string;
+    /** Shown greyed out with a "Soon" badge and cannot be opened (not even with ?tab=). */
+    comingSoon?: boolean;
   }[];
 }
 
@@ -139,7 +141,6 @@ export const SETTINGS_CATEGORIES: SettingsNavCategory[] = [
       { id: "branding", label: "Church & Branding", icon: Paintbrush, description: "Church identity, logo assets, lower-thirds, and speakers." },
       { id: "obs", label: "OBS Studio", icon: Radio, description: "WebSocket connection, credentials, and live status." },
       { id: "audio", label: "Audio & Voice AI", icon: Mic, description: "Microphone input, gain boost, and speech-to-scripture settings." },
-      { id: "mobile", label: "Mobile Companion", icon: Smartphone, description: "Wireless phone pairing, QR code, and remote permissions." },
       { id: "automation", label: "Automations", icon: Zap, description: "Create and manage desktop automations for OBS." },
     ],
   },
@@ -150,7 +151,18 @@ export const SETTINGS_CATEGORIES: SettingsNavCategory[] = [
       { id: "storage", label: "Data & Storage", icon: Trash2, description: "Database reset, worship cleanup, and cache management." },
     ],
   },
+  {
+    group: "Coming soon",
+    items: [
+      // The tab itself is kept (see activeTab === "mobile" below); remove `comingSoon` to switch it back on.
+      { id: "mobile", label: "Mobile Companion", icon: Smartphone, description: "Wireless phone pairing, QR code, and remote permissions.", comingSoon: true },
+    ],
+  },
 ];
+
+const COMING_SOON_TABS = new Set<SettingsTab>(
+  SETTINGS_CATEGORIES.flatMap((category) => category.items.filter((item) => item.comingSoon).map((item) => item.id)),
+);
 
 const PREFERRED_MIC_STORAGE_KEY = "ocs-speech-to-scripture-mic-id";
 
@@ -230,12 +242,14 @@ export function MVSettings() {
   const validTabs: SettingsTab[] = ["general", "appearance", "bible", "branding", "obs", "broadcast", "mobile", "automation", "usage", "storage", "audio"];
   const initialTab = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<SettingsTab>(
-    initialTab && validTabs.includes(initialTab as SettingsTab) ? (initialTab as SettingsTab) : "general"
+    initialTab && validTabs.includes(initialTab as SettingsTab) && !COMING_SOON_TABS.has(initialTab as SettingsTab)
+      ? (initialTab as SettingsTab)
+      : "general"
   );
 
   useEffect(() => {
     const tabParam = searchParams.get("tab") as SettingsTab | null;
-    if (tabParam && validTabs.includes(tabParam) && tabParam !== activeTab) {
+    if (tabParam && validTabs.includes(tabParam) && !COMING_SOON_TABS.has(tabParam) && tabParam !== activeTab) {
       setActiveTab(tabParam);
     }
   }, [searchParams, activeTab]);
@@ -267,7 +281,7 @@ export function MVSettings() {
   // ── Bible settings state ──
   const { state: bibleState, dispatch: bibleDispatch, setTheme: bibleSetTheme } = useBible();
   const [bDefaultTranslation, setBDefaultTranslation] = useState<BibleTranslation>("KJV");
-  const [bDefaultThemeId, setBDefaultThemeId] = useState("classic-dark");
+  const [bDefaultThemeId, setBDefaultThemeId] = useState("preset-caption-rule");
   const [bShowVerseNumbers, setBShowVerseNumbers] = useState(true);
   const [bMaxLines, setBMaxLines] = useState(4);
   const [bAutoSend, setBAutoSend] = useState(true);
@@ -695,7 +709,7 @@ export function MVSettings() {
   useEffect(() => {
     getBibleSettings().then((s) => {
       setBDefaultTranslation((s.defaultTranslation as BibleTranslation) ?? "KJV");
-      setBDefaultThemeId(s.activeThemeId ?? "classic-dark");
+      setBDefaultThemeId(s.activeThemeId ?? "preset-caption-rule");
       setBColorMode(s.colorMode ?? "dark");
       setBAutoSend(s.autoSendOnDoubleClick ?? true);
       setBReduceMotion(s.reduceMotion ?? false);
@@ -1301,14 +1315,18 @@ export function MVSettings() {
                 <div className="settings-nav-group-items">
                   {category.items.map((item) => {
                     const Icon = item.icon;
-                    const isActive = activeTab === item.id;
+                    const soon = Boolean(item.comingSoon);
+                    const isActive = !soon && activeTab === item.id;
                     const isBroadcast = item.id === "broadcast";
                     return (
                       <button
                         key={item.id}
                         type="button"
-                        className={`settings-nav-item ${isActive ? "active" : ""}`}
-                        onClick={() => setActiveTab(item.id)}
+                        className={`settings-nav-item ${isActive ? "active" : ""}${soon ? " is-coming-soon" : ""}`}
+                        disabled={soon}
+                        aria-disabled={soon}
+                        title={soon ? "Coming soon" : undefined}
+                        onClick={() => { if (!soon) setActiveTab(item.id); }}
                       >
                         {isBroadcast && (
                           <span
@@ -1318,6 +1336,7 @@ export function MVSettings() {
                         )}
                         <Icon size={16} className="settings-nav-item-icon" />
                         <span className="settings-nav-item-text">{item.label}</span>
+                        {soon && <span className="settings-nav-soon">Soon</span>}
                       </button>
                     );
                   })}

@@ -38,8 +38,37 @@ function category(t) {
   return "others";
 }
 
-const list = themes
-  .filter((t) => !SKIP.has(t.id))
+// Graphic packages bundled with the app (src/lowerthirds/bundledGraphicPackages.ts).
+// Their theme id is "lt-pkg-<id>", the same id the catalog uses for them.
+const bundledSrc = fs.readFileSync(path.resolve(__dirname, "../src/lowerthirds/bundledGraphicPackages.ts"), "utf8");
+const bundledStart = bundledSrc.indexOf("= [", bundledSrc.indexOf("BUNDLED_GRAPHIC_PACKAGES")) + 2;
+const bundledEnd = bundledSrc.lastIndexOf("]");
+const bundledPackages = JSON.parse(bundledSrc.slice(bundledStart, bundledEnd + 1));
+const kebab = (key) => key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+// Mirrors packageToTheme() in src/lowerthirds/graphicPackages.ts.
+const packageThemes = bundledPackages.map((pkg) => {
+  const id = String(pkg.id).replace(/[^\w-]/g, "");
+  const fields = (pkg.fields || []).filter((f) => f.key && !String(f.key).startsWith("kx"));
+  const firstText = fields.find((f) => (f.type || "text") === "text");
+  const encoded = Buffer.from(JSON.stringify(pkg), "utf8").toString("base64");
+  const html =
+    `<div class="kx-root" data-kx="pkg-${id}" data-kx-pkg="${encoded}" data-state="{{state}}" ` +
+    fields.map((f) => `data-v-${kebab(f.key)}="{{${f.key}}}"`).join(" ") +
+    ` data-v-kx-color="{{kxColor}}" data-v-kx-speed="{{kxSpeed}}" data-v-kx-scale="{{kxScale}}" data-v-kx-auto-out="{{kxAutoOut}}" data-v-kx-loop="{{kxLoop}}">` +
+    `<div class="kx-fallback"><div class="kx-fb-name">${firstText ? `{{${firstText.key}}}` : ""}</div></div></div>`;
+  return {
+    id: `lt-pkg-${id}`,
+    name: pkg.name,
+    graphicCategory: String(pkg.category || "others").toLowerCase(),
+    accentColor: pkg.color || "#2563eb",
+    description: pkg.description || "",
+    html,
+    variables: fields.map((f) => ({ key: f.key, label: f.label || f.key, type: f.type || "text", defaultValue: String(f.default ?? "") })),
+    fontImports: ["/fonts/google/google-fonts.css"],
+  };
+});
+
+const list = [...themes.filter((t) => !SKIP.has(t.id)), ...packageThemes]
   .map((t, i) => ({
     graphicId: t.id,
     name: t.name,
@@ -72,8 +101,7 @@ fs.writeFileSync(target, out);
 console.log(`${list.length} built-in graphics → ${target}`);
 
 // The admin preview uses the exact desktop HTML, variables and animation engine.
-const previewThemes = themes
-  .filter((t) => !SKIP.has(t.id))
+const previewThemes = [...themes.filter((t) => !SKIP.has(t.id)), ...packageThemes]
   .map((t) => ({
     graphicId: t.id,
     name: t.name,

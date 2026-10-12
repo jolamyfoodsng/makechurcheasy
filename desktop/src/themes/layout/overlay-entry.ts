@@ -10,6 +10,7 @@
  */
 import { ThemeRenderer } from "./renderer";
 import { isThemeLayout, type ThemeLayout } from "./types";
+import { applyLayoutAdjust } from "./adjust";
 
 interface OverlayPacket {
   slide?: { text?: string; reference?: string; lineCount?: number } | null;
@@ -27,6 +28,15 @@ interface OverlayHooks {
   ack?: ((packet: OverlayPacket, fontFitReady?: boolean) => void) | null;
   animateOutDone?: (() => void) | null;
   resolveAsset?: (src: string) => string;
+  /**
+   * True when this packet switches the page between Full screen and Lower
+   * third and the change should be seen (source on screen, motion allowed).
+   * A visible layout then plays out, swaps layout and plays in instead of
+   * cutting to the new layout.
+   */
+  modeSwitch?: boolean;
+  /** How long a leaving layout may take to play out on a mode switch (ms). Default 240. */
+  modeSwitchOutMs?: number;
 }
 
 const ACTIVE_CLASS = "mtl-active";
@@ -35,6 +45,10 @@ const LEGACY_HIDE_CSS = `html.${ACTIVE_CLASS} [data-mtl-legacy]{visibility:hidde
 let renderer: ThemeRenderer | null = null;
 let host: HTMLDivElement | null = null;
 let active = false;
+/** A layout is playing out before it is retired (layer theme -> legacy theme on a mode switch). */
+let retirePending = false;
+let retireToken = 0;
+const DEFAULT_MODE_SWITCH_OUT_MS = 240;
 
 function ensureHost(hooks: OverlayHooks): ThemeRenderer {
   if (renderer) return renderer;
@@ -61,6 +75,8 @@ function activate(hooks: OverlayHooks) {
 }
 
 function deactivate() {
+  retireToken++;
+  retirePending = false;
   if (!active) return;
   active = false;
   document.documentElement.classList.remove(ACTIVE_CLASS);
@@ -68,6 +84,28 @@ function deactivate() {
   renderer = null;
   host?.remove();
   host = null;
+}
+
+/**
+ * Layer theme -> legacy theme on a visible mode switch: let the layout play
+ * out first and keep the legacy elements hidden until it is gone, so the
+ * legacy bar of the layer that is leaving never shows through.
+ */
+function retireLayoutAfterOut(outMs: number) {
+  const r = renderer;
+  if (!r) {
+    deactivate();
+    return;
+  }
+  retirePending = true;
+  const token = ++retireToken;
+  const finish = () => {
+    if (token === retireToken && renderer === r) deactivate();
+  };
+  // Small margin so the page's own layer fade-out has finished too.
+  const settle = () => setTimeout(finish, 60);
+  void r.hide(outMs).then(settle, settle);
+  setTimeout(finish, outMs + 400); // safety net if the animation never reports back
 }
 
 function safe<T extends unknown[]>(fn: ((...args: T) => unknown) | null | undefined, ...args: T) {
@@ -81,18 +119,56 @@ function safe<T extends unknown[]>(fn: ((...args: T) => unknown) | null | undefi
 function handle(packet: OverlayPacket, hooks: OverlayHooks = {}): boolean {
   if (!packet || typeof packet !== "object") return false;
   const hasTheme = !!packet.theme && typeof packet.theme === "object";
-  const layout = hasTheme && isThemeLayout(packet.theme!.layout) ? (packet.theme!.layout as ThemeLayout) : null;
+  // The Dock's text-size / position tweaks travel as theme fields next to the layout.
+  const layout = hasTheme && isThemeLayout(packet.theme!.layout)
+    ? applyLayoutAdjust(packet.theme!.layout as ThemeLayout, packet.theme)
+    : null;
 
   // A theme without a layout means a legacy theme was picked: step aside.
   if (hasTheme && !layout) {
+    // A mode-switch fade-out is already retiring the layout: let it finish.
+    if (retirePending) return false;
+    if (hooks.modeSwitch && active && renderer?.visible) {
+      retireLayoutAfterOut(hooks.modeSwitchOutMs ?? DEFAULT_MODE_SWITCH_OUT_MS);
+      return false;
+    }
     deactivate();
     return false;
   }
   // No theme on the packet and no layout active: legacy owns it.
   if (!layout && !active) return false;
+  // The layout is on its way out (mode switch to a legacy theme): don't bring it back.
+  if (!layout && retirePending) return false;
 
+  // A layout is wanted again: cancel any pending retire.
+  if (layout) {
+    retireToken++;
+    retirePending = false;
+  }
   const r = ensureHost(hooks);
   activate(hooks);
+
+  if (
+    layout
+    && hooks.modeSwitch
+    && r.visible
+    && packet.action !== "animate-out"
+    && packet.slide
+    && !packet.blanked
+  ) {
+    // Full <-> Lower third while a layout is on air: out, swap layout, in.
+    safe(hooks.persist, packet);
+    void r.switchLayout(layout, {
+      text: packet.slide.text || "",
+      reference: packet.slide.reference || "",
+      lineCount: packet.slide.lineCount,
+    });
+    // Ack now, like the in-place swap this replaces: the Dock only waits a few
+    // hundred ms for it and must not be held up by the transition.
+    safe(hooks.ack, packet, true);
+    return true;
+  }
+
   if (layout) r.setLayout(layout);
 
   if (packet.action === "animate-out") {
@@ -122,12 +198,21 @@ function handle(packet: OverlayPacket, hooks: OverlayHooks = {}): boolean {
 function syncTheme(theme: OverlayPacket["theme"], hooks: OverlayHooks = {}) {
   if (!theme || typeof theme !== "object") return;
   if (!isThemeLayout(theme.layout)) {
+    if (retirePending) return;
+    if (hooks.modeSwitch && active && renderer?.visible) {
+      retireLayoutAfterOut(hooks.modeSwitchOutMs ?? DEFAULT_MODE_SWITCH_OUT_MS);
+      return;
+    }
     deactivate();
     return;
   }
+  retireToken++;
+  retirePending = false;
   const r = ensureHost(hooks);
   activate(hooks);
-  r.setLayout(theme.layout);
+  const layout = applyLayoutAdjust(theme.layout, theme);
+  if (hooks.modeSwitch && r.visible) void r.switchLayout(layout);
+  else r.setLayout(layout);
 }
 
 const api = {

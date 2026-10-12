@@ -36,6 +36,8 @@ import {
 } from "../services/productionSettings";
 import type { ServicePlannerSnapshot } from "../service-planner/types";
 import { installDockTextShortcuts } from "./dockTextShortcuts";
+import { loadDockFavoriteBibleThemes } from "./dockThemeData";
+import { announceDockThemesRefreshed } from "./dockThemeRefresh";
 import { useKeyboardShortcuts, type ShortcutDefinition, type ShortcutCategory, formatShortcut } from "./useKeyboardShortcuts";
 import { triggerTabSearchInput } from "../utils/searchShortcut";
 import { useDockDragDrop } from "./useDockDragDrop";
@@ -115,13 +117,6 @@ import {
 import { coerce, gt } from "semver";
 
 import { safeLazy } from "../utils/safeLazy";
-import {
-  loadBroadcastStore,
-  subscribeBroadcastStore,
-  setActiveProfileId,
-  getActiveProfile,
-  type BroadcastStoreState,
-} from "../services/broadcastSettingsService";
 
 const loadDockBibleTab = () => import("./tabs/DockBibleTab");
 const loadDockMediaTab = () => import("./tabs/DockMediaTab");
@@ -386,17 +381,6 @@ function DockPageContent({
   const typographyHydrationGenerationRef = useRef(0);
   const [upgradeModalMsg, setUpgradeModalMsg] = useState("");
   const [showPresentationLinkModal, setShowPresentationLinkModal] = useState(false);
-  const [broadcastStore, setBroadcastStore] = useState<BroadcastStoreState>(loadBroadcastStore);
-  const [showBroadcastPicker, setShowBroadcastPicker] = useState(false);
-
-  useEffect(() => {
-    return subscribeBroadcastStore((next) => {
-      setBroadcastStore(next);
-    });
-  }, []);
-
-  const activeBroadcastProfile = useMemo(() => getActiveProfile(broadcastStore), [broadcastStore]);
-
   const presentationPublishRequestRef = useRef(0);
   const presentationPublishTailRef = useRef(Promise.resolve());
   const hiddenTabsKey = hiddenTabs.join("|");
@@ -979,8 +963,28 @@ function DockPageContent({
       }
     });
 
+    // The app saved, deleted or hid a theme: re-read the themes and the selected-theme
+    // copy, then let the tabs swap in the edited versions (see dockThemeRefresh.ts).
+    let themeRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+    const refreshThemesFromApp = () => {
+      if (themeRefreshTimer) clearTimeout(themeRefreshTimer);
+      themeRefreshTimer = setTimeout(() => {
+        themeRefreshTimer = null;
+        void (async () => {
+          const [themes] = await Promise.all([
+            loadDockFavoriteBibleThemes({ fresh: true }).catch(() => []),
+            loadDockProductionSettings().then((next) => { if (!disposed) setProductionSettings(next); }).catch(() => undefined),
+          ]);
+          if (!disposed && themes.length > 0) announceDockThemesRefreshed(themes);
+        })();
+      }, 200);
+    };
+
     const unsubState = dockClient.onState((msg: DockStateMessage) => {
       switch (msg.type) {
+        case "state:favorite-themes-updated":
+          refreshThemesFromApp();
+          break;
         case "state:pong":
           setAppConnected(true);
           break;
@@ -1028,6 +1032,7 @@ function DockPageContent({
       if (autoReconnectTimer) clearInterval(autoReconnectTimer);
       unsubObs();
       unsubState();
+      if (themeRefreshTimer) clearTimeout(themeRefreshTimer);
       window.clearInterval(pingInterval);
       if (!externalObsSession && !presentationLinkMode) {
         dockObsClient.disconnect();
@@ -1288,149 +1293,6 @@ function DockPageContent({
               )}
             </div>
 
-            {/* Quick Minister / Profile Switcher Pill */}
-            {!headerCollapsed && activeTab !== "broadcast" && (
-              <div style={{ position: "relative" }}>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowBroadcastPicker((prev) => !prev);
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 5,
-                    padding: "2px 8px",
-                    borderRadius: 14,
-                    background: "rgba(245, 158, 11, 0.12)",
-                    border: "1px solid rgba(245, 158, 11, 0.35)",
-                    color: "var(--dock-accent, #f59e0b)",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    maxWidth: 160,
-                  }}
-                  title={t("broadcast.switchProfile", "Switch Minister / Stream Profile")}
-                >
-                  <span
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: "50%",
-                      background: activeBroadcastProfile?.color || "#f59e0b",
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {activeBroadcastProfile?.nickname || "Broadcast"}
-                  </span>
-                  <Icon name="expand_more" size={12} />
-                </button>
-
-                {/* Dropdown Popover */}
-                {showBroadcastPicker && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      top: "calc(100% + 4px)",
-                      left: "50%",
-                      transform: "translateX(-50%)",
-                      width: 220,
-                      background: "var(--dock-card-bg, #182234)",
-                      border: "1px solid var(--dock-border, #334155)",
-                      borderRadius: 10,
-                      padding: 6,
-                      boxShadow: "0 10px 25px rgba(0,0,0,0.5)",
-                      zIndex: 9999,
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 3,
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        color: "var(--dock-muted, #94a3b8)",
-                        textTransform: "uppercase",
-                        padding: "2px 6px 4px",
-                        borderBottom: "1px solid var(--dock-border, rgba(255,255,255,0.06))",
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                      }}
-                    >
-                      <span>Ministers & Profiles</span>
-                      <span style={{ fontSize: 9, color: "var(--dock-accent, #f59e0b)" }}>1-Click Switch</span>
-                    </div>
-
-                    {broadcastStore.profiles.map((p) => {
-                      const isSelected = p.id === broadcastStore.activeProfileId;
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => {
-                            setActiveProfileId(p.id);
-                            setShowBroadcastPicker(false);
-                            showDockSaveFeedback(`Switched to ${p.nickname}`);
-                          }}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            padding: "5px 8px",
-                            borderRadius: 6,
-                            background: isSelected ? "rgba(245, 158, 11, 0.15)" : "transparent",
-                            border: "none",
-                            color: isSelected ? "var(--dock-accent, #f59e0b)" : "var(--dock-text, #e2e8f0)",
-                            fontSize: 11,
-                            fontWeight: isSelected ? 700 : 500,
-                            cursor: "pointer",
-                            textAlign: "left",
-                          }}
-                        >
-                          <span style={{ display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
-                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: p.color || "#f59e0b" }} />
-                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nickname}</span>
-                          </span>
-                          {isSelected && <Icon name="check" size={12} />}
-                        </button>
-                      );
-                    })}
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowBroadcastPicker(false);
-                        setActiveTab("broadcast");
-                        setRenderedTab("broadcast");
-                      }}
-                      style={{
-                        marginTop: 3,
-                        padding: "5px 8px",
-                        borderRadius: 6,
-                        background: "var(--dock-surface, #1e293b)",
-                        border: "1px dashed var(--dock-border, #475569)",
-                        color: "var(--dock-accent, #f59e0b)",
-                        fontSize: 11,
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 4,
-                      }}
-                    >
-                      <Icon name="cell_tower" size={12} />
-                      <span>Open Broadcast Tab</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
             <div
               id="dock-shell-header-actions"
               hidden={headerCollapsed}
@@ -2212,6 +2074,7 @@ function DockPageContent({
                     staged={staged}
                     onStage={handleStage}
                     productionDefaults={productionSettings.worship}
+                    notesProductionDefaults={productionSettings.notes}
                     presentationOutputTarget={presentationOutputTarget}
                     searchPlacement={searchPlacement}
                     fullscreenOnly={hideLowerThirdControls}

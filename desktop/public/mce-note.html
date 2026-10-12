@@ -934,10 +934,13 @@
       const _channelName = 'obs-church-studio-notes-overlay' + _routeSuffix;
 
       function readInitialMode() {
+        // Order matters. The URL mode and the packet the dock just put in the
+        // URL hash describe THIS load; the cached packet in localStorage is
+        // whatever was shown last time. Trusting the cache first made a
+        // lower-third push start as full screen after a refresh.
         try {
-          const raw = localStorage.getItem(_storageKey);
-          const parsed = raw ? JSON.parse(raw) : null;
-          if (parsed?.mode === 'fullscreen' || parsed?.mode === 'lower-third') return parsed.mode;
+          const modeParam = new URLSearchParams(window.location.search).get('mode');
+          if (modeParam === 'fullscreen' || modeParam === 'lower-third') return modeParam;
         } catch { }
         try {
           const hash = window.location.hash;
@@ -945,6 +948,11 @@
             const parsed = JSON.parse(decodeURIComponent(hash.slice(6)));
             if (parsed?.mode === 'fullscreen' || parsed?.mode === 'lower-third') return parsed.mode;
           }
+        } catch { }
+        try {
+          const raw = localStorage.getItem(_storageKey);
+          const parsed = raw ? JSON.parse(raw) : null;
+          if (parsed?.mode === 'fullscreen' || parsed?.mode === 'lower-third') return parsed.mode;
         } catch { }
         return 'fullscreen';
       }
@@ -1457,10 +1465,87 @@
       /* ══════════════════════════════════════════════════════
          MODE SWITCHING: opacity-only toggle
          ══════════════════════════════════════════════════════ */
+      // OBS tells the page when its source is shown or hidden. A hidden page
+      // paints no frames, so an opacity fade started while hidden only begins
+      // when the source is shown again, and the previous mode is visible for
+      // the length of the fade ("full screen before lower third").
+      var _mceSourceVisible = true;
+      window.addEventListener('obsSourceVisibleChanged', function (event) {
+        _mceSourceVisible = !(event && event.detail && event.detail.visible === false);
+      });
+      // Full <-> Lower third plays as "out, then in": the layer that is leaving
+      // fades out first, then the new layer (already drawn while hidden, so its
+      // text has settled) fades in and its text plays the theme's entrance
+      // animation. Snaps instead when nothing is visible, motion is reduced or
+      // the theme animation is "none".
+      var MODE_OUT_MS = 240;
+      var MODE_IN_MS = 320;
+      var _modeRevealTimer = 0;
+      var _modeOutLayer = null;
+      var _modeOutEndsAt = 0;
+      function layerForMode(m) { return m === 'lower-third' ? lowerThirdLayer : fullscreenLayer; }
+      function cancelPendingModeReveal() {
+        if (_modeRevealTimer) { clearTimeout(_modeRevealTimer); _modeRevealTimer = 0; }
+      }
+      function shouldSequenceModeSwitch() {
+        try {
+          if (document.hidden || !_mceSourceVisible) return false;
+          if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+          if (typeof getOverlayAnimationName === 'function' && getOverlayAnimationName(currentOverlayData) === 'none') return false;
+        } catch (e) { }
+        return true;
+      }
+      function sequenceModeSwitch(from, to) {
+        var outLayer = layerForMode(from);
+        var inLayer = layerForMode(to);
+        cancelPendingModeReveal();
+        // Quick toggle back while the layer is still fading out: bring it straight back.
+        var returning = inLayer === _modeOutLayer && Date.now() < _modeOutEndsAt;
+        outLayer.style.transition = 'opacity ' + MODE_OUT_MS + 'ms ease-in';
+        inLayer.style.transition = 'opacity ' + MODE_IN_MS + 'ms ease-out';
+        outLayer.classList.remove('is-active');
+        _modeOutLayer = outLayer;
+        _modeOutEndsAt = Date.now() + MODE_OUT_MS;
+        if (returning) { inLayer.classList.add('is-active'); return; }
+        inLayer.classList.remove('is-active');
+        _modeRevealTimer = setTimeout(function () {
+          _modeRevealTimer = 0;
+          if (activeMode !== to) return;
+          inLayer.classList.add('is-active');
+          try {
+            if (typeof playVerseEnterAnimation === 'function' && typeof getOverlayAnimationName === 'function') {
+              playVerseEnterAnimation(to, getOverlayAnimationName(currentOverlayData));
+            }
+          } catch (e) { }
+        }, MODE_OUT_MS);
+      }
       function setActiveLayer(mode) {
         if (mode === activeMode) return;
-        fullscreenLayer.classList.toggle('is-active', mode === 'fullscreen');
-        lowerThirdLayer.classList.toggle('is-active', mode === 'lower-third');
+        // Switching away from a mode while nothing is on screen: jump straight
+        // to the new layer instead of cross-fading.
+        const snapToLayer = Boolean(activeMode) && (document.hidden || !_mceSourceVisible);
+        if (snapToLayer) {
+          fullscreenLayer.style.transition = 'none';
+          lowerThirdLayer.style.transition = 'none';
+        }
+        const previousMode = activeMode;
+        if (!snapToLayer && previousMode && shouldSequenceModeSwitch()) {
+          sequenceModeSwitch(previousMode, mode);
+        } else {
+          cancelPendingModeReveal();
+          if (!snapToLayer) {
+            fullscreenLayer.style.transition = '';
+            lowerThirdLayer.style.transition = '';
+          }
+          fullscreenLayer.classList.toggle('is-active', mode === 'fullscreen');
+          lowerThirdLayer.classList.toggle('is-active', mode === 'lower-third');
+        }
+        if (snapToLayer) {
+          void fullscreenLayer.offsetWidth;
+          void lowerThirdLayer.offsetWidth;
+          fullscreenLayer.style.transition = '';
+          lowerThirdLayer.style.transition = '';
+        }
         activeMode = mode;
         body.dataset.mode = mode;
         lastAppliedThemeKeyByMode[mode] = '';
@@ -2165,12 +2250,29 @@
         }
         // Theme Editor layouts: drawn by the shared renderer (public/theme-renderer.js).
         // Returns false for legacy themes, which continue below unchanged.
+        // A visible Full <-> Lower third switch plays the old layout out and the new one in.
+        const themeModeSwitch = Boolean(activeMode)
+          && (packet.mode === 'fullscreen' || packet.mode === 'lower-third')
+          && packet.mode !== activeMode
+          && shouldSequenceModeSwitch();
         if (window.MCEThemeOverlay && window.MCEThemeOverlay.handle(packet, {
+          modeSwitch: themeModeSwitch,
+          modeSwitchOutMs: MODE_OUT_MS,
           legacy: [overlay, ltBar],
           persist: typeof persistOverlayPacket === 'function' ? persistOverlayPacket : null,
           ack: typeof writeRenderAck === 'function' ? writeRenderAck : null,
           animateOutDone: typeof signalAnimateOutComplete === 'function' ? signalAnimateOutComplete : null,
-        })) return;
+        })) {
+          // The theme renderer draws into its own host on top of the page, so
+          // it never switches the Full-screen / Lower-third layers. Do it here,
+          // otherwise the Full-mode background stays visible behind a lower
+          // third after switching modes.
+          if (packet.action !== 'animate-out'
+            && (packet.mode === 'fullscreen' || packet.mode === 'lower-third')) {
+            setActiveLayer(packet.mode);
+          }
+          return;
+        }
         // Apply theme even from theme-only packets (e.g., settings change without verse push)
         if (packet.theme && (!packet.slide && !packet.blanked)) {
           const themedPacket = { ...(currentOverlayData || currentBibleState || {}), ...packet };
@@ -2359,7 +2461,7 @@
           const css = packet.css || packet.overlayCss || (data && typeof data === 'object' ? (data.css || data.overlayCss) : '');
           if (css) applyObsBrowserEventCss(css);
           if (packet.type === 'mode-change' && packet.mode) {
-            if (packet.theme && window.MCEThemeOverlay) window.MCEThemeOverlay.syncTheme(packet.theme, { legacy: [overlay, ltBar] });
+            if (packet.theme && window.MCEThemeOverlay) window.MCEThemeOverlay.syncTheme(packet.theme, { legacy: [overlay, ltBar], modeSwitch: Boolean(activeMode) && packet.mode !== activeMode && shouldSequenceModeSwitch(), modeSwitchOutMs: MODE_OUT_MS });
             if (packet.theme) {
               applyThemeIfChanged(packet.theme, true, packet.mode);
             }
@@ -2498,9 +2600,15 @@
           return;
         }
 
-        setActiveLayer(initialMode);
+        // A live packet may already have chosen the mode. Never replace it with
+        // the load-time guess: that guess is only for a page with no packet yet.
+        const packetMode = currentOverlayData && (currentOverlayData.mode === 'fullscreen' || currentOverlayData.mode === 'lower-third')
+          ? currentOverlayData.mode
+          : '';
+        const revealMode = activeMode || packetMode || initialMode;
+        if (!activeMode) setActiveLayer(revealMode);
 
-        if (initialMode === 'lower-third') {
+        if (revealMode === 'lower-third') {
           clearFullscreenBackgroundVideo();
         }
       })(10);

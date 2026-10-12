@@ -781,6 +781,19 @@ function App() {
         }
       }
 
+      // Dock "reload themes": pull the account's latest themes, rewrite the Dock files,
+      // then tell every open Dock so its pickers re-read them.
+      if (cmd.type === "themes:sync") {
+        try {
+          await syncCustomThemesToDock();
+          const { syncFavoriteBibleThemesToDock, notifyDockThemesChanged } = await import("./services/favoriteThemes");
+          await syncFavoriteBibleThemesToDock();
+          notifyDockThemesChanged();
+        } catch (err) {
+          console.warn("[App] Failed to resync themes for the dock:", err);
+        }
+      }
+
       // Dock is requesting library data (songs) via BroadcastChannel
       if (cmd.type === "request-library-data") {
         try {
@@ -1205,6 +1218,11 @@ function App() {
       if (connected && !prevConnected) {
         trackObsConnected();
         trackObsConnectedBackend();
+        // Remove OBS sources older versions left behind and the app no longer uses.
+        // Never touches a source that is on air.
+        void import("./services/retiredMceSources")
+          .then((m) => m.scheduleRetiredMceSourceCleanup((type, data) => obsService.call(type, data), "main-app"))
+          .catch(() => { /* best effort */ });
         // Wake any MCE browser source that loaded before the overlay server was ready.
         // Skipped automatically while OBS is streaming or recording.
         void import("./services/obsBrowserSourceRefresh")

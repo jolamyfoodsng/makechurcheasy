@@ -32,9 +32,17 @@ import {
   resolveDockNotesPresentationSettings,
 } from "../dockNotesStorage";
 import {
+  loadDockBibleOutputPreferences,
   resolveDockBibleReferenceLabels,
   resolveDockBibleThemeForOverlayMode,
 } from "../dockBibleThemeResolution";
+import {
+  pickNewestLiveBibleSnapshot,
+  resolveLmEffectiveOverlayMode,
+  resolveLmReferencePrefs,
+  resolveLmVerseLineCount,
+  type LiveBibleStyleHints,
+} from "../lmBibleStyle";
 import {
   createDockNotesAppendCommand,
   postDockNotesAppendCommand,
@@ -96,7 +104,7 @@ interface FreshnessInfo {
   level: "fresh" | "warning" | "stale";
 }
 
-interface LiveBibleThemeSnapshot {
+interface LiveBibleThemeSnapshot extends LiveBibleStyleHints {
   fullscreen?: {
     themeId?: string;
     themeSettings?: Record<string, unknown>;
@@ -336,9 +344,6 @@ export default function DockLmTab({
       return next;
     });
   }, []);
-  const updateOverlayMode = useCallback((mode: LmOverlayMode) => {
-    updateSetting("overlayMode", mode);
-  }, [updateSetting]);
 
   const [obsStatus, setObsStatus] = useState<DockObsStatus>("disconnected");
 
@@ -402,10 +407,10 @@ export default function DockLmTab({
   const autoPushInFlightRef = useRef<Set<string>>(new Set());
   const autoPushLastPushedAtRef = useRef<Map<string, number>>(new Map());
   const liveVerseRef = useRef<VoiceBibleCandidate | null>(liveVerse);
-  const lastRepublishedOverlayModeRef = useRef<LmOverlayMode>(settings.overlayMode);
+  const lastRepublishedOverlayModeRef = useRef<{ key: string; effective: LmOverlayMode } | null>(null);
   const liveBibleThemeSnapshotRef = useRef<LiveBibleThemeSnapshot | null>(loadLiveBibleThemeSnapshot());
   const resolvedProjectionCacheRef = useRef<Map<string, VoiceBibleCandidate>>(new Map());
-  const resolvedBibleThemeCacheRef = useRef<Map<LmOverlayMode, { theme: Awaited<ReturnType<typeof resolveLmBibleTheme>>; ts: number }>>(new Map());
+  const resolvedBibleThemeCacheRef = useRef<Map<LmOverlayMode, { theme: Awaited<ReturnType<typeof resolveLmBibleTheme>>; ts: number; stamp: number }>>(new Map());
 
   const getProjectionCacheKey = useCallback((c: VoiceBibleCandidate, tr: string) => {
     return `${c.book}:${c.chapter}:${c.verse}:${c.endVerse ?? c.verse}:${tr.trim().toUpperCase()}`;
@@ -428,14 +433,43 @@ export default function DockLmTab({
     overlayMode: LmOverlayMode,
     liveSnapshot: LiveBibleThemeSnapshot | null,
   ) => {
+    // The cache is only valid for the exact Bible-tab snapshot it was built
+    // from. A newer snapshot (the operator changed text size, theme or
+    // background) must never be answered with an older cached style. Without
+    // a snapshot the saved Bible preferences are the only source, so keep that
+    // cache short.
+    const stamp = Number(liveSnapshot?.updatedAt) || 0;
+    const maxAgeMs = liveSnapshot?.fullscreen || liveSnapshot?.lowerThird ? 10000 : 2000;
     const cached = resolvedBibleThemeCacheRef.current.get(overlayMode);
-    if (cached && Date.now() - cached.ts < 10000) {
+    if (cached && cached.stamp === stamp && Date.now() - cached.ts < maxAgeMs) {
       return cached.theme;
     }
     const resolved = await resolveLmBibleTheme(overlayMode, liveSnapshot);
-    resolvedBibleThemeCacheRef.current.set(overlayMode, { theme: resolved, ts: Date.now() });
+    resolvedBibleThemeCacheRef.current.set(overlayMode, { theme: resolved, ts: Date.now(), stamp });
     return resolved;
   }, []);
+
+  // The Bible tab can live in another OBS dock (another process), where the
+  // BroadcastChannel never reaches us. Its snapshot is also written to
+  // localStorage, so read that again whenever we are about to project and
+  // keep whichever copy is newer.
+  const getLiveBibleSnapshot = useCallback((): LiveBibleThemeSnapshot | null => {
+    const newest = pickNewestLiveBibleSnapshot(
+      liveBibleThemeSnapshotRef.current,
+      loadLiveBibleThemeSnapshot(),
+    );
+    liveBibleThemeSnapshotRef.current = newest;
+    return newest;
+  }, []);
+
+  // The mode LM projects in right now: the Bible tab's own mode while LM is
+  // following it (default), otherwise LM's Full/LT buttons.
+  const getEffectiveLmOverlayMode = useCallback((): LmOverlayMode => resolveLmEffectiveOverlayMode({
+    follow: settings.followBibleStyle,
+    lmMode: settings.overlayMode,
+    hints: getLiveBibleSnapshot(),
+    prefs: loadDockBibleOutputPreferences(),
+  }), [getLiveBibleSnapshot, settings.followBibleStyle, settings.overlayMode]);
 
   const setLiveVerse = useCallback((candidate: VoiceBibleCandidate | null) => {
     liveVerseRef.current = candidate;
@@ -805,13 +839,19 @@ export default function DockLmTab({
     }
     candidate = resolvedCandidate;
 
-    const bibleTheme = await getCachedLmBibleTheme(overlayMode, liveBibleThemeSnapshotRef.current);
+    // Use the Bible tab's current style: its newest theme snapshot, plus the
+    // reference format and line count it is using for this mode.
+    const liveSnapshot = getLiveBibleSnapshot();
+    const savedBiblePrefs = loadDockBibleOutputPreferences();
+    const bibleTheme = await getCachedLmBibleTheme(overlayMode, liveSnapshot);
+    const lineCount = resolveLmVerseLineCount(overlayMode, liveSnapshot, savedBiblePrefs);
     const verseRange = candidate.endVerse ? `${candidate.verse}-${candidate.endVerse}` : String(candidate.verse);
     const referenceLabels = resolveDockBibleReferenceLabels(
       candidate.book,
       candidate.chapter,
       verseRange,
       settings.translation,
+      resolveLmReferencePrefs(liveSnapshot, savedBiblePrefs),
     );
 
     if (presentationLinkMode) {
@@ -831,6 +871,7 @@ export default function DockLmTab({
           referenceBaseLabel: referenceLabels.referenceBaseLabel,
           translation: settings.translation,
           verseText: candidate.snippet,
+          ...(lineCount ? { lineCount } : {}),
           overlayMode,
           theme: bibleTheme.themeId,
           bibleThemeSettings: bibleTheme.themeSettings,
@@ -854,18 +895,23 @@ export default function DockLmTab({
       displayReferenceLabel: referenceLabels.displayReferenceLabel,
       referenceBaseLabel: referenceLabels.referenceBaseLabel,
       verseText: candidate.snippet,
+      ...(lineCount ? { lineCount } : {}),
       overlayMode,
       theme: bibleTheme.themeId,
       bibleThemeSettings: bibleTheme.themeSettings,
       liveOverrides: bibleTheme.liveOverrides,
       targetScene,
     };
+    // Keep the theme's live overrides (full-screen background preset). They
+    // used to be dropped here, so a verse sent from LM could look different
+    // from the same verse sent from the Bible tab.
     const overlayPayload = {
       verseText: candidate.snippet,
       referenceText: referenceLabels.displayReferenceLabel,
       verseRange,
+      ...(lineCount ? { lineCount } : {}),
       bibleThemeSettings: bibleTheme.themeSettings,
-      liveOverrides: null,
+      liveOverrides: bibleTheme.liveOverrides,
       themeId: bibleTheme.themeId,
       overlayMode,
     };
@@ -883,26 +929,37 @@ export default function DockLmTab({
 
     await pushLive();
     return candidate;
-  }, [getCachedLmBibleTheme, getProjectionCacheKey, presentationLinkMode, settings.pushScene, settings.translation]);
+  }, [getCachedLmBibleTheme, getLiveBibleSnapshot, getProjectionCacheKey, presentationLinkMode, settings.pushScene, settings.translation]);
 
+  // Re-project the verse that is live when the operator changes how LM
+  // projects (Bible / Full / LT buttons). Changes made in the Bible tab are
+  // not republished from here: the Bible tab owns its own output.
   useEffect(() => {
-    if (lastRepublishedOverlayModeRef.current === settings.overlayMode) return;
-    lastRepublishedOverlayModeRef.current = settings.overlayMode;
+    const key = `${settings.followBibleStyle ? "bible" : "own"}|${settings.overlayMode}`;
+    const effectiveMode = getEffectiveLmOverlayMode();
+    const last = lastRepublishedOverlayModeRef.current;
+    lastRepublishedOverlayModeRef.current = { key, effective: effectiveMode };
+    // First run, or one of the other dependencies changed (OBS connected,
+    // translation...): not a reason to touch what is on the output. The Bible
+    // tab changing its own mode must not republish LM's verse either.
+    if (!last || last.key === key) return;
+    // The buttons changed but the resulting mode did not: nothing to redo.
+    if (last.effective === effectiveMode) return;
     const live = liveVerseRef.current;
     if (!live) return;
     if (!presentationLinkMode && obsStatus !== "connected") return;
 
     setPushError(null);
-    void pushBibleCandidateToOutput(live, settings.overlayMode)
+    void pushBibleCandidateToOutput(live, effectiveMode)
       .then((projected) => {
         setLiveVerse(projected);
-        setPushSuccess(settings.overlayMode === "lower-third" ? "Switched to LT" : "Switched to Full");
+        setPushSuccess(effectiveMode === "lower-third" ? "Switched to LT" : "Switched to Full");
         setTimeout(() => setPushSuccess(null), 1600);
       })
       .catch((err) => {
         setPushError(err instanceof Error ? err.message : String(err));
       });
-  }, [obsStatus, presentationLinkMode, pushBibleCandidateToOutput, setLiveVerse, settings.overlayMode]);
+  }, [getEffectiveLmOverlayMode, obsStatus, presentationLinkMode, pushBibleCandidateToOutput, setLiveVerse, settings.followBibleStyle, settings.overlayMode]);
 
   const sendLmCommand = useCallback((type: DockCommandType, payload?: unknown) => {
     const cmd = {
@@ -923,6 +980,7 @@ export default function DockLmTab({
   const navigateBibleDock = useCallback((
     reference: Pick<VoiceBibleCandidate, "book" | "chapter" | "verse">,
     pushToPreview = false,
+    markLive = false,
   ) => {
     sendLmCommand("lm:navigate", {
       book: reference.book,
@@ -930,6 +988,8 @@ export default function DockLmTab({
       verse: reference.verse,
       translation: settings.translation,
       ...(pushToPreview ? { pushToPreview: true } : {}),
+      // LM already projected this verse; the Bible tab only needs to mark it live.
+      ...(markLive ? { markLive: true } : {}),
     });
   }, [sendLmCommand, settings.translation]);
 
@@ -952,9 +1012,13 @@ export default function DockLmTab({
     setPushError(null);
     setPushSuccess(null);
     try {
-      const overlayMode = settings.overlayMode;
+      const overlayMode = getEffectiveLmOverlayMode();
       candidate = await pushBibleCandidateToOutput(candidate, overlayMode);
       setLiveVerse(candidate);
+      // The verse is on the output now: tell the Bible tab so its list stays
+      // on this verse and it knows this is what is live (it will not push its
+      // own, older verse over it when the operator changes size or theme).
+      navigateBibleDock(candidate, false, true);
       setRetainedQueue((current) => mergeRetainedLmQueue(current, [candidate], Date.now()));
 
       if (source === "suggestion") {
@@ -976,7 +1040,7 @@ export default function DockLmTab({
     } finally {
       setPushing(false);
     }
-  }, [navigateBibleDock, obsStatus, onNavigateToBible, presentationLinkMode, pushBibleCandidateToOutput, setLiveVerse, settings.overlayMode, t]);
+  }, [getEffectiveLmOverlayMode, navigateBibleDock, obsStatus, onNavigateToBible, presentationLinkMode, pushBibleCandidateToOutput, setLiveVerse, t]);
 
   // ── Show/push transcript text ──
   const pushTranscriptToOBS = useCallback(async (text: string) => {
@@ -991,10 +1055,11 @@ export default function DockLmTab({
     }
     setPushing(true);
     try {
-      const notesSettings = await resolveDockNotesPresentationSettings(settings.overlayMode, {
+      const effectiveMode = getEffectiveLmOverlayMode();
+      const notesSettings = await resolveDockNotesPresentationSettings(effectiveMode, {
         forceOverlayMode: true,
       });
-      const bibleTheme = await resolveLmBibleTheme(settings.overlayMode, liveBibleThemeSnapshotRef.current);
+      const bibleTheme = await resolveLmBibleTheme(effectiveMode, getLiveBibleSnapshot());
       const obsData = {
         sectionText: cleanText,
         sectionLabel: "Transcript Note",
@@ -1052,7 +1117,7 @@ export default function DockLmTab({
     } finally {
       setPushing(false);
     }
-  }, [obsStatus, presentationLinkMode, settings.overlayMode, showToast, t]);
+  }, [getEffectiveLmOverlayMode, getLiveBibleSnapshot, obsStatus, presentationLinkMode, showToast, t]);
 
   const isListening = lmStatus === "listening" || lmStatus === "connecting" || lmStatus === "requesting-mic";
 
@@ -1535,7 +1600,13 @@ export default function DockLmTab({
     ? selectedEntries[selectedEntries.length - 1].id
     : null;
   const renderOverlayModeSwitch = useCallback(() => {
-    const options: Array<{ mode: LmOverlayMode; label: string; ariaLabel: string; title: string }> = [
+    const options: Array<{ mode: LmOverlayMode | "bible"; label: string; ariaLabel: string; title: string }> = [
+      {
+        mode: "bible",
+        label: "Bible",
+        ariaLabel: t("lm.followBible", "Same as Bible tab"),
+        title: "Project exactly like the Bible tab: its Full/LT mode, theme, text size and reference style",
+      },
       {
         mode: "fullscreen",
         label: "Full",
@@ -1560,12 +1631,14 @@ export default function DockLmTab({
           <span>{t("lm.overlayMode")}</span>
         </div>
         <div
-          style={S.modeSegmentedWide}
+          style={{ ...S.modeSegmentedWide, gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}
           role="group"
           aria-label={t("lm.overlayMode")}
         >
           {options.map((option) => {
-            const active = settings.overlayMode === option.mode;
+            const active = option.mode === "bible"
+              ? settings.followBibleStyle
+              : !settings.followBibleStyle && settings.overlayMode === option.mode;
             return (
               <button
                 key={option.mode}
@@ -1575,7 +1648,18 @@ export default function DockLmTab({
                   ...S.modeSegmentButtonWide,
                   ...(active ? S.modeSegmentButtonActive : undefined),
                 }}
-                onClick={() => updateOverlayMode(option.mode)}
+                onClick={() => {
+                  if (option.mode === "bible") {
+                    updateSetting("followBibleStyle", true);
+                    return;
+                  }
+                  // One write so Full/LT and "not following" are saved together.
+                  setSettings((prev) => {
+                    const next = { ...prev, followBibleStyle: false, overlayMode: option.mode as LmOverlayMode };
+                    saveSettings(next);
+                    return next;
+                  });
+                }}
                 aria-pressed={active}
                 aria-label={option.ariaLabel}
                 title={option.title}
@@ -1588,7 +1672,7 @@ export default function DockLmTab({
         </div>
       </div>
     );
-  }, [settings.overlayMode, t, updateOverlayMode]);
+  }, [settings.followBibleStyle, settings.overlayMode, t, updateSetting]);
 
   return (
     <div style={S.root} ref={rootRef}>
@@ -2526,7 +2610,7 @@ export default function DockLmTab({
                 <div style={S.settingsGroup}>
                   <div style={S.settingsGroupLabel}>{t("lm.overlayMode")}</div>
                   {renderOverlayModeSwitch()}
-                  <span style={S.settingHint}>{t("lm.overlayModeHint", "Choose how detected scriptures and transcript notes appear when pushed.")}</span>
+                  <span style={S.settingHint}>{t("lm.overlayModeHintBible", "Bible projects exactly like the Bible tab (its Full/LT mode, theme, text size and reference style). Full or LT forces that mode for scriptures and transcript notes.")}</span>
                 </div>
               )}
 

@@ -64,7 +64,7 @@ import {
 } from "../../services/favoriteThemes";
 import { useServiceGate } from "../../hooks/useServiceGate";
 import { ObsScenesPanel } from "../shared/ObsScenesPanel";
-import { BUILTIN_THEMES } from "../../bible/themes/builtinThemes";
+import { BUILTIN_THEMES, DEFAULT_BUILTIN_THEME_ID } from "../../bible/themes/builtinThemes";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   getEffectivePlan,
@@ -264,7 +264,7 @@ export function WorshipModule({
   const savedWorshipPrefs = loadWorshipLayoutPrefs();
   const [themes, setThemes] = useState<BibleTheme[]>(WORSHIP_FULLSCREEN_THEME_FALLBACKS);
   const [layoutMode, setLayoutMode] = useState<BibleTemplateType>(savedWorshipPrefs?.layoutMode ?? "fullscreen");
-  const [activeThemeId, setActiveThemeId] = useState(savedWorshipPrefs?.activeThemeId ?? (WORSHIP_FULLSCREEN_THEME_FALLBACKS[0]?.id ?? "classic-dark"));
+  const [activeThemeId, setActiveThemeId] = useState(savedWorshipPrefs?.activeThemeId ?? (WORSHIP_FULLSCREEN_THEME_FALLBACKS[0]?.id ?? DEFAULT_BUILTIN_THEME_ID));
   const [themeOpen, setThemeOpen] = useState(false);
   const [activeWorshipLowerThirdId, setActiveWorshipLowerThirdId] = useState(savedWorshipPrefs?.activeWorshipLowerThirdId ?? DEFAULT_WORSHIP_THEME_ID);
   const [worshipThemeOpen, setWorshipThemeOpen] = useState(false);
@@ -426,7 +426,7 @@ export function WorshipModule({
 
   useEffect(() => {
     if (themes.some((theme) => theme.id === activeThemeId)) return;
-    setActiveThemeId(themes[0]?.id ?? "classic-dark");
+    setActiveThemeId(themes[0]?.id ?? DEFAULT_BUILTIN_THEME_ID);
   }, [themes, activeThemeId]);
 
   // ── OBS connection listener ──

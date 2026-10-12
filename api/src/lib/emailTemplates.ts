@@ -19,6 +19,7 @@ import { logEmailEvent } from "./emailLog";
 // ─── Config ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_EMAIL_FROM = "noreply@notifications.makechurcheazy.com";
+const APPROVED_EMAIL_SENDER_DOMAIN = "notifications.makechurcheazy.com";
 const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || "MakeChurchEazy";
 const EMAIL_FROM = resolveEmailFrom(process.env.EMAIL_FROM);
 const APP_URL =
@@ -36,7 +37,7 @@ function resolveEmailFrom(value: string | undefined): string {
   const email = extractEmailAddress(raw);
   const domain = email.split("@")[1]?.toLowerCase() || "";
 
-  if (!domain || domain === "creatorstudioslabs.stream" || domain.endsWith(".creatorstudioslabs.stream")) {
+  if (domain !== APPROVED_EMAIL_SENDER_DOMAIN) {
     if (value) {
       console.warn(`[email] Ignoring unverified sender domain "${domain}". Using ${DEFAULT_EMAIL_FROM}.`);
     }
@@ -156,6 +157,61 @@ export async function sendEmail(options: SendEmailOptions): Promise<boolean> {
     provider: result.provider || "transactional",
   }).catch(() => {});
   return true;
+}
+
+/**
+ * Re-send an email exactly as it was stored in `email_logs` (the HTML there is
+ * already rendered, so it is not wrapped again). Used by the admin "Resend"
+ * button. Logs a new email_logs entry linked to the original.
+ */
+export async function resendLoggedEmail(options: {
+  to: string;
+  subject: string;
+  html: string;
+  userId?: string | null;
+  metadata?: Record<string, unknown>;
+}): Promise<{ sent: boolean; provider: string; error?: string; logId: string | null }> {
+  const { to, subject, html, userId, metadata } = options;
+  const useDevTransport = process.env.NODE_ENV === "development" && process.env.EMAIL_DEV_SEND_REAL !== "true";
+
+  let sent = false;
+  let provider = "transactional";
+  let error: string | undefined;
+
+  if (useDevTransport) {
+    try {
+      await getDevTransporter().sendMail({ from: formatEmailFrom(), to, subject, html });
+      sent = true;
+      provider = "maildev-smtp";
+    } catch (err) {
+      sent = false;
+      provider = "maildev-smtp";
+      error = err instanceof Error ? err.message : String(err);
+    }
+  } else {
+    const result = await sendTransactionalEmail({
+      from: resolveTransactionalSender({ email: EMAIL_FROM, name: EMAIL_FROM_NAME }),
+      to: [to],
+      subject,
+      html,
+      category: "transactional",
+    });
+    sent = result.sent;
+    provider = result.provider || "transactional";
+    error = result.sent ? undefined : result.error || "Provider failed to send email";
+  }
+
+  const logId = await logEmailEvent({
+    to,
+    userId: userId ?? null,
+    subject,
+    html,
+    status: sent ? "sent" : "failed",
+    provider,
+    error,
+    metadata,
+  });
+  return { sent, provider, error, logId };
 }
 
 // ─── Layout & Components ────────────────────────────────────────────────────
@@ -1334,6 +1390,64 @@ export function planUpgradeEmail(
   };
 }
 
+// What each paid plan switches on, written for the people who run Sunday.
+// Kept in step with dashboard/app/pricing/pricing-data.ts.
+const PLAN_UNLOCKS: Record<string, Array<{ title: string; detail: string }>> = {
+  basic: [
+    { title: "Unlimited songs, lyrics & media", detail: "Bring your whole worship library — no 10-item cap." },
+    { title: "Every Bible version", detail: "Switch translations live, mid-sermon, in one click." },
+    { title: "Automatic OBS scenes", detail: "Your scenes and sources build themselves. No manual setup." },
+    { title: "Multistream from OBS", detail: "Go live on more than one platform at once — 10 hours a month, no plugin." },
+    { title: "Voice to Scripture", detail: "Say the verse; it appears on screen. 4 hours a month." },
+  ],
+  growth: [
+    { title: "Unlimited songs, lyrics & media", detail: "Bring your whole worship library — no 10-item cap." },
+    { title: "Every Bible version", detail: "Switch translations live, mid-sermon, in one click." },
+    { title: "Automatic OBS scenes", detail: "Your scenes and sources build themselves. No manual setup." },
+    { title: "Multistream to YouTube & Facebook", detail: "Stream to both at the same time, straight from OBS — 20 hours a month." },
+    { title: "Cloud sync for your team", detail: "Songs, lyrics and media follow every operator, on every computer." },
+    { title: "Mobile control app", detail: "Run slides and lyrics from your phone anywhere in the room." },
+    { title: "Lower thirds & sermon export", detail: "Polished name straps, prayer bars and sermon notes in minutes." },
+    { title: "Voice to Scripture — 10 hours", detail: "The preacher says the verse; it's on screen before they finish." },
+    { title: "Priority support", detail: "Your questions jump the queue." },
+  ],
+  pro: [
+    { title: "Everything in Growth", detail: "Cloud sync, mobile control, lower thirds, every Bible version and more." },
+    { title: "Multistream — 40 hours a month", detail: "Broadcast to every platform you use, all at once." },
+    { title: "Multi-campus content sync", detail: "One library, kept in step across all your campuses." },
+    { title: "Voice to Scripture — 20 hours", detail: "Hands-free scripture for every service, every campus." },
+    { title: "Direct phone support", detail: "A direct line to our team when it matters." },
+  ],
+};
+
+function planUnlockList(plan: string): string {
+  const items = PLAN_UNLOCKS[plan.trim().toLowerCase()] || PLAN_UNLOCKS.growth;
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;margin:4px 0 24px;">
+      <tr>
+        <td style="background:${C.surface};border:1px solid ${C.border};border-radius:12px;padding:8px 20px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+            ${items
+              .map(
+                (item, i) => `
+                  <tr>
+                    <td width="30" valign="top" style="padding:${i === 0 ? 14 : 12}px 10px 12px 0;${i ? `border-top:1px solid ${C.border};` : ""}">
+                      <span style="display:inline-block;width:22px;height:22px;border-radius:50%;background:{{brand.primaryColor}};color:#FFFFFF;font-family:${FONT};font-size:13px;font-weight:700;line-height:22px;text-align:center;">&#10003;</span>
+                    </td>
+                    <td valign="top" style="padding:${i === 0 ? 14 : 12}px 0 12px;${i ? `border-top:1px solid ${C.border};` : ""}">
+                      <p style="margin:0;font-family:${FONT};font-size:15px;font-weight:600;color:${C.text};line-height:1.4;">${escapeEmailText(item.title)}</p>
+                      <p style="margin:2px 0 0;font-family:${FONT};font-size:14px;color:${C.muted};line-height:1.55;">${escapeEmailText(item.detail)}</p>
+                    </td>
+                  </tr>`
+              )
+              .join("")}
+          </table>
+        </td>
+      </tr>
+    </table>
+  `;
+}
+
 export function adminTemporaryPlanGrantedEmail(params: {
   userName: string;
   userEmail: string;
@@ -1342,29 +1456,36 @@ export function adminTemporaryPlanGrantedEmail(params: {
   expiresAt: string;
   reason?: string;
 }): SendEmailOptions {
-  const { userName, userEmail, previousPlan, newPlan, expiresAt, reason } = params;
+  const { userName, userEmail, newPlan, expiresAt, reason } = params;
   const endDate = new Date(expiresAt).toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
   });
+  const firstName = escapeEmailText(String(userName || "there").trim().split(/\s+/)[0] || "there");
+  const plan = escapeEmailText(newPlan);
 
   return {
     to: userEmail,
-    subject: `Temporary ${newPlan} access is active — MakeChurchEazy`,
+    subject: `You've been upgraded to ${newPlan} 🎉 — on us until ${endDate}`,
     html: wrap(
-      "Temporary plan access",
+      `You're on ${newPlan}`,
       `
-        ${heading("Temporary access updated")}
-        ${paragraph(`Hi ${userName}, your MakeChurchEazy plan has been changed from <strong style="color:#0f172a;">${previousPlan}</strong> to <strong style="color:#0f172a;">${newPlan}</strong>.`)}
+        <p style="margin:0 0 10px;font-family:${FONT};font-size:12px;font-weight:700;color:{{brand.accentColor}};text-transform:uppercase;letter-spacing:0.12em;">Upgrade unlocked</p>
+        ${heading(`${firstName}, you're on ${plan} — free until ${endDate}`)}
+        ${paragraph(`Good news: we've upgraded your MakeChurchEazy account to <strong style="color:${C.text};">${plan}</strong>, on us. Everything below is switched on right now — so make this Sunday your smoothest service yet.`)}
+        ${reason ? paragraph(`<em>${escapeEmailText(reason)}</em>`, { color: C.muted }) : ""}
+        <p style="margin:8px 0 10px;font-family:${FONT};font-size:13px;font-weight:600;color:${C.text};text-transform:uppercase;letter-spacing:0.08em;">What you get with ${plan}</p>
+        ${planUnlockList(newPlan)}
+        <p style="margin:8px 0 10px;font-family:${FONT};font-size:13px;font-weight:600;color:${C.text};text-transform:uppercase;letter-spacing:0.08em;">Start in 30 seconds</p>
+        ${paragraph(`<strong style="color:${C.text};">1.</strong> Open MakeChurchEazy on your computer (already open? restart it).<br/><strong style="color:${C.text};">2.</strong> Your ${plan} features appear on their own — no code, no card.<br/><strong style="color:${C.text};">3.</strong> Try one today: turn on Voice to Scripture or sync your songs to the cloud.`)}
+        ${button(`${APP_URL}/download`, "Open MakeChurchEazy")}
         ${card([
-        ["Current plan", newPlan],
-        ["Access ends", endDate],
-        ["After this date", "Your account returns to the Free plan"],
-        ...(reason ? [["Note", reason] as [string, string]] : []),
-      ])}
-        ${paragraph("Your desktop app will pick up this plan automatically the next time it checks your account.")}
-        ${button(`${APP_URL}/dashboard`, "Open Dashboard")}
+          ["Your plan", plan],
+          ["Free until", endDate],
+          ["After that", "You move back to Free — no charge, nothing to cancel"],
+        ])}
+        ${paragraph(`Want to keep ${plan} after ${endDate}? You can continue any time from <a href="${APP_URL}/subscription/plans" style="color:{{brand.primaryColor}};">your plans page</a>.`, { color: C.muted })}
       `
     ),
   };

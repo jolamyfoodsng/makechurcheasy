@@ -146,7 +146,27 @@ describe("DockLmTab settings helpers", () => {
 
   it("tracks actual pushed verses as the live card source", () => {
     expect(dockLmTabSource).toContain("setLiveVerse(candidate)");
-    expect(dockLmTabSource).toContain("pushBibleCandidateToOutput(live, settings.overlayMode)");
+    expect(dockLmTabSource).toContain("pushBibleCandidateToOutput(live, effectiveMode)");
+  });
+
+  it("projects with the Bible tab's current style and keeps the Bible tab in step", () => {
+    // Mode follows the Bible tab (default), with LM's own Full/LT as the override.
+    expect(dockLmTabSource).toContain("resolveLmEffectiveOverlayMode({");
+    expect(dockLmTabSource).toContain("settings.followBibleStyle");
+    expect(dockLmTabSource).toContain('mode: "bible"');
+    // Theme overrides are no longer dropped, and the line count / reference prefs come from the Bible tab.
+    expect(dockLmTabSource).not.toContain("liveOverrides: null,\n      themeId: bibleTheme.themeId");
+    expect(dockLmTabSource).toContain("resolveLmVerseLineCount(overlayMode, liveSnapshot, savedBiblePrefs)");
+    expect(dockLmTabSource).toContain("resolveLmReferencePrefs(liveSnapshot, savedBiblePrefs)");
+    // A newer stored snapshot wins over an older in-memory one, and the cache is stamped by snapshot.
+    expect(dockLmTabSource).toContain("pickNewestLiveBibleSnapshot(");
+    expect(dockLmTabSource).toContain("cached.stamp === stamp");
+    // After projecting, the Bible tab is told what went live.
+    expect(dockLmTabSource).toContain("navigateBibleDock(candidate, false, true)");
+    expect(dockLmTabSource).toContain("markLive: true");
+    expect(dockBibleTabSource).toContain("payload.markLive");
+    expect(dockBibleTabSource).toContain("fullscreenLineCount: fullscreenVerseLineCount");
+    expect(dockBibleTabSource).toContain("updatedAt: Date.now()");
   });
 
   it("moves the Bible dock to an AI reference when the operator shows it", () => {

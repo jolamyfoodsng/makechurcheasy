@@ -116,12 +116,12 @@ describe("ensureModuleSourceOpenAndOnTop", () => {
     expect(setIndexWorshipCall?.params?.sceneItemIndex).toBe(1);
   });
 
-  it("checks if Notes source is open and on top, enabling it", async () => {
+  it("checks if Notes source (shared with Worship) is open and on top, enabling it", async () => {
     vi.spyOn(dockObsClient, "isConnected", "get").mockReturnValue(true);
 
     const calls: Array<{ method: string; params: any }> = [];
     const sceneItems = [
-      { sourceName: "Notes - MCE Presentation", sceneItemId: 20, sceneItemIndex: 0, sceneItemEnabled: false },
+      { sourceName: "Worship - MCE Presentation", sceneItemId: 20, sceneItemIndex: 0, sceneItemEnabled: false },
     ];
 
     vi.spyOn(dockObsClient, "call").mockImplementation(async (method: string, params?: any) => {

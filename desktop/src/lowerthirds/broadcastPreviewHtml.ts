@@ -5,11 +5,13 @@
  * Supports kinetic animations, GSAP, variable injection, and responsive scaling.
  */
 
+import { formatTickerClock, hasTickerClock, TICKER_CLOCK_SCRIPT } from "../data/tickerClock";
 import { KINETIC_LOWER_THIRD_THEMES } from "./kineticThemes";
 import type { TickerTheme } from "../data/tickerThemes";
 import { getSettings as getMVSettings } from "../multiview/mvStore";
 import { generateTickerHTML, type TickerThemeConfig } from "../components/modules/tickerThemes";
 import { resolveOverlayAssetUrl } from "../services/overlayUrl";
+import { substituteStyledVariables } from "./textStyle";
 
 export interface BroadcastTheme {
   id: string;
@@ -46,9 +48,24 @@ function isGeneratedPackageTheme(theme: BroadcastTheme): boolean {
     && !/<script|<iframe|<object|<embed|javascript:|\son[a-z]+\s*=/i.test(html);
 }
 
+/**
+ * Motion (kinetic) graphics are only data attributes on a .kx-root; the scripts that draw
+ * them are the app's own bundled runtime. Saved/customised copies get a new theme id, so
+ * they are recognised by their markup rather than by id.
+ */
+function isScriptFreeKineticTheme(theme: BroadcastTheme): boolean {
+  const html = typeof theme.html === "string" ? theme.html.trim() : "";
+  return html.startsWith('<div class="kx-root"')
+    && !/<script|<iframe|<object|<embed|<link|javascript:|\son[a-z]+\s*=/i.test(html);
+}
+
 export function obsPreviewSandbox(theme: BroadcastTheme): string {
   const trusted = typeof theme.html === "string"
-    && (TRUSTED_SCRIPTED_THEME_HTML.get(theme.id) === theme.html || isGeneratedPackageTheme(theme));
+    && (
+      TRUSTED_SCRIPTED_THEME_HTML.get(theme.id) === theme.html
+      || isGeneratedPackageTheme(theme)
+      || isScriptFreeKineticTheme(theme)
+    );
   return trusted ? "allow-same-origin allow-scripts" : "allow-same-origin";
 }
 
@@ -100,14 +117,8 @@ export function buildThemePreviewHtml(
     Object.assign(resolvedValues, options.customVariables);
   }
 
-  for (const [key, value] of Object.entries(resolvedValues)) {
-    const escaped = String(value)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-    html = html.split(`{{${key}}}`).join(escaped);
-  }
+  // Fills {{key}} and applies each text's style (letter case, size, weight…).
+  html = substituteStyledVariables(html, resolvedValues);
   html = html.split("{{state}}").join("in");
 
   if (isKineticObsTheme(theme)) {
@@ -137,7 +148,7 @@ ${kineticFontLinks}
 <script src="/kinetic/church-lower-thirds.js?v=3"></script>
 <script src="/kinetic/sunday-lower-thirds.js?v=1"></script>
 <script src="/kinetic/stream-lower-thirds.js?v=2"></script>
-<script src="/kinetic/mce-graphic-packages.js?v=1"></script>
+<script src="/kinetic/mce-graphic-packages.js?v=2"></script>
 </head>
 <body>
 <div id="kx-canvas">${html}</div>
@@ -213,6 +224,7 @@ export function buildTickerPreviewHtml(ticker: TickerTheme): string {
     badge: ticker.badge,
     tickerText: ticker.tickerText,
     speed: ticker.speed,
+    clock: formatTickerClock(),
   };
   for (const [key, value] of Object.entries(resolvedValues)) {
     const escaped = value
@@ -244,6 +256,7 @@ ${ticker.css}
 </head>
 <body>
 ${html}
+${hasTickerClock(html) ? TICKER_CLOCK_SCRIPT : ""}
 </body>
 </html>`;
 }

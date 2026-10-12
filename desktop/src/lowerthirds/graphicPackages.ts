@@ -22,6 +22,8 @@ export interface GraphicPackageField {
   defaultValue?: string;
   options?: "icons" | "brands" | Array<string | { label?: string; value: string }>;
   shades?: boolean;
+  /** Text field: show a multi-line text area in the editors. */
+  multiline?: boolean;
 }
 
 export interface GraphicPackage {
@@ -87,6 +89,14 @@ function cleanKey(key: unknown): string {
 }
 
 /** Turn a package into the lower third the app, the Dock and OBS use. */
+/** Field names/labels that hold sentences rather than a short title. */
+export function looksLikeLongTextField(key: string, label: string): boolean {
+  const name = `${key} ${label}`.toLowerCase();
+  if (/new line|wraps|paragraph/.test(name)) return true;
+  if (/\b(label|title|name|heading|kicker|tag|role|handle|time|date)\b/.test(key.toLowerCase())) return false;
+  return /\b(text|body|message|prayer|answer|question|quote|description|content|notes?|verse|scripture|announcement|details)\b/.test(name);
+}
+
 export function packageToTheme(pkg: GraphicPackage, extra: { tags?: string[] } = {}): LowerThirdTheme & { graphicCategory?: string } {
   const fields = (pkg.fields || [])
     .map((f) => ({ ...f, key: cleanKey(f.key) }))
@@ -101,7 +111,15 @@ export function packageToTheme(pkg: GraphicPackage, extra: { tags?: string[] } =
       defaultValue,
       group: type === "color" ? "Style" : "Content",
     };
-    if (type === "text") v.placeholder = defaultValue;
+    if (type === "text") {
+      v.placeholder = defaultValue;
+      // Long text (prayers, answers, notes) gets a text area. Don't rely on the
+      // default's length alone: short placeholder defaults ("Your prayer point
+      // goes here") would otherwise drop long-text fields to a one-line input.
+      if (f.multiline === true || defaultValue.length > 70 || looksLikeLongTextField(f.key, v.label)) {
+        v.multiline = true;
+      }
+    }
     if (type === "list") v.separator = ",";
     const options = fieldOptions(f);
     if (options) v.options = options;
@@ -114,6 +132,11 @@ export function packageToTheme(pkg: GraphicPackage, extra: { tags?: string[] } =
   const html =
     `<div class="kx-root" data-kx="pkg-${id}" data-kx-pkg="${encoded}" data-state="{{state}}" ` +
     fields.map((f) => `${attr(f.key)}="{{${f.key}}}"`).join(" ") +
+    // Per-text styling (size / weight / italic / spacing); see textStyle.ts.
+    fields
+      .filter((f) => (f.type || "text") === "text")
+      .map((f) => ` ${attr(f.key)}-ts="{{${f.key}__style}}"`)
+      .join("") +
     ` data-v-kx-color="{{kxColor}}" data-v-kx-speed="{{kxSpeed}}" data-v-kx-scale="{{kxScale}}" data-v-kx-auto-out="{{kxAutoOut}}" data-v-kx-loop="{{kxLoop}}">` +
     `<div class="kx-fallback"><div class="kx-fb-name">${firstText ? `{{${firstText.key}}}` : ""}</div></div></div>`;
   const category = String(pkg.category || "others").toLowerCase();

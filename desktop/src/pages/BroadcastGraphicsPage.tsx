@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { looksLikeLongTextField } from "../lowerthirds/graphicPackages";
 import { createPortal } from "react-dom";
 import {
   MonitorPlay,
@@ -39,7 +40,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { getEffectivePlan } from "../services/licenseService";
 import { checkEntitlementSync } from "../services/entitlementClient";
 import { openDashboardSubscriptionPlans } from "../services/subscriptionNavigation";
-import UpgradeModal from "../components/UpgradeModal";
+import PlanLimitModal from "../components/PlanLimitModal";
 import { trackGraphicUsage } from "../services/tracking";
 
 import { KINETIC_LOWER_THIRD_THEMES } from "../lowerthirds/kineticThemes";
@@ -50,7 +51,7 @@ import {
   churchAwareDefaults,
   type ChurchThemeLike,
 } from "../lowerthirds/churchDefaults";
-import { getMinistryData, refreshMinistry } from "../services/ministryStore";
+import { getMinistryData, getMinistryHistory, refreshMinistry } from "../services/ministryStore";
 import { defaultTickerThemes, type TickerTheme } from "../data/tickerThemes";
 import {
   TICKER_THEMES as DOCK_TICKER_THEMES,
@@ -104,6 +105,8 @@ import {
   obsPreviewSandbox,
   type BroadcastTheme,
 } from "../lowerthirds/broadcastPreviewHtml";
+import TextStyleControls from "../components/TextStyleControls";
+import { textStyleCapabilityFor, textStyleKey } from "../lowerthirds/textStyle";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -112,7 +115,53 @@ type MainTab = "library" | "my-graphics" | "tickers";
 export type GraphicCategory = SavedBroadcastGraphic["category"];
 export type CategoryFilter = "all" | GraphicCategory;
 
-type SortOption = "newest" | "oldest" | "name-asc" | "name-desc";
+type SortOption = "mixed" | "newest" | "oldest" | "name-asc" | "name-desc";
+
+/** Small seeded random generator, so the mixed order stays put while the page is open. */
+function seededRandom(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shuffled<T>(items: T[], rand: () => number): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/**
+ * "All" view: mix the library so it doesn't open on a wall of one kind (e.g. 25 speaker
+ * straps). Each category is shuffled, then categories take turns (speaker, giving, quote,
+ * welcome, …) in a shuffled order, so every kind shows up near the top.
+ */
+function mixAcrossCategories<T>(items: T[], categoryOf: (item: T) => string, seed: number): T[] {
+  const rand = seededRandom(seed);
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const key = categoryOf(item);
+    const group = groups.get(key);
+    if (group) group.push(item);
+    else groups.set(key, [item]);
+  }
+  const queues = shuffled([...groups.values()], rand).map((group) => shuffled(group, rand));
+  const out: T[] = [];
+  while (queues.some((q) => q.length)) {
+    for (const q of queues) {
+      const next = q.shift();
+      if (next !== undefined) out.push(next);
+    }
+  }
+  return out;
+}
 
 interface DockTickerPreview {
   id: string;
@@ -138,6 +187,7 @@ const CATEGORY_TABS: { key: CategoryFilter; label: string }[] = [
   { key: "social", label: "Social Media" },
   { key: "branding", label: "Logo & Branding" },
   { key: "scripture", label: "Scripture" },
+  { key: "quotes", label: "Quotes" },
   { key: "others", label: "Others" },
 ];
 
@@ -300,7 +350,9 @@ export default function BroadcastGraphicsPage() {
   const [activeTab, setActiveTab] = useState<MainTab>("library");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>("all");
-  const [sortBy, setSortBy] = useState<SortOption>("newest");
+  const [sortBy, setSortBy] = useState<SortOption>("mixed");
+  // New mix each time the page opens; stable while it stays open (favouriting won't reshuffle).
+  const [mixSeed] = useState(() => Math.floor(Math.random() * 2 ** 31));
   const [isBannerDismissed, setIsBannerDismissed] = useState<boolean>(() => {
     try {
       return localStorage.getItem("mce-broadcast-banner-dismissed") === "true";
@@ -565,8 +617,12 @@ export default function BroadcastGraphicsPage() {
       return 0; // Default order
     });
 
+    if (sortBy === "mixed" && selectedCategory === "all" && !searchQuery.trim()) {
+      list = mixAcrossCategories(list, getTemplateCategory, mixSeed);
+    }
+
     return list;
-  }, [allTemplates, selectedCategory, searchQuery, sortBy]);
+  }, [allTemplates, selectedCategory, searchQuery, sortBy, mixSeed]);
 
   const visibleSavedGraphics = useMemo(
     () => savedGraphics.filter((graphic) => availabilityOf(graphic.templateId).visible),
@@ -734,11 +790,20 @@ export default function BroadcastGraphicsPage() {
     [ensureUsable],
   );
 
-  // Fill the church name and main pastor from the church profile, replacing whatever is typed.
+  // Fill the church name, main pastor, website, phone, email, address and social icons from the church profile, replacing whatever is typed.
   const handleUseChurchInfo = useCallback(() => {
     refreshMinistry();
     const ministry = getMinistryData();
-    if (!ministry.churchName.trim() && !ministry.mainPastorName.trim()) {
+    const hasAnyChurchInfo = Boolean(
+      ministry.churchName.trim() ||
+      ministry.mainPastorName.trim() ||
+      (ministry.website ?? "").trim() ||
+      (ministry.phone ?? "").trim() ||
+      (ministry.email ?? "").trim() ||
+      (ministry.address ?? "").trim() ||
+      Object.keys(ministry.socials ?? {}).length > 0,
+    );
+    if (!hasAnyChurchInfo) {
       showToast(
         "Your church profile is empty. Fill it in at makechurcheazy.com/church-profile, then try again.",
         "error",
@@ -771,7 +836,8 @@ export default function BroadcastGraphicsPage() {
         const def = v as unknown as Record<string, unknown>;
         const key = typeof def.key === "string" ? def.key : "";
         if (!key || key.startsWith("kx")) continue;
-        if (String(def.type || "text") !== "text") continue;
+        const boxType = String(def.type || "text");
+        if (boxType !== "text" && boxType !== "list") continue;
         next[key] = defaults[key] ?? String(def.defaultValue ?? "");
       }
       return { ...prev, variables: next };
@@ -790,7 +856,13 @@ export default function BroadcastGraphicsPage() {
         name: saved.name,
         category: saved.category,
         displayType: saved.displayType,
-        variables: { ...saved.variables },
+        // Boxes that still hold what the church profile said before it changed follow the new profile.
+        variables: applyChurchDefaults(
+          template as unknown as ChurchThemeLike,
+          { ...saved.variables },
+          getMinistryData(),
+          { history: getMinistryHistory(), keepCleared: true },
+        ),
         accentColor: saved.design?.accentColor || template.accentColor || "#5b5cf6",
         backgroundColor: saved.design?.bgColor || "transparent",
         fontScale: saved.design?.fontSizeScale || 1,
@@ -994,13 +1066,19 @@ export default function BroadcastGraphicsPage() {
           </ScreenModal>
         )}
         {upgradePrompt && (
-          <UpgradeModal
+          <PlanLimitModal
             open
             onClose={() => setUpgradePrompt(null)}
-            feature={upgradePrompt.feature}
+            title={
+              upgradePrompt.feature === "lowerThirds"
+                ? "Broadcast graphics limit reached"
+                : upgradePrompt.feature === "tickerThemes"
+                  ? "Ticker limit reached"
+                  : "Upgrade to use tickers"
+            }
             requiredPlan={upgradePrompt.requiredPlan || "basic"}
-            currentPlan={effectivePlan}
             message={upgradePrompt.message}
+            reason={`${upgradePrompt.feature}_limit`}
           />
         )}
         {/* ── 1. Page Header ── */}
@@ -1134,6 +1212,7 @@ export default function BroadcastGraphicsPage() {
                 onChange={(e) => setSortBy(e.target.value as SortOption)}
                 aria-label="Sort graphics"
               >
+                <option value="mixed">Mixed</option>
                 <option value="newest">Newest First</option>
                 <option value="oldest">Oldest First</option>
                 <option value="name-asc">Name A–Z</option>
@@ -2124,12 +2203,14 @@ export default function BroadcastGraphicsPage() {
                             )}
                           </div>
                           {fieldGuide.hint && <span className="bg-form-group__hint">{fieldGuide.hint}</span>}
-                          {varDef.multiline === true ? (
+                          {(varDef.multiline === true
+                            || looksLikeLongTextField(key, String(varDef.label || ""))
+                            || String(currentVal || "").length > 60) ? (
                             <textarea
                               id={`bg-field-${key}`}
                               className="bg-form-group__input"
-                              rows={4}
-                              style={{ resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
+                              rows={6}
+                              style={{ resize: "vertical", fontFamily: "inherit", lineHeight: 1.45, minHeight: 130, height: "auto" }}
                               value={currentVal}
                               placeholder={String(varDef.placeholder || "")}
                               onChange={(e) => setVar(e.target.value)}
@@ -2144,6 +2225,15 @@ export default function BroadcastGraphicsPage() {
                               onChange={(e) => setVar(e.target.value)}
                             />
                           )}
+                          <TextStyleControls
+                            value={editorState.variables[textStyleKey(key)]}
+                            capability={textStyleCapabilityFor(editorState.template)}
+                            onChange={(next) =>
+                              setEditorState((prev) =>
+                                prev ? { ...prev, variables: { ...prev.variables, [textStyleKey(key)]: next } } : prev,
+                              )
+                            }
+                          />
                         </div>
                       );
                     })}

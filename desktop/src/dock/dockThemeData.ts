@@ -2,7 +2,8 @@ import type { BibleTheme } from "../bible/types";
 import type { SavedBroadcastGraphic } from "../services/broadcastGraphicsStorage";
 import type { LowerThirdTheme } from "../lowerthirds/types";
 import type { TickerTheme } from "../data/tickerThemes";
-import { getBibleFavorites, getWorshipLTFavorites, getObsFavorites, getTickerFavorites, hydrateFavoriteThemes } from "../services/favoriteThemes";
+import { getBibleFavorites, getWorshipLTFavorites, getObsFavorites, getTickerFavorites, hydrateFavoriteThemes, refreshFavoriteThemesFromStore } from "../services/favoriteThemes";
+import { filterThemesForDockArea, loadDockThemeOptOuts, type DockThemeArea } from "../services/dockThemeAvailability";
 import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
 import { BIBLE_BUILTIN_THEMES } from "../bible/bibleThemes";
 
@@ -71,7 +72,30 @@ export async function loadDockTickerFavorites(): Promise<Set<string>> {
   return mergeIdSets(local, remote);
 }
 
+/** `null` when the app has not written the file (or it cannot be read). */
+async function loadJsonArrayIfPresent<T>(url: string): Promise<T[] | null> {
+  try {
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return null;
+    const data: unknown = await res.json();
+    return Array.isArray(data) ? (data as T[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function isInsideDesktopApp(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
 export async function loadDockCustomBibleThemes(): Promise<BibleTheme[]> {
+  // In the OBS browser dock the app rewrites dock-bible-themes.json on every theme save
+  // and delete, while this page's own IndexedDB / localStorage copy is only a cache that
+  // goes stale (an edited theme kept its old look "even after refreshing"). So the file wins.
+  if (!isInsideDesktopApp()) {
+    const fromApp = await loadJsonArrayIfPresent<BibleTheme>("/uploads/dock-bible-themes.json");
+    if (fromApp) return fromApp;
+  }
   try {
     const { getCustomThemes } = await import("../bible/bibleDb");
     const localThemes = await getCustomThemes();
@@ -83,7 +107,9 @@ export async function loadDockCustomBibleThemes(): Promise<BibleTheme[]> {
   return loadJsonArray<BibleTheme>("/uploads/dock-bible-themes.json");
 }
 
-export async function loadDockFavoriteBibleThemes(): Promise<BibleTheme[]> {
+export async function loadDockFavoriteBibleThemes(options: { fresh?: boolean } = {}): Promise<BibleTheme[]> {
+  // A Dock left open in OBS only read the favourites when it started; "fresh" asks the app again.
+  if (options.fresh) await refreshFavoriteThemesFromStore().catch(() => { });
   const remoteFavorites = await loadJsonArray<BibleTheme>("/uploads/dock-bible-favorite-themes.json");
   // Load both fullscreen and lower-third favorites — themes are now unified
   const [fullscreenFavoriteIds, lowerThirdFavoriteIds] = await Promise.all([
@@ -98,9 +124,14 @@ export async function loadDockFavoriteBibleThemes(): Promise<BibleTheme[]> {
   ];
   const builtinIds = new Set(allBuiltins.map((theme) => theme.id));
   const uniqueCustom = customThemes.filter((theme) => !builtinIds.has(theme.id));
-  // Built-in themes: only show if favorited. Custom themes: always show.
-  const favoritedBuiltins = allBuiltins.filter((theme) => allFavoriteIds.has(theme.id));
-  const localThemes = [...favoritedBuiltins, ...uniqueCustom];
+  // The user's own themes and every ready-made theme on the Themes page are always here
+  // (the pickers drop the ones the user hid). Library templates need a favourite.
+  // Order: your own first (newest first), then favourited ready-made ones, then the rest.
+  const pageBuiltinIds = new Set(BUILTIN_THEMES.map((theme) => theme.id));
+  const shownBuiltins = allBuiltins.filter((theme) => pageBuiltinIds.has(theme.id) || allFavoriteIds.has(theme.id));
+  const favoritedBuiltins = shownBuiltins.filter((theme) => allFavoriteIds.has(theme.id));
+  const otherBuiltins = shownBuiltins.filter((theme) => !allFavoriteIds.has(theme.id));
+  const localThemes = [...uniqueCustom, ...favoritedBuiltins, ...otherBuiltins];
   const remoteById = new Map(remoteFavorites.map((theme) => [theme.id, theme]));
   const localById = new Map(localThemes.map((theme) => [theme.id, theme]));
   // Merge by ID — deduplicates so each theme appears once regardless of templateType
@@ -111,11 +142,30 @@ export async function loadDockFavoriteBibleThemes(): Promise<BibleTheme[]> {
     customThemesCount: customThemes.length,
     uniqueCustomCount: uniqueCustom.length,
     favoritedBuiltinsCount: favoritedBuiltins.length,
+    readyMadeCount: shownBuiltins.length,
     remoteCount: remoteFavorites.length,
     mergedCount: values.length,
     themeNames: values.map((t) => t.name),
   });
   return values;
+}
+
+/**
+ * The themes one Dock picker offers: the user's own themes and every ready-made theme on
+ * the Themes page (all on by default, unless hidden), plus any favourited library
+ * templates that fit the picker's categories. `fresh` re-reads everything from the app, for a manual reload.
+ */
+export async function loadDockThemesForArea(
+  area: DockThemeArea | null,
+  allowedCategories: ReadonlyArray<string> | undefined,
+  options: { fresh?: boolean } = {},
+): Promise<BibleTheme[]> {
+  const [themes, optOuts] = await Promise.all([
+    loadDockFavoriteBibleThemes(options),
+    loadDockThemeOptOuts(),
+  ]);
+  const alwaysShownIds = new Set(BUILTIN_THEMES.map((theme) => theme.id));
+  return filterThemesForDockArea(themes, { area, allowedCategories, optOuts, alwaysShownIds });
 }
 
 /**
@@ -174,10 +224,23 @@ export async function loadDockGraphicsPolicy(): Promise<DockGraphicsPolicy> {
       const packageTickers = Array.isArray(data.packageTickers)
         ? (data.packageTickers as TickerTheme[]).filter((t) => t && typeof t.id === "string" && typeof t.html === "string")
         : [];
-      return { blocked: new Set(blocked), packageThemes, packageTickers };
+      // Older policy files predate the bundled graphics; add any that are missing.
+      const known = new Set(packageThemes.map((t) => t.id));
+      const bundled = (await loadBundledPackageThemes()).filter((t) => !known.has(t.id) && !blocked.includes(t.id));
+      return { blocked: new Set(blocked), packageThemes: [...bundled, ...packageThemes], packageTickers };
     }
   } catch {
     // No policy yet.
   }
-  return { blocked: new Set(), packageThemes: [], packageTickers: [] };
+  return { blocked: new Set(), packageThemes: await loadBundledPackageThemes(), packageTickers: [] };
+}
+
+/** Graphics that ship inside the app, for when no catalog or policy file is available. */
+async function loadBundledPackageThemes(): Promise<LowerThirdTheme[]> {
+  try {
+    const catalog = await import("../services/broadcastGraphicsCatalog");
+    return catalog.getPackageThemes(null);
+  } catch {
+    return [];
+  }
 }

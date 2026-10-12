@@ -5,6 +5,12 @@
  */
 import { useEffect, useRef, type CSSProperties } from "react";
 import { ThemeRenderer } from "./renderer";
+import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
+
+/** Theme media is stored as /uploads/<file> for OBS; in the app that file lives on the local overlay server. */
+function previewAssetUrl(src: string): string {
+  return /^\/?uploads\//.test(src) ? resolveOverlayAssetUrl(src) : src;
+}
 import type { ThemeContent, ThemeLayout } from "./types";
 
 export const SAMPLE_THEME_CONTENT: ThemeContent = {
@@ -28,7 +34,7 @@ export default function ThemeLayoutPreview({ layout, content = SAMPLE_THEME_CONT
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const renderer = new ThemeRenderer(host, { static: !animate });
+    const renderer = new ThemeRenderer(host, { static: !animate, resolveAsset: previewAssetUrl });
     rendererRef.current = renderer;
     return () => {
       renderer.destroy();

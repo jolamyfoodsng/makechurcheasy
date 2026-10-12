@@ -15,7 +15,7 @@ export interface SavedBroadcastGraphic {
   id: string;
   name: string;
   templateId: string;
-  category: "speaker" | "service" | "welcome" | "giving" | "subscribe" | "announcements" | "countdown" | "social" | "branding" | "scripture" | "others";
+  category: "speaker" | "service" | "welcome" | "giving" | "subscribe" | "announcements" | "countdown" | "social" | "branding" | "scripture" | "quotes" | "others";
   displayType: "lower-third" | "fullscreen" | "overlay";
   variables: Record<string, string>;
   design?: {

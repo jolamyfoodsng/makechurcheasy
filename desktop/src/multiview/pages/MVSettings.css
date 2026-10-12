@@ -367,6 +367,29 @@
     color: #ffffff;
 }
 
+.settings-nav-item.is-coming-soon,
+.settings-nav-item.is-coming-soon:hover {
+    background: transparent;
+    color: #71717a;
+    cursor: not-allowed;
+}
+
+.settings-nav-item.is-coming-soon .settings-nav-item-icon {
+    color: #52525b;
+}
+
+.settings-nav-soon {
+    margin-left: auto;
+    padding: 2px 8px;
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    border-radius: 999px;
+    background: rgba(251, 191, 36, 0.1);
+    color: #fbbf24;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
 .settings-nav-item-icon {
     flex-shrink: 0;
     color: #a1a1aa;

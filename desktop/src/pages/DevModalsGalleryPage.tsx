@@ -13,6 +13,7 @@ import {
   Globe,
   Crown,
   Zap,
+  CloudDownload,
   RefreshCw,
   AlertTriangle,
   CheckCircle,
@@ -40,6 +41,8 @@ import ForceUpdateModal from "../components/ForceUpdateModal";
 import TrialModal from "../components/TrialModal";
 import DockPresentationLinkModal from "../dock/components/DockPresentationLinkModal";
 import type { DesktopAnnouncement } from "../services/announcementService";
+import ModalDialog, { ModalProgress } from "../components/ModalDialog";
+import PlanLimitModal from "../components/PlanLimitModal";
 import "./dev-modals.css";
 
 // ── Sample Data for Live Previews ──────────────────────────────────────────
@@ -106,6 +109,7 @@ type ActiveModalId =
   | "update_force"
   | "update_bg_notice"
   | "update_close_warning"
+  | "plan_limit"
   | "confirm_reset_canvas"
   | "confirm_undo"
   | "confirm_delete"
@@ -432,6 +436,30 @@ export default function DevModalsGalleryPage() {
           </article>
         )}
 
+        {/* Plan limit (graphics / themes) */}
+        {(activeTab === "all" || activeTab === "plans") && (
+          <article className="dev-modal-card">
+            <div className="dev-modal-card__header">
+              <span className="dev-card-icon dev-card-icon--amber">
+                <Lock size={20} />
+              </span>
+              <span className="dev-card-category">Plan Limit</span>
+            </div>
+            <h3>Free Plan Limit Reached</h3>
+            <p>
+              Shown when a Free church adds a 4th broadcast graphic or creates a 3rd custom theme. The button opens the subscription plans page.
+            </p>
+            <button
+              type="button"
+              className="dev-launch-btn"
+              onClick={() => setActiveModal("plan_limit")}
+            >
+              <Eye size={16} />
+              Preview Plan Limit
+            </button>
+          </article>
+        )}
+
         {/* 9. Trial Welcome Modal */}
         {(activeTab === "all" || activeTab === "plans") && (
           <article className="dev-modal-card">
@@ -629,39 +657,21 @@ export default function DevModalsGalleryPage() {
           LIVE MODAL PREVIEWS (MOUNTED CONDITIONALLY)
           ══════════════════════════════════════════════════════════════════════ */}
 
-      {/* 1. Redesigned Language Change Confirmation Modal */}
-      {activeModal === "language" && (
-        <div className="mv-modal-backdrop" onClick={() => handleAction("Cancelled Language Modal")}>
-          <div className="mv-modal mv-modal--language" onClick={(e) => e.stopPropagation()}>
-            <div className="mv-modal-icon-badge mv-modal-icon-badge--indigo">
-              <Globe size={28} />
-            </div>
-            <h3 className="mv-modal-title">Change Language</h3>
-            <p className="mv-modal-prompt">
-              Switch interface language to <strong>{getInterfaceLanguageLabel(selectedLanguageCode)}</strong>?
-            </p>
-            <p className="mv-modal-hint">
-              The interface will update immediately.
-            </p>
-            <div className="mv-modal-actions mv-modal-actions--modern">
-              <button
-                type="button"
-                className="mv-modal-btn mv-modal-btn--ghost"
-                onClick={() => handleAction("Cancelled Language Change")}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="mv-modal-btn mv-modal-btn--primary"
-                onClick={() => handleAction(`Confirmed language: ${getInterfaceLanguageLabel(selectedLanguageCode)}`)}
-              >
-                Change Language
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 1. Language Change Confirmation */}
+      <ModalDialog
+        open={activeModal === "language"}
+        tone="brand"
+        icon={<Globe size={26} />}
+        title="Change Language"
+        onClose={() => handleAction("Cancelled Language Modal")}
+        hint="The interface will update immediately."
+        actions={[
+          { label: "Cancel", variant: "ghost", onClick: () => handleAction("Cancelled Language Change") },
+          { label: "Change Language", variant: "primary", onClick: () => handleAction(`Confirmed language: ${getInterfaceLanguageLabel(selectedLanguageCode)}`) },
+        ]}
+      >
+        Switch interface language to <strong>{getInterfaceLanguageLabel(selectedLanguageCode)}</strong>?
+      </ModalDialog>
 
       {/* 2. Announcement Modal: Special Offer */}
       {activeModal === "announcement_offer" && (
@@ -862,106 +872,53 @@ export default function DevModalsGalleryPage() {
         />
       )}
 
-      {/* 7. Background Update Notice */}
-      {activeModal === "update_bg_notice" && (
-        <div className="update-modal-backdrop" onClick={() => setActiveModal(null)}>
-          <div className="update-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="update-modal-header">
-              <div className="update-modal-header__title update-modal-header__title--info">
-                <Zap size={16} />
-                <span>Downloading in Background</span>
-              </div>
-              <button
-                type="button"
-                className="update-modal-header__close"
-                onClick={() => { setActiveModal(null); handleAction("Closed Background Notice"); }}
-                aria-label="Dismiss notice"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="update-modal-body">
-              <h3>Your update will continue downloading</h3>
-              <p>
-                MakeChurchEazy is downloading the update in the background so you can continue
-                working without disruption. We will let you know as soon as the installation is ready.
-              </p>
-              <div className="update-modal-preview">
-                <div className="update-modal-preview__row">
-                  <span className="update-modal-preview__label">MakeChurchEazy v3.31.0</span>
-                  <span className="update-modal-preview__val">68% · 42.1 MB / 61.8 MB</span>
-                </div>
-                <div className="update-modal-preview__track">
-                  <div className="update-modal-preview__fill" style={{ width: "68%" }} />
-                </div>
-              </div>
-            </div>
-            <div className="update-modal-actions">
-              <button
-                type="button"
-                className="update-modal-btn update-modal-btn--primary"
-                onClick={() => { setActiveModal(null); handleAction("Acknowledged Background Notice"); }}
-              >
-                Got It
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 7. Background Update Notice (same dialog as components/UpdateBackgroundNoticeModal.tsx) */}
+      <ModalDialog
+        open={activeModal === "update_bg_notice"}
+        tone="info"
+        icon={<CloudDownload size={26} />}
+        title="Your update will continue downloading"
+        onClose={() => handleAction("Closed Background Notice")}
+        extra={<ModalProgress label="MakeChurchEazy v3.31.0" value="68% (42.1 MB / 61.8 MB)" percent={68} />}
+        hint="You can check live progress at any time in the banner pinned at the top of your screen, or under Settings > About."
+        actions={[
+          { label: "View Download", variant: "ghost", onClick: () => handleAction("Opened Download Details") },
+          { label: "Got It", variant: "primary", onClick: () => handleAction("Acknowledged Background Notice") },
+        ]}
+      >
+        MakeChurchEazy is downloading the update in the background so you can continue working without disruption.
+        MakeChurchEazy will not restart on its own: when the download finishes you can restart, or it will install the next time you close the app.
+      </ModalDialog>
 
-      {/* 8. Close Warning Modal */}
-      {activeModal === "update_close_warning" && (
-        <div className="update-modal-backdrop" style={{ zIndex: 100001 }} onClick={() => setActiveModal(null)}>
-          <div className="update-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="update-modal-header">
-              <div className="update-modal-header__title update-modal-header__title--warning">
-                <AlertTriangle size={16} />
-                <span>Update In Progress</span>
-              </div>
-              <button
-                type="button"
-                className="update-modal-header__close"
-                onClick={() => { setActiveModal(null); handleAction("Cancelled Quit"); }}
-                aria-label="Cancel"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="update-modal-body">
-              <h3>Download is still in progress</h3>
-              <p>
-                MakeChurchEazy is currently downloading the latest update (v3.31.0).
-                If you close the application now, the download will be interrupted and you will need to restart it later.
-              </p>
-              <div className="update-modal-preview">
-                <div className="update-modal-preview__row">
-                  <span className="update-modal-preview__label">Current Progress</span>
-                  <span className="update-modal-preview__val">45% · 28.4 MB / 61.8 MB</span>
-                </div>
-                <div className="update-modal-preview__track">
-                  <div className="update-modal-preview__fill" style={{ width: "45%" }} />
-                </div>
-              </div>
-            </div>
-            <div className="update-modal-actions">
-              <button
-                type="button"
-                className="update-modal-btn update-modal-btn--ghost"
-                onClick={() => { setActiveModal(null); handleAction("Cancelled Quit"); }}
-              >
-                Keep Downloading
-              </button>
-              <button
-                type="button"
-                className="update-modal-btn update-modal-btn--danger"
-                onClick={() => { setActiveModal(null); handleAction("Confirmed Quit During Update"); }}
-              >
-                Close Anyway
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 8. Close Warning (same dialog as components/UpdateCloseAppWarningModal.tsx) */}
+      <ModalDialog
+        open={activeModal === "update_close_warning"}
+        tone="warning"
+        role="alertdialog"
+        icon={<AlertTriangle size={26} />}
+        title="Download is still in progress"
+        onClose={() => handleAction("Cancelled Quit")}
+        closeOnBackdrop={false}
+        showClose
+        extra={<ModalProgress label="Current Progress" value="45% · 28.4 MB / 61.8 MB" percent={45} />}
+        actions={[
+          { label: "Quit Anyway", variant: "dangerGhost", onClick: () => handleAction("Confirmed Quit During Update") },
+          { label: "Keep Downloading", variant: "primary", autoFocus: true, onClick: () => handleAction("Cancelled Quit") },
+        ]}
+      >
+        MakeChurchEazy is currently downloading the latest update (v3.31.0).
+        If you close the application now, the download will be interrupted and you will need to restart it later.
+      </ModalDialog>
+
+      {/* Plan limit (graphics / themes) */}
+      <PlanLimitModal
+        open={activeModal === "plan_limit"}
+        onClose={() => handleAction("Closed Plan Limit")}
+        title="Broadcast graphics limit reached"
+        message="Your plan includes up to 3 broadcast graphics and you already have 3. Remove one, or upgrade to add more."
+        requiredPlan="basic"
+        reason="gallery_preview"
+      />
 
       {/* 9. Trial Welcome Modal */}
       {activeModal === "trial_welcome" && (
@@ -1038,97 +995,49 @@ export default function DevModalsGalleryPage() {
       )}
 
       {/* 13. Studio - Reset Canvas */}
-      {activeModal === "confirm_reset_canvas" && (
-        <div className="mv-modal-backdrop" onClick={() => handleAction("Cancelled Reset")}>
-          <div className="mv-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="mv-modal-icon-badge mv-modal-icon-badge--amber">
-              <RotateCcw size={26} />
-            </div>
-            <h3 className="mv-modal-title">Reset Canvas Layout?</h3>
-            <p className="mv-modal-text">
-              This will clear all current regions and restore the starter grid. Unsaved region edits will be lost.
-            </p>
-            <div className="mv-modal-actions mv-modal-actions--modern">
-              <button
-                type="button"
-                className="mv-modal-btn mv-modal-btn--ghost"
-                onClick={() => handleAction("Cancelled Reset")}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="mv-modal-btn mv-modal-btn--danger"
-                onClick={() => handleAction("Confirmed Canvas Reset")}
-              >
-                Reset Canvas
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalDialog
+        open={activeModal === "confirm_reset_canvas"}
+        tone="warning"
+        icon={<RotateCcw size={26} />}
+        title="Reset Canvas Layout?"
+        onClose={() => handleAction("Cancelled Reset")}
+        actions={[
+          { label: "Cancel", variant: "ghost", onClick: () => handleAction("Cancelled Reset") },
+          { label: "Reset Canvas", variant: "danger", onClick: () => handleAction("Confirmed Canvas Reset") },
+        ]}
+      >
+        This will clear all current regions and restore the starter grid. Unsaved region edits will be lost.
+      </ModalDialog>
 
       {/* 14. Studio - Delete Scene / Theme */}
-      {activeModal === "confirm_delete" && (
-        <div className="mv-modal-backdrop" onClick={() => handleAction("Cancelled Delete")}>
-          <div className="mv-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="mv-modal-icon-badge mv-modal-icon-badge--red">
-              <Trash2 size={26} />
-            </div>
-            <h3 className="mv-modal-title">Remove Scene &ldquo;Sunday Main&rdquo;?</h3>
-            <p className="mv-modal-text">
-              Are you sure you want to permanently delete this scene? This cannot be undone.
-            </p>
-            <div className="mv-modal-actions mv-modal-actions--modern">
-              <button
-                type="button"
-                className="mv-modal-btn mv-modal-btn--ghost"
-                onClick={() => handleAction("Cancelled Delete")}
-              >
-                Keep Scene
-              </button>
-              <button
-                type="button"
-                className="mv-modal-btn mv-modal-btn--danger"
-                onClick={() => handleAction("Confirmed Scene Deleted")}
-              >
-                Delete Scene
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalDialog
+        open={activeModal === "confirm_delete"}
+        tone="danger"
+        icon={<Trash2 size={26} />}
+        title={"Remove Scene \u201CSunday Main\u201D?"}
+        onClose={() => handleAction("Cancelled Delete")}
+        actions={[
+          { label: "Keep Scene", variant: "ghost", onClick: () => handleAction("Cancelled Delete") },
+          { label: "Delete Scene", variant: "danger", onClick: () => handleAction("Confirmed Scene Deleted") },
+        ]}
+      >
+        Are you sure you want to permanently delete this scene? This cannot be undone.
+      </ModalDialog>
 
       {/* 15. Studio - Undo Changes */}
-      {activeModal === "confirm_undo" && (
-        <div className="mv-modal-backdrop" onClick={() => handleAction("Cancelled Undo")}>
-          <div className="mv-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="mv-modal-icon-badge mv-modal-icon-badge--indigo">
-              <Undo size={26} />
-            </div>
-            <h3 className="mv-modal-title">Undo Canvas Edits?</h3>
-            <p className="mv-modal-text">
-              Revert all changes made since the last save to the active OBS output?
-            </p>
-            <div className="mv-modal-actions mv-modal-actions--modern">
-              <button
-                type="button"
-                className="mv-modal-btn mv-modal-btn--ghost"
-                onClick={() => handleAction("Cancelled Undo")}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="mv-modal-btn mv-modal-btn--primary"
-                onClick={() => handleAction("Confirmed Undo")}
-              >
-                Revert Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ModalDialog
+        open={activeModal === "confirm_undo"}
+        tone="brand"
+        icon={<Undo size={26} />}
+        title="Undo Canvas Edits?"
+        onClose={() => handleAction("Cancelled Undo")}
+        actions={[
+          { label: "Cancel", variant: "ghost", onClick: () => handleAction("Cancelled Undo") },
+          { label: "Revert Changes", variant: "primary", onClick: () => handleAction("Confirmed Undo") },
+        ]}
+      >
+        Revert all changes made since the last save to the active OBS output?
+      </ModalDialog>
 
       {/* 16. Studio - Keyboard Shortcuts */}
       {activeModal === "shortcuts" && (

@@ -19,7 +19,7 @@ export type SpeakerLowerThirdProps = {
 };
 
 const SpeakerLowerThirdInner: React.FC<SpeakerLowerThirdProps> = ({
-  speakerName = "Pastor Henry Odewale",
+  speakerName = "Pastor Name here",
   roleOrTitle = "Lead Pastor",
   organization = "MakeChurchEazy Ministry",
   topic = "Keys to Forceful Advancement",
@@ -270,7 +270,7 @@ const SpeakerLowerThirdInner: React.FC<SpeakerLowerThirdProps> = ({
 const speakerLowerThirdSchema = {
   speakerName: {
     type: "text-content",
-    default: "Pastor Henry Odewale",
+    default: "Pastor Name here",
     description: "Speaker Name",
   },
   roleOrTitle: {

@@ -18,7 +18,10 @@ export interface ProjectionSettings {
 }
 
 const PROJECTION_SETTINGS_KEY = "ocs-dock-projection-settings";
-const PROJECTION_SETTINGS_VERSION = 3;
+// 4: lowerThirdSourceVisibility defaults to "overlay" (a lower third hides nothing). An older saved
+// "active-only" is ignored once, because every save wrote the whole object and so kept the
+// old default forever. Ticking the option again saves it at this version.
+const PROJECTION_SETTINGS_VERSION = 4;
 
 const DEFAULT_PROJECTION_SETTINGS: ProjectionSettings = {
   sceneMode: "no-clone",
@@ -71,7 +74,8 @@ export function loadProjectionSettings(): ProjectionSettings {
       presentationSourceVisibility: parsed.presentationSourceVisibility === "keep-visible"
         ? "keep-visible"
         : DEFAULT_PROJECTION_SETTINGS.presentationSourceVisibility,
-      lowerThirdSourceVisibility: parsed.lowerThirdSourceVisibility === "active-only"
+      lowerThirdSourceVisibility: Number(parsed.settingsVersion) >= 4
+        && parsed.lowerThirdSourceVisibility === "active-only"
         ? "active-only"
         : DEFAULT_PROJECTION_SETTINGS.lowerThirdSourceVisibility,
       preserveAudioOnSourceSwitch: parsed.preserveAudioOnSourceSwitch !== false,

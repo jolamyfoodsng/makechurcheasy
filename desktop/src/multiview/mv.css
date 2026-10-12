@@ -1417,14 +1417,14 @@
 }
 
 .mv-modal {
-  background: #18181c;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
+  background: var(--mce-modal-bg, #131724);
+  border: 1px solid var(--mce-modal-border, rgba(255, 255, 255, 0.1));
+  border-radius: var(--mce-modal-radius, 16px);
   padding: 28px 28px 24px;
   max-width: 420px;
   width: 90%;
   text-align: center;
-  box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow: var(--mce-modal-shadow, 0 24px 60px -12px rgba(0, 0, 0, 0.75));
   animation: mv-modal-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex;
   flex-direction: column;
@@ -1542,29 +1542,23 @@
 }
 
 .mv-modal-btn--primary {
-  background: #6366f1;
-  border: 1px solid #4f46e5;
+  background: var(--mce-modal-primary, #4f46e5);
+  border: 1px solid transparent;
   color: #fff;
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
 }
 
 .mv-modal-btn--primary:hover {
-  background: #4f46e5;
-  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
-  transform: translateY(-1px);
+  background: var(--mce-modal-primary-hover, #4338ca);
 }
 
 .mv-modal-btn--danger {
-  background: #ef4444;
-  border: 1px solid #dc2626;
+  background: var(--mce-modal-danger, #ef4444);
+  border: 1px solid transparent;
   color: #fff;
-  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
 }
 
 .mv-modal-btn--danger:hover {
-  background: #dc2626;
-  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
-  transform: translateY(-1px);
+  background: var(--mce-modal-danger-hover, #dc2626);
 }
 
 .mv-btn--danger {
@@ -3843,14 +3837,14 @@ body.mv-dragging-scene * {
 }
 
 .mv-modal {
-  background: #18181c;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
+  background: var(--mce-modal-bg, #131724);
+  border: 1px solid var(--mce-modal-border, rgba(255, 255, 255, 0.1));
+  border-radius: var(--mce-modal-radius, 16px);
   padding: 28px 28px 24px;
   max-width: 420px;
   width: 90%;
   text-align: center;
-  box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow: var(--mce-modal-shadow, 0 24px 60px -12px rgba(0, 0, 0, 0.75));
   animation: mv-modal-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex;
   flex-direction: column;
@@ -3881,16 +3875,16 @@ body.mv-dragging-scene * {
 
 .mv-modal-title {
   margin: 0 0 8px;
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--mce-modal-title, #f8fafc);
 }
 
 .mv-modal-text {
   margin: 0 0 20px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.5;
+  font-size: 14px;
+  color: var(--mce-modal-text, #cbd5e1);
+  line-height: 1.55;
 }
 
 .mv-modal-actions {

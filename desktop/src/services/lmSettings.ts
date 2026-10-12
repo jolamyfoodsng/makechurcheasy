@@ -7,6 +7,12 @@ export interface LmDockSettings {
   autoNavigate: boolean;
   translation: string;
   overlayMode: LmOverlayMode;
+  /**
+   * Project verses the way the Bible tab does (its Full/LT mode, theme, size,
+   * line count and reference format). `overlayMode` is only used when this is
+   * switched off from LM's own Full/LT buttons.
+   */
+  followBibleStyle: boolean;
   autoScroll: boolean;
   autoPushQueue: boolean;
   autoPushSuggestions: boolean;
@@ -19,6 +25,7 @@ export const DEFAULT_LM_SETTINGS: LmDockSettings = {
   autoNavigate: false,
   translation: "KJV",
   overlayMode: "fullscreen",
+  followBibleStyle: true,
   autoScroll: true,
   autoPushQueue: true,
   autoPushSuggestions: false,
@@ -46,6 +53,7 @@ export function loadLmSettings(): LmDockSettings {
       translation: typeof merged.translation === "string" && merged.translation.trim() ? merged.translation.trim().toUpperCase() : "KJV",
       pushScene: merged.pushScene === "main" ? "main" : "ai",
       overlayMode: normalizeLmOverlayMode(merged.overlayMode, fallbackOverlayMode),
+      followBibleStyle: merged.followBibleStyle !== false,
       autoPushQueue: merged.autoPushQueue === true,
       autoPushSuggestions: merged.autoPushSuggestions === true,
       autoPushDedupWindow: Number.isFinite(autoPushDedupWindow)

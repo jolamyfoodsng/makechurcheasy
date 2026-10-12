@@ -3,6 +3,11 @@ import { useTranslation } from "react-i18next";
 import i18next from "i18next";
 import { dockClient, type DockStateMessage } from "../../services/dockBridge";
 import { dockObsClient } from "../dockObsClient";
+import {
+  DOCK_SELECT_BIBLE_VERSE_EVENT,
+  extractBibleVerseFromPayload,
+  setPendingBibleVerseSelection,
+} from "../dockBibleNavigation";
 import type { DockStagedItem } from "../dockTypes";
 import Icon from "../DockIcon";
 import {
@@ -238,6 +243,16 @@ export default function DockPlannerTab({ staged: _staged, onStage, initialSnapsh
       }
       const payload = cue.payloadSnapshot ?? {};
       if (cue.type === "bible") {
+        if (action === "live") {
+          // Keep the Bible tab's verse list on the verse that is going live.
+          const bibleVerse = extractBibleVerseFromPayload(payload as Record<string, unknown>, cue.label);
+          if (bibleVerse) {
+            setPendingBibleVerseSelection(bibleVerse);
+            window.dispatchEvent(
+              new CustomEvent(DOCK_SELECT_BIBLE_VERSE_EVENT, { detail: bibleVerse }),
+            );
+          }
+        }
         await dockObsClient.pushBible(payload as unknown as Parameters<typeof dockObsClient.pushBible>[0]);
       } else if (cue.type === "worship") {
         await dockObsClient.pushWorshipLyrics(payload as unknown as Parameters<typeof dockObsClient.pushWorshipLyrics>[0]);

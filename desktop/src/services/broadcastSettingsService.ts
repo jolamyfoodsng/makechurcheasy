@@ -2,7 +2,7 @@
  * broadcastSettingsService.ts — Manage broadcast destinations, profiles, and stream keys.
  *
  * Allows tying multiple social media channels (YouTube, Facebook, Kick, Twitch, etc.)
- * to a specific Person/Profile (e.g. "Senior Pastor", "Pastor Isaac (Guest)", "Youth Church")
+ * to a specific Person/Profile (e.g. "Senior Pastor", "Pastor Profile (Guest)", "Youth Church")
  * with a friendly nickname for 1-click switching in Make Church Eazy and OBS Studio.
  */
 
@@ -482,8 +482,8 @@ export function updateCloudBroadcastSettings(settings: {
       settings.multistreamMode !== undefined
         ? settings.multistreamMode
         : settings.cloudflareStreamKey
-        ? "cloud"
-        : current.multistreamMode,
+          ? "cloud"
+          : current.multistreamMode,
     cloudflareIngestUrl:
       settings.cloudflareIngestUrl !== undefined
         ? settings.cloudflareIngestUrl

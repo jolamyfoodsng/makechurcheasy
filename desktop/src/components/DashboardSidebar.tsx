@@ -38,11 +38,13 @@ import {
   FileText,
   Radio,
   MonitorPlay,
-  Layers, Youtube } from "lucide-react";
+  Layers, Youtube, Lock, Star } from "lucide-react";
 import type { ConnectionStatus } from "../services/obsService";
 
 import { useAuth } from "../contexts/AuthContext";
 import { getEnvConfig } from "../services/envConfig";
+import { getEffectivePlan } from "../services/licenseService";
+import { openDashboardSubscriptionPlans } from "../services/subscriptionNavigation";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -66,6 +68,8 @@ export default function DashboardSidebar({
   onNavigate,
 }: DashboardSidebarProps) {
   const { user, logout } = useAuth();
+  // Free plan: a FREE badge by the logo, a lock on paid areas, and an upgrade card above the account.
+  const isFreePlan = Boolean(user) && getEffectivePlan(user) === "free";
   const { t } = useTranslation();
   const { appName, isTest } = getEnvConfig();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -78,7 +82,7 @@ export default function DashboardSidebar({
 
 
   const navItem = useCallback(
-    (to: string, Icon: typeof Mic, label: string, pulseDot = false) => {
+    (to: string, Icon: typeof Mic, label: string, pulseDot = false, locked = false) => {
       const full = to.split("?")[0];
       const query = to.includes("?") ? to.split("?")[1] : "";
       const pathMatches =
@@ -104,7 +108,15 @@ export default function DashboardSidebar({
         >
           <Icon className="sidebar-nav-icon" />
           <span className="sidebar-nav-text">{label}</span>
-          {pulseDot && (
+          {locked ? (
+            <span
+              className={`sidebar-nav-lock${collapsed ? " sidebar-nav-lock--collapsed" : ""}`}
+              title="Paid feature: upgrade to unlock"
+            >
+              <Lock size={collapsed ? 9 : 11} aria-hidden="true" />
+              {!collapsed && <span>Paid</span>}
+            </span>
+          ) : pulseDot && (
             collapsed ? (
               <span className="sidebar-live-dot sidebar-live-dot--collapsed" aria-hidden="true" />
             ) : (
@@ -149,7 +161,10 @@ export default function DashboardSidebar({
       <div className="sidebar-header">
         <AppLogo alt={appName} className="sidebar-logo" />
         <div className="sidebar-header-text">
-          <p className="sidebar-subtitle">{appName}</p>
+          <p className="sidebar-subtitle">
+            {appName}
+            {isFreePlan && <span className="sidebar-plan-badge" title="You are on the Free plan">FREE</span>}
+          </p>
           {isTest ? (
             <p className="sidebar-subtitle" style={{ color: "var(--warning)", marginTop: 2 }}>
               Testing environment
@@ -401,7 +416,7 @@ export default function DashboardSidebar({
             </div>
           )}
 
-          {navItem("/broadcast", Radio, t("sidebar.multiStream", { defaultValue: "Multi-Stream" }), true)}
+          {navItem("/broadcast", Radio, t("sidebar.multiStream", { defaultValue: "Multi-Stream" }), !isFreePlan, isFreePlan)}
           {navItem("/presentation", Tv, t("sidebar.presentation"))}
         </div>
       </div>
@@ -430,6 +445,23 @@ export default function DashboardSidebar({
         </div>
 
 
+
+        {isFreePlan && !collapsed && (
+          <div className="sidebar-free-card">
+            <div className="sidebar-free-card__head">
+              <Star size={14} aria-hidden="true" />
+              <span>You&apos;re on the Free plan</span>
+            </div>
+            <p className="sidebar-free-card__text">One stream channel, limited themes, graphics and Verse AI minutes.</p>
+            <button
+              type="button"
+              className="sidebar-free-card__cta"
+              onClick={() => void openDashboardSubscriptionPlans({ source: "sidebar-free-card" })}
+            >
+              Upgrade
+            </button>
+          </div>
+        )}
 
         {/* User Profile */}
         {user && !collapsed && (

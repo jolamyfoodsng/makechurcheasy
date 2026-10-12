@@ -15531,6 +15531,13 @@ input[type="radio"] {
   margin-top: auto;
 }
 
+/* Shown on one of your own themes that you chose to hide from the Dock. */
+.production-theme-card__meta-pill--hidden {
+  gap: 4px;
+  color: var(--text-secondary);
+  border-style: dashed;
+}
+
 .production-theme-card__actions .production-btn {
   flex: 1;
 }
@@ -17697,43 +17704,181 @@ html.mv-theme-light .dash-v2-footer {
 
 .sts3-header-mic-status {
   display: flex;
-  align-items: center;
-  padding: 8px 12px;
-  gap: 14px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 11px;
   font-size: 11px;
   color: var(--text-secondary);
   border-bottom: 1px solid var(--border);
   background: var(--surface-raised);
 }
 
-.sts3-gain-control {
+/* Status pills: mic state and broadcast connection */
+.sts3-status-pills {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
 }
 
-.sts3-gain-slider {
-  width: 68px;
-  height: 4px;
-  accent-color: var(--accent, #6366f1);
-  cursor: pointer;
+.sts3-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
 }
 
-.sts3-mini-meter {
-  width: 34px;
+.sts3-pill__dot {
+  width: 6px;
   height: 6px;
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 3px;
-  overflow: hidden;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.7;
+}
+
+.sts3-pill--on {
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success, #10b981);
+}
+
+.sts3-pill--on .sts3-pill__dot {
+  opacity: 1;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.sts3-pill--warn {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning, #f59e0b);
+}
+
+/* Microphone sensitivity: label, slider, value, live level underneath */
+.sts3-sens {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sts3-sens__row {
   display: flex;
   align-items: center;
-  flex-shrink: 0;
+  gap: 8px;
 }
 
-.sts3-mini-meter-fill {
+.sts3-sens__icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.sts3-sens__label {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.sts3-sens__value {
+  flex-shrink: 0;
+  min-width: 40px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-primary, var(--text-secondary));
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* Fully custom slider: the browser's default thumb is oversized and white
+   inside a 4px-high input, so draw the track and thumb ourselves. */
+.sts3-gain-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1 1 auto;
+  min-width: 60px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  --sts3-fill: 25%;
+}
+
+.sts3-gain-slider:focus {
+  outline: none;
+}
+
+.sts3-gain-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--accent-blue, #6366f1) 0%,
+    var(--accent-blue, #6366f1) var(--sts3-fill),
+    rgba(148, 163, 184, 0.25) var(--sts3-fill),
+    rgba(148, 163, 184, 0.25) 100%
+  );
+}
+
+.sts3-gain-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: 2px solid var(--surface-raised, #171b28);
+  border-radius: 50%;
+  background: var(--accent-blue, #6366f1);
+  box-shadow: 0 0 0 1px var(--accent-blue, #6366f1), 0 1px 3px rgba(0, 0, 0, 0.35);
+  transition: transform 0.12s ease;
+}
+
+.sts3-gain-slider:hover::-webkit-slider-thumb,
+.sts3-gain-slider:focus-visible::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+
+.sts3-gain-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.25);
+}
+
+.sts3-gain-slider::-moz-range-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--accent-blue, #6366f1);
+}
+
+.sts3-gain-slider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--surface-raised, #171b28);
+  border-radius: 50%;
+  background: var(--accent-blue, #6366f1);
+  box-shadow: 0 0 0 1px var(--accent-blue, #6366f1), 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+
+/* Live input level, always present so the row never changes height */
+.sts3-sens__meter {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+  overflow: hidden;
+}
+
+.sts3-sens__meter-fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: 999px;
   transition: width 0.08s ease;
 }
 
@@ -23755,4 +23900,84 @@ html.mv-theme-light .tc-preview-area {
 
 .app-env-banner-test__text {
   flex: 1;
+}
+
+/* Themes page: format filter + "in use" badges (Ready-made themes / My Themes) */
+.production-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.production-filter-chip {
+  min-height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-dark);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.production-filter-chip--active {
+  border-color: var(--primary, #6366f1);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--primary, #6366f1) 18%, transparent);
+}
+
+.production-theme-card__meta-pill--inuse {
+  gap: 4px;
+  border-color: color-mix(in srgb, var(--success, #22c55e) 55%, transparent);
+  color: var(--success, #22c55e);
+}
+
+.production-theme-card__actions--wrap {
+  flex-wrap: wrap;
+}
+
+.production-theme-card__actions--wrap .production-btn {
+  flex: 1 1 calc(50% - 4px);
+}
+
+/* Themes page toolbar: search, sort and where "Use theme" applies. */
+.production-theme-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+}
+
+.production-theme-search {
+  position: relative;
+  flex: 1 1 240px;
+  min-width: 200px;
+  display: flex;
+  align-items: center;
+}
+
+.production-theme-search > svg,
+.production-theme-search > .material-icons {
+  position: absolute;
+  left: 12px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.production-theme-search .production-input {
+  padding-left: 36px;
+}
+
+.production-theme-sort,
+.production-theme-sort > span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.production-theme-sort .production-input {
+  width: auto;
+  min-width: 150px;
 }

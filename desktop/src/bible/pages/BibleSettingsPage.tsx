@@ -22,6 +22,7 @@ import {
   type ShortcutCategory,
 } from "../../multiview/shortcuts";
 import Icon from "../../components/Icon";
+import { resolveBuiltinThemeId } from "../themes/builtinThemes";
 
 const FALLBACK_TRANSLATIONS: { value: string; label: string }[] = [
   { value: "KJV", label: "King James Version (KJV)" },
@@ -47,7 +48,7 @@ export default function BibleSettingsPage() {
   useEffect(() => {
     getBibleSettings().then((s) => {
       setDefaultTranslation((s.defaultTranslation as BibleTranslation) ?? "KJV");
-      setDefaultThemeId(s.activeThemeId ?? "classic-dark");
+      setDefaultThemeId(resolveBuiltinThemeId(s.activeThemeId));
       setColorMode(s.colorMode ?? "dark");
       setAutoSend(s.autoSendOnDoubleClick ?? true);
       setReduceMotion(s.reduceMotion ?? false);

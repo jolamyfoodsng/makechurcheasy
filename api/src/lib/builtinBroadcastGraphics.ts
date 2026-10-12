@@ -393,7 +393,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
   },
   {
     "graphicId": "lt-sun-healing",
-    "name": "Healing & Salvation",
+    "name": "Title & Info Strip",
     "category": "service",
     "accentColor": "#e5352a",
     "description": "Black title bar and red info strip slide in from opposite sides.",
@@ -502,5 +502,141 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "accentColor": "#ff3156",
     "description": "A LIVE pill with a pulsing dot and a hashtag.",
     "sortOrder": 60
+  },
+  {
+    "graphicId": "lt-pkg-prayer-bar",
+    "name": "Prayer Bar",
+    "category": "service",
+    "accentColor": "#d32f2f",
+    "description": "Wide colour bar for a prayer, declaration or confession, with a small label tab. The bar sweeps in, the tab drops onto it, the label spaces out and the words rise in line by line",
+    "sortOrder": 61
+  },
+  {
+    "graphicId": "lt-pkg-website-bar",
+    "name": "Website Bar",
+    "category": "announcements",
+    "accentColor": "#3d0b10",
+    "description": "Two-tier bar that sends viewers to your website: a light caption strip above a bold address bar with a globe-and-pointer icon. The bar wipes in, the caption slides across, the icon spins in and the address rises",
+    "sortOrder": 62
+  },
+  {
+    "graphicId": "lt-pkg-live-social-bar",
+    "name": "Live Social Bar",
+    "category": "social",
+    "accentColor": "#7a2cf5",
+    "description": "Gradient title bar with a logo tab, a LIVE badge and three social handles. The bar wipes in, the logo drops, LIVE flashes, the titles rise and the socials slide along the bottom strip",
+    "sortOrder": 63
+  },
+  {
+    "graphicId": "lt-pkg-arrow-logo-bar",
+    "name": "Arrow Logo Bar",
+    "category": "branding",
+    "accentColor": "#f0641e",
+    "description": "Chevron logo block with a gradient arrow bar, social icons and a website strip. The logo punches in, the arrow bar sweeps right, the titles stretch in, the icons pop and the website strip slides out underneath",
+    "sortOrder": 64
+  },
+  {
+    "graphicId": "lt-pkg-contact-bar",
+    "name": "Contact Bar",
+    "category": "announcements",
+    "accentColor": "#3d0b10",
+    "description": "Two-tier contact bar: a light caption strip above a bold bar with a round icon and your email, phone or handle. The bar wipes in, the caption slides across, the icon pops and the contact rises",
+    "sortOrder": 65
+  },
+  {
+    "graphicId": "lt-pkg-testimony-bar",
+    "name": "Share Your Testimony",
+    "category": "announcements",
+    "accentColor": "#9b1414",
+    "description": "Wide red panel with diagonal stripes, a bold headline and one or two contact boxes. The panel wipes in, the stripes slide in, the headline rises and the boxes grow out one after the other",
+    "sortOrder": 66
+  },
+  {
+    "graphicId": "lt-pkg-question-bar",
+    "name": "Question & Answer Bar",
+    "category": "service",
+    "accentColor": "#1d4ed8",
+    "description": "Sermon point in two tiers: a white question strip above a solid colour bar with the answer in bold capitals. The bar wipes in, the question slides across and the answer rises in",
+    "sortOrder": 67
+  },
+  {
+    "graphicId": "lt-pkg-quote-card",
+    "name": "Quote",
+    "category": "quotes",
+    "accentColor": "#e3171c",
+    "description": "Quote graphic for a lower third or the full screen. Letters track in one by one, highlight or underline bars sweep across each line, quote marks snap in and the name follows; on the way out the letters fold away from the end",
+    "sortOrder": 68
+  },
+  {
+    "graphicId": "lt-pkg-quote-tag-box",
+    "name": "Quote · Tag Box",
+    "category": "quotes",
+    "accentColor": "#0f9d58",
+    "description": "Name tag sits on a solid colour box holding the quote in capitals; big quote marks snap onto the bottom corner. The tag and box wipe across, the words rise and the marks pop",
+    "sortOrder": 69
+  },
+  {
+    "graphicId": "lt-pkg-quote-corner-frame",
+    "name": "Quote · Corner Frame",
+    "category": "quotes",
+    "accentColor": "#0f9d58",
+    "description": "A thin outline frame draws itself around the quote, with a big opening mark on the top-left corner and a closing mark on the bottom-right. The words fade up inside and the name follows",
+    "sortOrder": 70
+  },
+  {
+    "graphicId": "lt-pkg-quote-solid-box",
+    "name": "Quote · Solid Box",
+    "category": "quotes",
+    "accentColor": "#0f9d58",
+    "description": "Clean colour box with the quote in capitals and the name in small caps underneath, with a quote mark hanging off the left edge. The box wipes in, then the words and the name",
+    "sortOrder": 71
+  },
+  {
+    "graphicId": "lt-pkg-quote-clean",
+    "name": "Quote · Clean",
+    "category": "quotes",
+    "accentColor": "#ffffff",
+    "description": "No box, just type: big quote marks, the quote in sentence case and a bold name. The marks fade down, each word rises in turn and the name slides up out of a mask",
+    "sortOrder": 72
+  },
+  {
+    "graphicId": "lt-pkg-quote-centred-tag",
+    "name": "Quote · Centred Tag",
+    "category": "quotes",
+    "accentColor": "#0f9d58",
+    "description": "Centred quote in capitals with a colour quote mark above, a thin rule underneath and the name in a colour tag. The rule draws out from the middle and the name spreads in letter by letter",
+    "sortOrder": 73
+  },
+  {
+    "graphicId": "lt-pkg-quote-mark-block",
+    "name": "Quote · Mark Block",
+    "category": "quotes",
+    "accentColor": "#0f9d58",
+    "description": "A colour square with a huge quote mark grows from a thin line, the quote in capitals slides out from behind it and the name lands in a colour tag underneath",
+    "sortOrder": 74
+  },
+  {
+    "graphicId": "lt-pkg-quote-outline-box",
+    "name": "Quote · Outline Box",
+    "category": "quotes",
+    "accentColor": "#0f9d58",
+    "description": "A colour outline box draws itself in, a quote mark drops onto its top-left corner, the quote types in word by word and the name appears centred underneath",
+    "sortOrder": 75
+  },
+  {
+    "graphicId": "lt-pkg-quote-title-pill",
+    "name": "Quote · Title Pill",
+    "category": "quotes",
+    "accentColor": "#0f9d58",
+    "description": "Short title inside a rounded outline with quote marks on either side and a small subtitle under the box. The outline grows from the centre, the marks fly in from the sides and the title spreads out",
+    "sortOrder": 76
+  },
+  {
+    "graphicId": "lt-pkg-giving-accounts-board",
+    "name": "Giving Accounts Board",
+    "category": "giving",
+    "accentColor": "#6e1116",
+    "description": "Fullscreen board for bank transfer giving: a gold title plaque, up to six banks in two columns with logo, bank name and account number, and the account name on a white panel at the bottom. The plaque opens from the centre, accounts drop in one by one and the bottom panel rises",
+    "sortOrder": 77
   }
 ];

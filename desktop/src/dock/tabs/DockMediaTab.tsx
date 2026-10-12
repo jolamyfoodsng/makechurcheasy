@@ -390,7 +390,7 @@ function loadLocalMediaLibrary(): MediaItem[] {
 }
 
 function isDockMediaBrowserTab(value: unknown): value is DockMediaBrowserTab {
-  return value === "uploads" || value === "templates" || value === "animations" || value === "patterns" || value === "text";
+  return value === "uploads" || value === "templates" || value === "animations" || value === "patterns";
 }
 
 function isDockMediaKind(value: unknown): value is DockMediaFilter {
@@ -4621,18 +4621,7 @@ let _cachedGlobalUploadsDir: string | null = null;
             <span className="dock-media-tab__label">{t('media.patterns', 'Patterns')}</span>
             <span className="dock-media-tab__count">{BACKGROUND_PATTERNS.length}</span>
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={browserTab === "text"}
-            className={`dock-media-tab ${browserTab === "text" ? "dock-media-tab--active" : ""}`}
-            onClick={() => setBrowserTab("text")}
-            title={t('media.tabText')}
-            aria-label={t('media.tabText')}
-          >
-            <Icon name="title" size={14} />
-            <span className="dock-media-tab__label">{t('media.tabText')}</span>
-          </button>
+          {/* The Text overlay tab was retired. Its OBS source is removed by services/retiredMceSources.ts. */}
         </div>
       </div>
 

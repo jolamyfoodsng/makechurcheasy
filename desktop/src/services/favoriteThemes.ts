@@ -16,6 +16,7 @@ import {
   getNativeDockSettingsScope,
   hydrateNativeDockSettings,
   readNativeDockSetting,
+  reloadNativeDockSettings,
   writeNativeDockSetting,
 } from "./localDockSettings";
 
@@ -193,6 +194,29 @@ function setTickerFavoritesCache(next: Set<string>, emit = true): void {
 function ensureHydrationStarted(): void {
   if (hydrationPromise && hydrationScopeToken === currentHydrationScopeToken()) return;
   hydrationPromise = hydrateFavoriteThemes().catch(() => { });
+}
+
+/**
+ * Tell every open Dock (and this window) that the theme list changed, so the
+ * pickers re-read it: a theme was created, deleted, edited, favourited or had
+ * an area switched off.
+ */
+export function notifyDockThemesChanged(): void {
+  emitFavoritesUpdated();
+}
+
+/**
+ * Re-read the favourites from the desktop app. A Dock left open in OBS only
+ * reads them once when it starts, so this is what a "reload themes" needs.
+ */
+export async function refreshFavoriteThemesFromStore(): Promise<void> {
+  await reloadNativeDockSettings([
+    BIBLE_FAVS_KEY,
+    WORSHIP_LT_FAVS_KEY,
+    OBS_FAVS_KEY,
+    TICKER_FAVS_KEY,
+  ]).catch(() => undefined);
+  refreshAllFavoriteCaches();
 }
 
 export async function hydrateFavoriteThemes(): Promise<void> {

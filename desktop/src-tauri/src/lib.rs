@@ -7800,6 +7800,47 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 continue;
             }
 
+            // API: Clipboard text for the OBS Dock — GET /api/dock/clipboard-text
+            // OBS's browser dock has no clipboard-read permission, and OBS takes
+            // Ctrl/Cmd+V for itself, so the Dock's paste shortcut asks the app.
+            // Loopback only, same-origin only (no CORS header), text only.
+            if clean == "api/dock/clipboard-text" && request.method() == &tiny_http::Method::Get {
+                let is_loopback = request
+                    .remote_addr()
+                    .map(|addr| addr.ip().is_loopback())
+                    .unwrap_or(false);
+                let origin_ok = match overlay_header_value(&request, "Origin") {
+                    None => true,
+                    Some(origin) => {
+                        let origin = origin.trim_end_matches('/');
+                        origin.starts_with("http://127.0.0.1:") || origin.starts_with("http://localhost:")
+                    }
+                };
+                let content_type = overlay_header("Content-Type", "application/json; charset=utf-8");
+                if !is_loopback || !origin_ok {
+                    let resp = tiny_http::Response::from_string("{\"error\":\"forbidden\"}")
+                        .with_status_code(403)
+                        .with_header(content_type);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                let text_result: Result<String, String> = arboard::Clipboard::new()
+                    .and_then(|mut clipboard| clipboard.get_text())
+                    .map_err(|error| error.to_string());
+                #[cfg(any(target_os = "android", target_os = "ios"))]
+                let text_result: Result<String, String> = Err("unsupported".to_string());
+                let body = match text_result {
+                    Ok(text) => serde_json::json!({ "text": text }),
+                    Err(error) => serde_json::json!({ "text": "", "error": error }),
+                };
+                let resp = tiny_http::Response::from_string(body.to_string())
+                    .with_header(content_type)
+                    .with_header(overlay_header("Cache-Control", "no-store"));
+                let _ = request.respond(resp);
+                continue;
+            }
+
             // API: Auth status — GET /api/auth/status
             // Returns the full stored session (user with plan, deviceId, expiresAt).
             // The dock reads the plan from here for entitlement checks.

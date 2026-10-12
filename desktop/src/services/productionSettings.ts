@@ -1,5 +1,6 @@
 import type { BibleTheme } from "../bible/types";
-import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
+import { themeSupportsBibleOverlayMode } from "../bible/themeVariantSupport";
+import { BUILTIN_THEMES, DEFAULT_BUILTIN_THEME_ID, resolveBuiltinThemeId } from "../bible/themes/builtinThemes";
 import { serializeBibleThemesForDock } from "./dockBibleThemeAssets";
 import { getSettings } from "../multiview/mvStore";
 import {
@@ -21,6 +22,8 @@ export interface ProductionModuleSettings {
 export interface ProductionSettings {
   bible: ProductionModuleSettings;
   worship: ProductionModuleSettings;
+  /** Dock Notes. Older saves have none; it starts as a copy of Worship. */
+  notes: ProductionModuleSettings;
   updatedAt: string;
 }
 
@@ -32,15 +35,20 @@ export interface DockProductionModuleSettings extends ProductionModuleSettings {
 export interface DockProductionSettingsPayload {
   bible: DockProductionModuleSettings;
   worship: DockProductionModuleSettings;
+  /** Optional: payloads from older app versions don't carry it. */
+  notes?: DockProductionModuleSettings;
   updatedAt: string;
 }
 
+// New accounts start on the "Caption Rule" starter theme (it has both looks), so
+// the first verse, lyric or note sent from the Dock shows in OBS straight away.
+const DEFAULT_THEME = BUILTIN_THEMES.find((theme) => theme.id === DEFAULT_BUILTIN_THEME_ID);
 const FALLBACK_FULLSCREEN_THEME =
-  BUILTIN_THEMES.find((theme) => theme.id === "default-dark-fullscreen") ??
+  DEFAULT_THEME ??
   BUILTIN_THEMES.find((theme) => theme.templateType === "fullscreen") ??
   BUILTIN_THEMES[0];
 const FALLBACK_LOWER_THIRD_THEME =
-  BUILTIN_THEMES.find((theme) => theme.id === "default-dark-lower-third") ??
+  DEFAULT_THEME ??
   BUILTIN_THEMES.find((theme) => theme.templateType === "lower-third") ??
   BUILTIN_THEMES[0];
 
@@ -107,13 +115,14 @@ function normalizeModuleSettings(
 ): ProductionModuleSettings {
   return {
     defaultMode: isOverlayMode(value?.defaultMode) ? value.defaultMode : fallback.defaultMode,
+    // Retired classic built-ins (Default Dark, Classic Dark…) move to the starter theme.
     fullscreenThemeId:
       typeof value?.fullscreenThemeId === "string" && value.fullscreenThemeId.trim()
-        ? value.fullscreenThemeId
+        ? resolveBuiltinThemeId(value.fullscreenThemeId)
         : fallback.fullscreenThemeId,
     lowerThirdThemeId:
       typeof value?.lowerThirdThemeId === "string" && value.lowerThirdThemeId.trim()
-        ? value.lowerThirdThemeId
+        ? resolveBuiltinThemeId(value.lowerThirdThemeId)
         : fallback.lowerThirdThemeId,
   };
 }
@@ -123,8 +132,11 @@ function resolveTheme(
   templateType: BibleTheme["templateType"],
   themes: BibleTheme[],
 ): BibleTheme {
+  // Themes with both looks (every ready-made layer theme) fit either slot.
+  const mode = templateType === "lower-third" ? "lower-third" : "fullscreen";
   return (
-    themes.find((theme) => theme.id === themeId && theme.templateType === templateType) ??
+    themes.find((theme) => theme.id === resolveBuiltinThemeId(themeId) && themeSupportsBibleOverlayMode(theme, mode)) ??
+    (DEFAULT_THEME && themeSupportsBibleOverlayMode(DEFAULT_THEME, mode) ? DEFAULT_THEME : undefined) ??
     themes.find((theme) => theme.templateType === templateType) ??
     (templateType === "lower-third" ? FALLBACK_LOWER_THIRD_THEME : FALLBACK_FULLSCREEN_THEME)
   );
@@ -150,6 +162,7 @@ export function getDefaultProductionSettings(): ProductionSettings {
   return {
     bible: { ...moduleDefaults },
     worship: { ...moduleDefaults },
+    notes: { ...moduleDefaults },
     updatedAt: new Date(0).toISOString(),
   };
 }
@@ -159,6 +172,7 @@ export function normalizeProductionSettings(raw?: Partial<ProductionSettings> | 
   return {
     bible: normalizeModuleSettings(raw?.bible, fallback.bible),
     worship: normalizeModuleSettings(raw?.worship, fallback.worship),
+    notes: normalizeModuleSettings(raw?.notes, normalizeModuleSettings(raw?.worship, fallback.worship)),
     updatedAt:
       typeof raw?.updatedAt === "string" && raw.updatedAt.trim()
         ? raw.updatedAt
@@ -168,8 +182,23 @@ export function normalizeProductionSettings(raw?: Partial<ProductionSettings> | 
 
 export async function loadAvailableProductionThemes(): Promise<BibleTheme[]> {
   try {
-    const { getCustomThemes } = await import("../bible/bibleDb");
-    const customThemes = await getCustomThemes();
+    let customThemes: BibleTheme[] | null = null;
+    if (typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window)) {
+      // OBS browser dock: the app's file is current, this page's local copy can be stale.
+      try {
+        const res = await fetch("/uploads/dock-bible-themes.json", { cache: "no-store" });
+        if (res.ok) {
+          const data: unknown = await res.json();
+          if (Array.isArray(data)) customThemes = data as BibleTheme[];
+        }
+      } catch {
+        customThemes = null;
+      }
+    }
+    if (!customThemes) {
+      const { getCustomThemes } = await import("../bible/bibleDb");
+      customThemes = await getCustomThemes();
+    }
     const builtinIds = new Set(BUILTIN_THEMES.map((theme) => theme.id));
     return uniqueThemes([
       ...BUILTIN_THEMES,
@@ -197,6 +226,7 @@ export function resolveProductionSettings(
     updatedAt: normalized.updatedAt,
     bible: buildModule(normalized.bible),
     worship: buildModule(normalized.worship),
+    notes: buildModule(normalized.notes),
   };
 }
 
@@ -239,6 +269,7 @@ async function serializeDockPayload(
       payload.bible.lowerThirdTheme,
       payload.worship.fullscreenTheme,
       payload.worship.lowerThirdTheme,
+      ...(payload.notes ? [payload.notes.fullscreenTheme, payload.notes.lowerThirdTheme] : []),
     ]),
   );
   const serializedById = new Map(serializedThemes.map((theme) => [theme.id, theme]));
@@ -255,6 +286,7 @@ async function serializeDockPayload(
     ...payload,
     bible: mapModule(payload.bible),
     worship: mapModule(payload.worship),
+    ...(payload.notes ? { notes: mapModule(payload.notes) } : {}),
   };
 }
 
@@ -322,6 +354,7 @@ function normalizeDockPayload(raw: unknown): DockProductionSettingsPayload | nul
     updatedAt: normalized.updatedAt,
     bible: normalizeDockModule(candidate.bible, fallback.bible),
     worship: normalizeDockModule(candidate.worship, fallback.worship),
+    notes: normalizeDockModule(candidate.notes, fallback.notes ?? fallback.worship),
   };
 }
 

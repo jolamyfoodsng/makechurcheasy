@@ -45,11 +45,14 @@
    * }
    *
    * Template tags: {{key}} text · {{key|br}} text with "|" as a line break ·
+   * {{key|words}} / {{key|chars}} text split into <span class="w"> words / <span class="ch"> letters ·
    * {{icon:key}} / {{icon=mail}} glyph icon · {{brands:key}} / {{brand=youtube}} brand icons ·
    * {{image:key|fallbackKey}} picture or fallback text · {{#key}}…{{/key}} only when key has a value.
    * Colours become CSS variables: --key (and --key-l / --key-d when "shades": true).
    * Animation steps: [selector, effect, at, {d, e, s}] with the effects below, or
-   * { "sel", "from", "to", "set", "at", "d", "e", "s" } for any GSAP properties.
+   * { "sel", "from", "to", "set", "at", "d", "e", "s", "sa", "fromEnd" } for any GSAP properties
+   * ("s" = stagger per element, "sa" = most seconds the whole stagger may take, "fromEnd" = last first).
+   * A displayed element with class "pkg-fullscreen" makes the graphic fill the whole 1920x1080 frame.
    * ==================================================================== */
   var DESIGN_W = 1920, DESIGN_H = 1080, EDGE_TOP = 40;
   var MAX_FIELDS = 80, MAX_STEPS = 120;
@@ -106,6 +109,41 @@
   }
   function brands(v) { return String(v || "").split(/[\s,]+/).map(function (k) { return k.toLowerCase(); }).filter(function (k) { return BRAND[k]; }); }
 
+  /* ---------- per-text soft styling (see src/lowerthirds/textStyle.ts) ---------- */
+  var TS_WEIGHTS = { light: "300", normal: "400", semibold: "600", bold: "700", black: "900" };
+  var TS_SPACING = { tight: "-0.02em", wide: "0.06em", wider: "0.16em" };
+  function tsCss(raw) {
+    raw = String(raw == null ? "" : raw);
+    if (!raw || /^\{\{/.test(raw)) return "";
+    var css = [];
+    raw.split(";").forEach(function (part) {
+      var kv = part.split("="), k = (kv[0] || "").trim(), val = (kv[1] || "").trim();
+      if (k === "case" && val && val !== "none") css.push("text-transform:none!important");
+      else if (k === "size" && isFinite(+val) && +val !== 100) css.push("font-size:" + Math.min(180, Math.max(60, Math.round(+val))) + "%!important");
+      else if (k === "weight" && TS_WEIGHTS[val]) css.push("font-weight:" + TS_WEIGHTS[val] + "!important");
+      else if (k === "italic" && (val === "1" || val === "true")) css.push("font-style:italic!important");
+      else if (k === "spacing" && TS_SPACING[val]) css.push("letter-spacing:" + TS_SPACING[val] + "!important");
+    });
+    return css.join(";");
+  }
+  function styled(v, key, html) {
+    var css = tsCss(v[key + "__ts"]);
+    return css ? '<span class="lt-ts" style="' + esc(css) + '">' + html + "</span>" : html;
+  }
+
+  /* ---------- letter / word splitting for {{key|chars}} and {{key|words}} ----------
+   * Each word becomes <span class="w"> (kept on one line) and, with |chars, each
+   * letter inside it a <span class="ch">, so animations can target .w or .ch.
+   * New lines (Enter or "|") become <br>. */
+  function splitText(raw, chars) {
+    return String(raw == null ? "" : raw).split(/\r?\n|\|/).map(function (line) {
+      return line.split(/\s+/).filter(Boolean).map(function (word) {
+        var inner = chars ? Array.from(word).map(function (c) { return '<span class="ch">' + esc(c) + "</span>"; }).join("") : esc(word);
+        return '<span class="w">' + inner + "</span>";
+      }).join(" ");
+    }).join("<br>");
+  }
+
   /* ---------- template ---------- */
   function render(tpl, v) {
     // {{#key}}…{{/key}} blocks first (no nesting of the same key)
@@ -123,8 +161,9 @@
         if (u) return '<img class="pkg-img" alt="" src="' + esc(u) + '">';
         return m[2] ? '<span class="pkg-fallback">' + String(v[m[2]] || "").split("|").map(esc).join("<br>") + "</span>" : "";
       }
-      if ((m = /^([\w-]+)\|br$/.exec(expr))) return String(v[m[1]] == null ? "" : v[m[1]]).split("|").map(esc).join("<br>");
-      if ((m = /^([\w-]+)$/.exec(expr))) return esc(v[m[1]]);
+      if ((m = /^([\w-]+)\|(chars|words)$/.exec(expr))) return styled(v, m[1], splitText(v[m[1]], m[2] === "chars"));
+      if ((m = /^([\w-]+)\|br$/.exec(expr))) return styled(v, m[1], String(v[m[1]] == null ? "" : v[m[1]]).split(/\r?\n|\|/).map(esc).join("<br>"));
+      if ((m = /^([\w-]+)$/.exec(expr))) return styled(v, m[1], esc(v[m[1]]));
       return "";
     });
   }
@@ -215,8 +254,8 @@
     return out;
   }
   function normStep(s) {
-    if (Array.isArray(s)) return { sel: String(s[0] || ""), fx: String(s[1] || ""), at: +s[2] || 0, d: s[3] && s[3].d, e: s[3] && s[3].e, s: s[3] && s[3].s };
-    if (s && typeof s === "object") return { sel: String(s.sel || s.selector || ""), fx: s.fx ? String(s.fx) : "", from: s.from, to: s.to, set: s.set, at: +s.at || 0, d: s.d, e: s.e, s: s.s };
+    if (Array.isArray(s)) return { sel: String(s[0] || ""), fx: String(s[1] || ""), at: +s[2] || 0, d: s[3] && s[3].d, e: s[3] && s[3].e, s: s[3] && s[3].s, sa: s[3] && s[3].sa };
+    if (s && typeof s === "object") return { sel: String(s.sel || s.selector || ""), fx: s.fx ? String(s.fx) : "", from: s.from, to: s.to, set: s.set, at: +s.at || 0, d: s.d, e: s.e, s: s.s, sa: s.sa, from_end: !!s.fromEnd };
     return null;
   }
   function stagOf(n, st, each) { return st != null ? +st : Math.min(.45, Math.max(0, (n - 1) * each)); }
@@ -232,7 +271,8 @@
       var from = fx ? assign(fx.f, cleanVars(s.from)) : cleanVars(s.from);
       var to = fx ? assign(fx.t, cleanVars(s.to)) : cleanVars(s.to);
       to.duration = +s.d || (fx ? fx.d : .5); to.ease = s.e || (fx ? fx.e : "power2.out");
-      to.stagger = stagOf(els.length, s.s, .1);
+      to.stagger = s.sa > 0 ? Math.min(s.s != null ? +s.s : .1, +s.sa / Math.max(1, els.length - 1)) : stagOf(els.length, s.s, .1);
+      if (s.from_end) to.stagger = { each: to.stagger, from: "end" };
       if (s.from || fx) tl.fromTo(els, from, to, s.at); else tl.to(els, to, s.at);
     });
   }
@@ -349,14 +389,31 @@
           box.style.setProperty("--" + f.key, v);
           if (f.shades) { box.style.setProperty("--" + f.key + "-l", shade(v, .28)); box.style.setProperty("--" + f.key + "-d", shade(v, -.3)); }
         });
-        box.innerHTML = render(pkg.html, P);
+        // Per-text styling travels as data-v-<key>-ts on the .kx-root (written by the app).
+        var PV = assign(P);
+        if (kx && kx.getAttribute) {
+          fields.forEach(function (f) {
+            if (f.type !== "text") return;
+            PV[f.key + "__ts"] = kx.getAttribute("data-v-" + f.key.replace(/[A-Z]/g, function (c) { return "-" + c.toLowerCase(); }) + "-ts") || "";
+          });
+        }
+        box.innerHTML = render(pkg.html, PV);
         sec.appendChild(box); frame.appendChild(sec); crop.appendChild(frame); stage.appendChild(crop);
         frame.style.cssText = "position:absolute;top:0;width:" + DESIGN_W + "px;height:" + DESIGN_H + "px;transform-origin:0 0";
-        var w = box.offsetWidth * PS, h = box.offsetHeight * PS;
-        var f0 = inOverlay ? justifyFactor(kx) : 0;
-        var left = f0 === 0 ? X : f0 === 1 ? DESIGN_W - X - w : (DESIGN_W - w) / 2;
-        box.style.cssText += ";left:" + left + "px;bottom:" + Y + "px;transform:scale(" + PS + ")";
-        var H = Math.min(DESIGN_H, Math.ceil(Y + h + EDGE_TOP));
+        // A graphic whose markup has a .pkg-fullscreen element fills the whole 1920x1080 frame.
+        // (only when that element is displayed, so a "layout" option can switch it on and off).
+        var fullEl = box.querySelector(".pkg-fullscreen");
+        var full = !!(fullEl && fullEl.getClientRects().length);
+        var bx = full ? 0 : X, by = full ? 0 : Y, bs = full ? 1 : PS;
+        if (full) box.classList.add("pkg-full");
+        // Outside OBS (library thumbnails, preview modals) the graphic is centred like the
+        // other Motion graphics, with an even margin above and below it.
+        if (!inOverlay && !full) by = EDGE_TOP;
+        var w = box.offsetWidth * bs, h = box.offsetHeight * bs;
+        var f0 = inOverlay ? justifyFactor(kx) : .5;
+        var left = f0 === 0 ? bx : f0 === 1 ? DESIGN_W - bx - w : (DESIGN_W - w) / 2;
+        box.style.cssText += ";left:" + left + "px;bottom:" + by + "px;transform:scale(" + bs + ")";
+        var H = Math.min(DESIGN_H, Math.ceil(by + h + (full ? 0 : EDGE_TOP)));
         crop.style.cssText = "position:relative;overflow:visible;width:" + (inOverlay ? 0 : Math.round(DESIGN_W * Sc)) + "px;height:" + Math.round(H * Sc) + "px";
         frame.style.left = (inOverlay ? -DESIGN_W * Sc * f0 : 0) + "px";
         frame.style.transform = "scale(" + Sc + ") translateY(" + (-(DESIGN_H - H)) + "px)";

@@ -469,6 +469,27 @@ export async function hydrateNativeDockSettings(): Promise<void> {
   return hydrationPromise;
 }
 
+/**
+ * Re-read some settings from the desktop app, for a Dock that has been open a
+ * while: the app may have changed them since the Dock first hydrated. Only the
+ * listed keys are refreshed, and a key with an unsent local write is left alone
+ * so a fresh read can never undo a change the user just made.
+ */
+export async function reloadNativeDockSettings(keys: readonly string[]): Promise<void> {
+  const scope = getNativeDockSettingsScope();
+  if (!hydrated || hydratedScope !== scope) {
+    await hydrateNativeDockSettings();
+    return;
+  }
+  const scoped = await loadFromDesktop(scope);
+  const device = scope === "device" ? {} : await loadFromDesktop("device").catch(() => ({}));
+  const loaded: SettingsMap = { ...device, ...scoped };
+  for (const key of keys) {
+    if (writeQueues.has(key)) continue;
+    if (Object.prototype.hasOwnProperty.call(loaded, key)) settings[key] = loaded[key];
+  }
+}
+
 export function isNativeDockSettingsHydrated(): boolean {
   return hydrated;
 }

@@ -488,6 +488,18 @@ export interface MVSettings {
   brandLogoPath: string;
   brandLogoAssets: BrandLogoAssetSetting[];
   churchProfileOnboardingCompleted: boolean;
+  // ── Church details from the website profile (filled into lower thirds) ──
+  churchWebsite: string;
+  churchPhone: string;
+  churchEmail: string;
+  churchTagline: string;
+  churchAddress: string;
+  churchCity: string;
+  churchCountry: string;
+  /** Social links by lower-third icon key (facebook, instagram, youtube, x, tiktok, whatsapp, telegram, threads). */
+  churchSocials: Record<string, string>;
+  /** `updatedAt` of the website profile last synced, so unchanged profiles are not downloaded again. */
+  churchProfileUpdatedAt: string;
 
   // ── Sermon Notes ──
   sermonTitle: string;
@@ -535,6 +547,15 @@ export const DEFAULT_SETTINGS: MVSettings = {
   brandLogoPath: "",
   brandLogoAssets: [],
   churchProfileOnboardingCompleted: false,
+  churchWebsite: "",
+  churchPhone: "",
+  churchEmail: "",
+  churchTagline: "",
+  churchAddress: "",
+  churchCity: "",
+  churchCountry: "",
+  churchSocials: {},
+  churchProfileUpdatedAt: "",
 
   sermonTitle: "",
   sermonSeries: "",
@@ -617,7 +638,15 @@ export function updateSettings(patch: Partial<MVSettings>): MVSettings {
     patch.brandFontFamily !== undefined ||
     patch.brandFaviconUrl !== undefined ||
     patch.churchName !== undefined ||
-    patch.mainPastorName !== undefined
+    patch.mainPastorName !== undefined ||
+    patch.churchWebsite !== undefined ||
+    patch.churchPhone !== undefined ||
+    patch.churchEmail !== undefined ||
+    patch.churchTagline !== undefined ||
+    patch.churchAddress !== undefined ||
+    patch.churchCity !== undefined ||
+    patch.churchCountry !== undefined ||
+    patch.churchSocials !== undefined
   ) {
     syncBrandingToDock(updated).catch(() => { });
   }
@@ -699,6 +728,18 @@ export async function syncBrandingToDock(settings: MVSettings): Promise<void> {
         brandFaviconUrl: settings.brandFaviconUrl,
         churchName: settings.churchName,
         mainPastorName: settings.mainPastorName,
+        // Church details the OBS dock fills into lower thirds.
+        churchInfo: {
+          website: settings.churchWebsite || "",
+          phone: settings.churchPhone || "",
+          email: settings.churchEmail || "",
+          tagline: settings.churchTagline || "",
+          address: settings.churchAddress || "",
+          city: settings.churchCity || "",
+          country: settings.churchCountry || "",
+          socials: settings.churchSocials || {},
+        },
+        churchProfileUpdatedAt: settings.churchProfileUpdatedAt || "",
       }),
     });
   } catch (err) {

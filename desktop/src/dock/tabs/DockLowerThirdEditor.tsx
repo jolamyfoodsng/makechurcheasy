@@ -6,6 +6,8 @@
  * Animation, Animation Presets, Theme Inspector.
  */
 
+import TextStyleControls from "../../components/TextStyleControls";
+import { textStyleCapabilityFor, textStyleKey } from "../../lowerthirds/textStyle";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ContentSlot, SlotState } from "../../lowerthirds/contentSlots";
@@ -35,13 +37,23 @@ import {
 } from "../../lowerthirds/types";
 import type { SpeakerProfileSetting } from "../../multiview/mvStore";
 import { MV_SETTINGS_UPDATED_EVENT } from "../../multiview/mvStore";
-import { buildSpeakerRoleMap, ensureChurchInfo, ensureMinistryData, getMinistryData, refreshMinistry } from "../../services/ministryStore";
+import {
+  MINISTRY_DATA_UPDATED_EVENT,
+  buildSpeakerRoleMap,
+  ensureMinistryData,
+  getMinistryData,
+  getMinistryHistory,
+  refreshChurchInfo,
+  refreshMinistry,
+} from "../../services/ministryStore";
 import { describeField } from "../../lowerthirds/fieldGuide";
+import { looksLikeLongTextField } from "../../lowerthirds/graphicPackages";
 import type { ChurchThemeLike } from "../../lowerthirds/churchDefaults";
-import { churchAwareDefaults, churchValueFor, sameValues } from "../../lowerthirds/churchDefaults";
+import { applyChurchDefaults, churchAwareDefaults, sameValues } from "../../lowerthirds/churchDefaults";
 import { getSafeFileName, saveToDisk } from "../dockUploadService";
 import Icon from "../DockIcon";
 import DockMotionControls from "./DockMotionControls";
+import DockGraphicPreviewModal from "../components/DockGraphicPreviewModal";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -251,6 +263,9 @@ export default function DockLowerThirdEditor({
     const activeIdx = loadActiveSlotIndex(theme.id, "default");
     return loadInitialSlotState(theme.id, activeIdx, theme);
   }, [theme]);
+
+  // ── Preview modal ──
+  const [showPreview, setShowPreview] = useState(false);
 
   // ── Variable values ──
   const [variableValues, setVariableValues] = useState<Record<string, string>>(() => initialSlotState.variableValues);
@@ -560,22 +575,36 @@ export default function DockLowerThirdEditor({
     }
   }, [theme, activeSlotIndex]);
 
-  // ── Church details (church name, pastor, role) saved on the website ──
+  // ── Church details (church name, pastor, website, phone, socials …) saved on the website ──
   const [ministryTick, setMinistryTick] = useState(0);
   useEffect(() => {
-    let cancelled = false;
+    // The desktop app tells us when its copy changed (MV_SETTINGS_UPDATED_EVENT).
     const bump = () => {
       refreshMinistry();
       setMinistryTick((n) => n + 1);
     };
+    // The OBS dock keeps no copy, so it asks the web, and says so when something changed.
+    const reread = () => setMinistryTick((n) => n + 1);
+    const refreshFromWeb = (force = false) => {
+      refreshChurchInfo({ force }).catch(() => { /* keep the text that is already there */ });
+    };
+    const onFocus = () => refreshFromWeb();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refreshFromWeb();
+    };
     window.addEventListener(MV_SETTINGS_UPDATED_EVENT, bump);
-    // The OBS dock keeps no copy of the church profile, so it is fetched once in the background.
-    ensureChurchInfo()
-      .then((changed) => { if (changed && !cancelled) setMinistryTick((n) => n + 1); })
-      .catch(() => { /* keep the generic placeholder text */ });
+    window.addEventListener(MINISTRY_DATA_UPDATED_EVENT, reread);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    refreshFromWeb(true);
+    // A change saved on the website reaches an open dock within a few minutes.
+    const timer = window.setInterval(() => refreshFromWeb(), 5 * 60 * 1000);
     return () => {
-      cancelled = true;
+      window.clearInterval(timer);
       window.removeEventListener(MV_SETTINGS_UPDATED_EVENT, bump);
+      window.removeEventListener(MINISTRY_DATA_UPDATED_EVENT, reread);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 
@@ -586,22 +615,17 @@ export default function DockLowerThirdEditor({
     [theme, ministryTick],
   );
 
-  // Fill the church's details into boxes that still show the design's placeholder.
-  // Anything the person has typed is left alone.
+  // Fill the church's details into boxes that still show the design's placeholder, or
+  // still hold what the profile said before it changed. Anything the person has typed
+  // is left alone. Runs again when the profile changes and when another saved slot is opened.
   useEffect(() => {
     const ministry = getMinistryData();
+    const history = getMinistryHistory();
     setVariableValues((prev) => {
-      const next = { ...prev };
-      for (const v of theme.variables) {
-        const fill = churchValueFor(v, theme as unknown as ChurchThemeLike, ministry);
-        if (fill === null) continue;
-        const current = String(prev[v.key] ?? "").trim();
-        const placeholder = String(v.defaultValue ?? "").trim();
-        if (prev[v.key] === undefined || current === placeholder) next[v.key] = fill;
-      }
+      const next = applyChurchDefaults(theme as unknown as ChurchThemeLike, prev, ministry, { history, keepCleared: true });
       return sameValues(prev, next) ? prev : next;
     });
-  }, [theme, ministryTick]);
+  }, [theme, ministryTick, activeSlotIndex]);
 
   // ── Cards accordion state ──
   const [cardsOpen, setCardsOpen] = useState(true);
@@ -1085,12 +1109,14 @@ export default function DockLowerThirdEditor({
                             </button>
                           )}
                         </div>
-                        {v.multiline ? (
+                        {(v.multiline
+                          || looksLikeLongTextField(v.key, v.label || "")
+                          || (variableValues[v.key] ?? "").length > 60) ? (
                           <textarea
                             id={`dock-lt-field-${v.key}`}
                             className="dock-lt-field-input"
-                            rows={4}
-                            style={{ width: "100%", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit", lineHeight: 1.4 }}
+                            rows={6}
+                            style={{ width: "100%", boxSizing: "border-box", resize: "vertical", fontFamily: "inherit", lineHeight: 1.45, minHeight: 130 }}
                             value={variableValues[v.key] ?? ""}
                             onChange={(e) => setVariableValues((prev) => ({ ...prev, [v.key]: e.target.value }))}
                             placeholder={guide.heading}
@@ -1106,6 +1132,12 @@ export default function DockLowerThirdEditor({
                             placeholder={guide.heading}
                           />
                         )}
+                        <TextStyleControls
+                          compact
+                          value={variableValues[textStyleKey(v.key)]}
+                          capability={textStyleCapabilityFor(theme)}
+                          onChange={(next) => setVariableValues((prev) => ({ ...prev, [textStyleKey(v.key)]: next }))}
+                        />
                         {guide.hint ? <div style={dockFieldHintStyle}>{guide.hint}</div> : null}
                       </div>
                     );
@@ -1267,8 +1299,21 @@ export default function DockLowerThirdEditor({
             </div>
             )}
 
-            {/* Panel Bottom: Memory + Time Controls */}
-            <div className="dock-lt-panel-bottom">
+          </div>
+        </div>
+
+
+
+
+
+
+
+      </div>{/* /scroll */}
+
+      {/* ── Action Buttons (fixed bottom) ── */}
+      <div className="dock-lt-editor-layout__bar">
+            {/* Saved slots + Reset all: kept in the pinned bar so they are always reachable */}
+            <div className="dock-lt-panel-bottom dock-lt-panel-bottom--in-bar">
               <button
                 type="button"
                 onClick={() => {
@@ -1320,19 +1365,15 @@ export default function DockLowerThirdEditor({
 
 
             </div>
-          </div>
-        </div>
-
-
-
-
-
-
-
-      </div>{/* /scroll */}
-
-      {/* ── Action Buttons (fixed bottom) ── */}
-      <div className="dock-lt-editor-layout__bar">
+        <button
+          type="button"
+          className="dock-btn dock-btn--sm dock-lt-preview-btn"
+          onClick={() => setShowPreview(true)}
+          title="Preview this lower third with your text and styles (nothing is sent to OBS)"
+        >
+          <Icon name="visibility" size={14} />
+          <span>Preview</span>
+        </button>
         <button
           type="button"
           className={`dock-btn dock-btn--sm ${sending ? "dock-btn--loading" : "dock-btn--primary"}`}
@@ -1355,6 +1396,15 @@ export default function DockLowerThirdEditor({
           </button>
         )}
       </div>
+
+      {showPreview && (
+        <DockGraphicPreviewModal
+          theme={theme}
+          values={variableValues}
+          onClose={() => setShowPreview(false)}
+          onSend={sending ? undefined : handleSend}
+        />
+      )}
 
       {/* ── Slot Context Menu ── */}
       {contextMenu && (

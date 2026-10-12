@@ -112,3 +112,28 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* Free plan: the strip itself says so, in colour. */
+.app-status-strip--free {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.18), rgba(123, 104, 238, 0.14) 60%, var(--surface));
+  border-bottom-color: rgba(245, 158, 11, 0.45);
+}
+
+.app-status-strip--free .app-status-strip__chip--plan {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.16);
+  border-color: rgba(245, 158, 11, 0.55);
+}
+
+.app-status-strip__limits {
+  color: var(--text-secondary, rgba(230, 233, 240, 0.75));
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 900px) {
+  .app-status-strip__limits { display: none; }
+}
+
+.app-status-strip--free .app-status-strip__chip--plan { min-width: 0; max-width: 100%; }

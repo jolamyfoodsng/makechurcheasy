@@ -40,6 +40,7 @@ import {
 } from "./bibleDb";
 import { track } from "../services/analytics";
 import { BUILTIN_THEMES } from "./themes/builtinThemes";
+import { DEFAULT_BUILTIN_THEME_ID, resolveBuiltinThemeId } from "./themes/builtinThemes";
 import { bibleObsService } from "./bibleObsService";
 
 // ---------------------------------------------------------------------------
@@ -93,7 +94,7 @@ const initialState: BibleState = {
   slideConfig: DEFAULT_SLIDE_CONFIG,
   queue: [],
   activeQueueIndex: -1,
-  activeThemeId: "classic-dark",
+  activeThemeId: DEFAULT_BUILTIN_THEME_ID,
   themes: [...BUILTIN_THEMES],
   history: [],
   favorites: [],
@@ -254,7 +255,7 @@ function bibleReducer(state: BibleState, action: BibleAction): BibleState {
         themes: state.themes.filter((t) => t.id !== action.id),
         activeThemeId:
           state.activeThemeId === action.id
-            ? "classic-dark"
+            ? DEFAULT_BUILTIN_THEME_ID
             : state.activeThemeId,
       };
 
@@ -389,7 +390,7 @@ export function BibleProvider({ children }: { children: ReactNode }) {
           state: {
             translation: resolvedTranslation as BibleTranslation,
             slideConfig: (settings as Record<string, unknown>).slideConfig as typeof DEFAULT_SLIDE_CONFIG ?? DEFAULT_SLIDE_CONFIG,
-            activeThemeId: ((settings as Record<string, unknown>).activeThemeId as string) ?? "classic-dark",
+            activeThemeId: resolveBuiltinThemeId((settings as Record<string, unknown>).activeThemeId as string | undefined),
             favorites: favorites || [],
             history: (historyEntries || []).map((e) => e.passage),
             themes: allThemes,
@@ -412,7 +413,7 @@ export function BibleProvider({ children }: { children: ReactNode }) {
           state: {
             translation: "KJV" as BibleTranslation,
             slideConfig: DEFAULT_SLIDE_CONFIG,
-            activeThemeId: "classic-dark",
+            activeThemeId: DEFAULT_BUILTIN_THEME_ID,
             favorites: [],
             history: [],
             themes: [...BUILTIN_THEMES],

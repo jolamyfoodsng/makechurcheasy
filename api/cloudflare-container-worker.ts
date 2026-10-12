@@ -110,6 +110,10 @@ const CONTAINER_ENV_NAMES = [
   "AUTH_FACEBOOK_SECRET",
 ] as const;
 
+// Use a new named instance so updated Worker secrets and code are applied to a
+// freshly started API container instead of a warm container with stale env.
+const API_CONTAINER_INSTANCE = "api-production-v2";
+
 function buildContainerEnv(source: Record<string, unknown>): Record<string, string> {
   const values: Record<string, string> = {};
 
@@ -177,7 +181,7 @@ export default {
       });
     }
 
-    const container = getContainer(workerEnv.MCE_API_CONTAINER, "staging");
+    const container = getContainer(workerEnv.MCE_API_CONTAINER, API_CONTAINER_INSTANCE);
     return container.fetch(forwardEdgeMetadata(request));
   },
 
@@ -185,7 +189,7 @@ export default {
     const cron = controller.cron || "";
     const zohoSyncSecret = String((workerEnv as Record<string, unknown>).ZOHO_CAMPAIGNS_SYNC_CRON_SECRET || "");
     if (cron === "*/15 * * * *" && zohoSyncSecret) {
-      const container = getContainer(workerEnv.MCE_API_CONTAINER, "staging");
+      const container = getContainer(workerEnv.MCE_API_CONTAINER, API_CONTAINER_INSTANCE);
       const zohoSyncUrl = "http://localhost:3000/api/cron/zoho-campaigns-sync";
       ctx.waitUntil(
         container.fetch(new Request(zohoSyncUrl, {
@@ -209,7 +213,7 @@ export default {
       console.error("[Cloudflare Cron] CRON_SECRET is not configured; skipping generic scheduled jobs");
       return;
     }
-    const container = getContainer(workerEnv.MCE_API_CONTAINER, "staging");
+    const container = getContainer(workerEnv.MCE_API_CONTAINER, API_CONTAINER_INSTANCE);
 
     const dispatchUrl = `http://localhost:3000/api/cron/dispatcher?cron=${encodeURIComponent(cron)}`;
     ctx.waitUntil(
