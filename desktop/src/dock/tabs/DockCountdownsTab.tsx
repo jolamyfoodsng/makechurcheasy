@@ -1,9 +1,9 @@
 /**
- * DockCountdownsTab.tsx — Simplified dock panel with 3 hardcoded countdowns.
- * No add/edit/duplicate/delete. Just 3 preset cards with Push & Start controls.
+ * DockCountdownsTab.tsx — Dock panel: the countdown designs saved in the app (layer designs and
+ * classic ones) plus 3 ready-made defaults. Each card has a live preview and Push & Start controls.
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Upload } from "lucide-react";
 import { dockObsClient } from "../dockObsClient";
@@ -16,6 +16,10 @@ import { useDockSceneRoute } from "../dockSceneRouting";
 import type { CountdownConfig, BackgroundSettings, BackgroundType, ImageFit, MessageSettings, OBSSettings, OverlaySyncState, CountdownOverlayPayload } from "../../countdowns/types";
 // countdownDefaults removed — editBg initialized inline
 import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
+import ThemeLayoutPreview from "../../themes/layout/ThemeLayoutPreview";
+import { createLayoutCountdown } from "../../countdowns/countdownDefaults";
+import { attachLayoutMode, isLayoutDesign } from "../../countdowns/layoutMode";
+import { buildCountdownContent } from "../../countdowns/countdownTime";
 import { getTextTheme, loadTextThemeFont } from "../../countdowns/textThemes";
 import { validateMediaFile, backgroundFileAccept } from "../../countdowns/mediaValidation";
 import { saveCountdownAsset, deleteCountdownAsset } from "../../countdowns/countdownStore";
@@ -33,39 +37,37 @@ import {
 
 // ── Hardcoded countdowns ───────────────────────────────────────────────────
 
-function makeCountdown(title: string, minutes: number, templateId: "minimal" | "circular" | "modern" = "minimal"): CountdownConfig {
-  const now = new Date().toISOString();
+/** A ready-made layer design with a fixed id (so a live countdown survives a reload). */
+function makeDesignCountdown(title: string, subtitle: string, minutes: number, presetId: string, yellow: number, red: number): CountdownConfig {
+  const base = createLayoutCountdown(presetId, `hardcoded-${title.toLowerCase().replace(/\s+/g, "-")}`);
+  const seconds = minutes * 60;
   return {
-    id: `hardcoded-${title.toLowerCase().replace(/\s+/g, "-")}`,
+    ...base,
     title,
-    templateId,
-    timer: { mode: "fixed-duration" as const, durationSeconds: minutes * 60, showHours: false, showMinutes: true, showSeconds: true },
-    message: { text: title, color: "#ffffff", position: "below" as const },
-    background: {
-      type: "solid" as const,
-      color: templateId === "minimal" ? "#1a1a2e" : templateId === "circular" ? "#0f172a" : "#1e293b",
-      gradientStart: "#1a1a2e", gradientEnd: "#16213e", gradientAngle: 135,
-      imageUrl: "", videoUrl: "", blur: 0, brightness: 100, overlayOpacity: 0.6,
-      zoom: 1, positionX: 50, positionY: 50, source: "builtin" as const, imageFit: "cover" as const,
-      loop: true, muted: true, flyerMode: false,
-    },
-    text: {
-      title, subtitle: "", fontFamily: "Inter, system-ui, sans-serif", fontWeight: 700, fontSize: 48,
-      letterSpacing: 2, lineHeight: 1.2, color: "#ffffff",
-      shadowEnabled: true, shadowColor: "#000000", shadowBlur: 12, shadowOffsetX: 0, shadowOffsetY: 4,
-    },
-    animation: { entrance: "fade-in" as const, backgroundMotion: "none" as const, speed: 1 },
-    obs: { sceneName: "", autoAction: "none" as const, autoActionScene: "", autoSwitchEnabled: false, autoSwitchScene: "", autoSwitchAtSeconds: 0 },
-    createdAt: now,
-    updatedAt: now,
+    timer: { ...base.timer, durationSeconds: seconds, showHours: seconds >= 3600 },
+    text: { ...base.text, title, subtitle },
+    warnYellowSeconds: yellow,
+    warnRedSeconds: red,
   };
 }
 
 export const HARDCODED_COUNTDOWNS: CountdownConfig[] = [
-  makeCountdown("Pre-Service", 15, "minimal"),
-  makeCountdown("Worship Set", 5, "circular"),
-  makeCountdown("Sermon Start", 10, "modern"),
+  makeDesignCountdown("Pre-Service", "Until we begin", 15, "welcome-crimson", 120, 30),
+  makeDesignCountdown("Worship Set", "Starting in", 5, "brush-circle", 60, 15),
+  makeDesignCountdown("Sermon Start", "Until the message", 10, "segment-coral", 60, 15),
 ];
+
+/** Saved designs from the app, written to /uploads/dock-countdowns.json by countdownStore. */
+async function loadSavedDesigns(): Promise<CountdownConfig[] | null> {
+  try {
+    const res = await fetch(`/uploads/dock-countdowns.json?_=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { countdowns?: CountdownConfig[] };
+    return Array.isArray(data.countdowns) ? data.countdowns : null;
+  } catch {
+    return null;
+  }
+}
 
 // ── Live persist helpers ───────────────────────────────────────────────────
 
@@ -173,6 +175,30 @@ function useCountdownTimer(cd: CountdownConfig | null) {
   return { remaining, isRunning, isComplete, formatted, start, pause, reset, adjustTime, setRemainingDirect };
 }
 
+// ── Live preview thumbnail for layer designs ───────────────────────────────
+
+function DesignThumb({ cd, seconds }: { cd: CountdownConfig & { layout: NonNullable<CountdownConfig["layout"]> }; seconds: number }) {
+  const content = useMemo(
+    () =>
+      buildCountdownContent({
+        kind: "countdown",
+        value: seconds,
+        durationSeconds: cd.timer.durationSeconds,
+        warnYellowSeconds: cd.warnYellowSeconds ?? 0,
+        warnRedSeconds: cd.warnRedSeconds ?? 0,
+        title: cd.text.title,
+        subtitle: cd.text.subtitle,
+        name: cd.text.title,
+      }),
+    [seconds, cd.timer.durationSeconds, cd.warnYellowSeconds, cd.warnRedSeconds, cd.text.title, cd.text.subtitle],
+  );
+  return (
+    <div style={{ width: "100%", aspectRatio: "16 / 9", borderRadius: 6, overflow: "hidden", background: "#000", position: "relative", marginBottom: 2 }}>
+      <ThemeLayoutPreview layout={cd.layout} content={content} />
+    </div>
+  );
+}
+
 // ── Simplified Countdown Card ──────────────────────────────────────────────
 
 function CountdownCard({
@@ -180,6 +206,7 @@ function CountdownCard({
   isLive,
   isPaused,
   formattedTime,
+  previewSeconds,
   obsScenes,
   onSelect,
   onAdjustTime,
@@ -198,6 +225,7 @@ function CountdownCard({
   isLive: boolean;
   isPaused: boolean;
   formattedTime: string;
+  previewSeconds: number;
   obsScenes: string[];
   onSelect: () => void;
   onAdjustTime: (deltaSeconds: number) => void;
@@ -300,6 +328,8 @@ function CountdownCard({
         gap: isCompact ? 3 : 4,
       }}
     >
+      {isLayoutDesign(cd) && !isCompact && <DesignThumb cd={cd} seconds={previewSeconds} />}
+
       {/* Title + edit cue + Live badge + three-dot menu */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flex: 1, overflow: "visible" }}>
@@ -640,6 +670,51 @@ export default function DockCountdownsTab({
     return () => window.removeEventListener("resize", check);
   }, []);
 
+  // Designs saved in the app show up here too. Re-checked every few seconds so edits in the app appear
+  // without reopening the Dock; the live / selected countdown is never swapped out from under the operator.
+  const syncedStampsRef = useRef<Record<string, string>>({});
+  const protectedIdsRef = useRef<Array<string | null>>([]);
+  protectedIdsRef.current = [liveCountdownId, activeId];
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      const saved = await loadSavedDesigns();
+      if (cancelled || !saved) return;
+      const stamps = syncedStampsRef.current;
+      const savedSorted = [...saved].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+      const savedIds = new Set(savedSorted.map((c) => c.id));
+      const protectedIds = protectedIdsRef.current;
+      setCountdowns((prev) => {
+        const merged: CountdownConfig[] = savedSorted.map((cd) => {
+          const existing = prev.find((c) => c.id === cd.id);
+          if (existing && (stamps[cd.id] === cd.updatedAt || protectedIds.includes(cd.id))) return existing;
+          return cd;
+        });
+        const rest = prev.filter((c) => {
+          if (savedIds.has(c.id)) return false;
+          if (c.id.startsWith("hardcoded-")) return true;
+          // Deleted in the app: drop it, unless it is on air right now.
+          return !(c.id in stamps) || protectedIds.includes(c.id);
+        });
+        const next = [...merged, ...rest];
+        for (const cd of savedSorted) {
+          if (!protectedIds.includes(cd.id) || !(cd.id in stamps)) stamps[cd.id] = cd.updatedAt;
+        }
+        const same = next.length === prev.length && next.every((c, i) => c === prev[i]);
+        return same ? prev : next;
+      });
+    };
+    void refresh();
+    const timerId = window.setInterval(refresh, 6000);
+    const onVisible = () => { if (document.visibilityState === "visible") void refresh(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timerId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
   // Restore activeId when liveCountdownId is set but activeId is not
   useEffect(() => {
     if (liveCountdownId && !activeId) {
@@ -886,7 +961,7 @@ export default function DockCountdownsTab({
 
     try {
       const baseUrl = getOverlayBaseUrlSync();
-      const payload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync, reveal: false };
+      const payload: CountdownOverlayPayload = attachLayoutMode({ config: cd, baseUrl, timestamp: Date.now(), sync, reveal: false });
       const url = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
       const targets = getObsTargets(cd);
       for (const target of targets) {
@@ -934,14 +1009,21 @@ export default function DockCountdownsTab({
         await hideObsSource(target.contentSourceName, target.sceneName);
       }
 
-      const bgPayload = { config: cd, baseUrl, timestamp: Date.now() };
-      const bgUrl = `${baseUrl}/countdown-bg-overlay.html#data=${encodeURIComponent(JSON.stringify(bgPayload))}`;
-      for (const target of targets) {
-        await ensureObsSource(target.backgroundSourceName, bgUrl, target.sceneName, { setTransform: true });
-      }
+      if (isLayoutDesign(cd)) {
+        // Layer designs draw their own background: make sure no old picture/video source shows behind them.
+        for (const target of targets) {
+          await hideObsSource(target.backgroundSourceName, target.sceneName);
+        }
+      } else {
+        const bgPayload = { config: cd, baseUrl, timestamp: Date.now() };
+        const bgUrl = `${baseUrl}/countdown-bg-overlay.html#data=${encodeURIComponent(JSON.stringify(bgPayload))}`;
+        for (const target of targets) {
+          await ensureObsSource(target.backgroundSourceName, bgUrl, target.sceneName, { setTransform: true });
+        }
 
-      // Give OBS a frame to paint the background before enabling the text source.
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 280));
+        // Give OBS a frame to paint the background before enabling the text source.
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 280));
+      }
 
       setActiveId(cd.id);
       setPlaybackState("running");
@@ -955,7 +1037,7 @@ export default function DockCountdownsTab({
       setLiveCountdownId(cd.id);
 
       const sync: OverlaySyncState = { paused: false, remaining };
-      const payload: CountdownOverlayPayload = { config: cd, baseUrl, timestamp: Date.now(), sync, reveal: true };
+      const payload: CountdownOverlayPayload = attachLayoutMode({ config: cd, baseUrl, timestamp: Date.now(), sync, reveal: true });
       const contentUrl = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
       for (const target of targets) {
         await ensureObsSource(target.contentSourceName, contentUrl, target.sceneName, { setTransform: true });
@@ -1104,6 +1186,7 @@ export default function DockCountdownsTab({
                 isLive={isThisLive}
                 isPaused={isThisLive && playbackState === "paused"}
                 formattedTime={timeDisplay}
+                previewSeconds={isThisActive ? timer.remaining : cd.timer.durationSeconds}
                 obsScenes={obsScenes}
                 onSelect={() => setActiveId(cd.id)}
                 onAdjustTime={(delta) => handleAdjustTime(cd, delta)}
@@ -1221,6 +1304,7 @@ export default function DockCountdownsTab({
                 </div>
               </div>
 
+            {!isLayoutDesign(editingCd) && (<>
             {/* ── Background Section ─────────────────────────────── */}
             <div style={{ padding: 12, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 10, background: "rgba(255,255,255,0.025)" }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
@@ -1497,6 +1581,7 @@ export default function DockCountdownsTab({
                 </div>
             </div>
 
+            </>)}
             {/* ── Message Section ────────────────────────────────── */}
             <div style={{ padding: 12, border: "1px solid var(--dock-border, rgba(255,255,255,0.1))", borderRadius: 10, background: "rgba(255,255,255,0.025)" }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
@@ -1555,6 +1640,7 @@ export default function DockCountdownsTab({
                 const updatedCd: CountdownConfig = {
                   ...editingCd,
                   title: editTitle.trim() || editingCd.title,
+                  text: isLayoutDesign(editingCd) ? { ...editingCd.text, title: editTitle.trim() || editingCd.text.title } : editingCd.text,
                   timer: { ...editingCd.timer, durationSeconds: secs },
                   background: { ...editBg },
                   message: editMessage.text.trim() ? { ...editMessage } : undefined,

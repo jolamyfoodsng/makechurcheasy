@@ -763,7 +763,7 @@ const DEFAULT_PLAN_CONFIG: PlanConfig = {
       paystack: { monthlyPlanCode: "mce_basic_monthly", yearlyPlanCode: "mce_basic_yearly" },
       credits: 720,
       entitlements: {
-        songs: 100, images: 100, videos: 100, themes: 3, lowerThirds: -1, devices: 3,
+        songs: 100, images: 100, videos: 100, themes: 10, lowerThirds: 15, devices: 3,
         bibleVersions: -1, multiviewTemplates: 5, tickerThemes: -1, themePresets: 3,
         cloudStorageGB: 1,
         multiview: true, tickers: true, massImport: false, easyWorshipImport: false,
@@ -813,7 +813,7 @@ const DEFAULT_PLAN_CONFIG: PlanConfig = {
         { text: "Unlimited Bible versions and 3 devices" },
         { text: "Bible, Worship, Media, and up to 5 multiview templates" },
         { text: "Verse AI with 100 monthly credits" },
-        { text: "Unlimited broadcast graphics and tickers" },
+        { text: "Up to 15 broadcast graphics and 10 themes, unlimited tickers" },
         { text: "Countdowns and transcript translation require Growth" },
       ],
       buttonText: "Get Basic",

@@ -27,6 +27,7 @@ import {
   syncProductionSettingsToDock,
 } from "../services/productionSettings";
 import { useThemeCreateGate } from "../hooks/useThemeCreateGate";
+import { lockedThemeMessage, planLockedThemeIds } from "../themes/planLocks";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -237,6 +238,14 @@ export default function ProductionThemeSettingsPage() {
   const isThemeInUse = (theme: BibleTheme, target: ThemeTarget): boolean =>
     themeSlots(theme).every((slot) => settings[target]?.[slot] === theme.id);
 
+  // Ready-made themes past the plan's allowance are locked (the first N stay open); a theme that is
+  // already in use stays usable. Your own themes are never locked.
+  const lockedThemeIds = planLockedThemeIds(
+    themes,
+    themeGate.themeLimit,
+    themes.filter((theme) => THEME_TARGETS.some((target) => isThemeInUse(theme, target))).map((theme) => theme.id),
+  );
+
   const sortThemes = (list: BibleTheme[]): BibleTheme[] => {
     // Array.sort is stable, so ties keep the curated order.
     const sorted = [...list];
@@ -339,6 +348,10 @@ export default function ProductionThemeSettingsPage() {
   }, [pendingDeleteTheme, persistSettings, settings, themes, t]);
 
   const startCustomising = async (theme: BibleTheme) => {
+    if (lockedThemeIds.has(theme.id)) {
+      themeGate.promptLocked(lockedThemeMessage(themeGate.themeLimit));
+      return;
+    }
     if (!(await themeGate.guard())) return;
     setEditingTheme({
       ...theme,
@@ -353,8 +366,9 @@ export default function ProductionThemeSettingsPage() {
     const look: ThemeLook = themeHasLook(theme, previewLook) ? previewLook : themeFormat(theme);
     const layout = themeLayoutFor(theme, look);
     const inUse = THEME_TARGETS.filter((target) => isThemeInUse(theme, target));
+    const planLocked = lockedThemeIds.has(theme.id);
     return (
-      <article key={theme.id} className="production-theme-card">
+      <article key={theme.id} className={`production-theme-card${planLocked ? " production-theme-card--locked" : ""}`}>
         <ThemePreviewSurface
           className="production-theme-card__preview"
           videoSrc={theme.settings.backgroundVideo}
@@ -432,6 +446,15 @@ export default function ProductionThemeSettingsPage() {
                 {t("themes.hiddenFromDock", "Hidden from Dock")}
               </span>
             )}
+            {planLocked && (
+              <span
+                className="production-theme-card__meta-pill production-theme-card__meta-pill--locked"
+                title={t("themes.upgradeToUnlock", "Upgrade your plan to unlock this theme")}
+              >
+                <Icon name="lock" size={14} />{" "}
+                {t("themes.locked", "Locked")}
+              </span>
+            )}
             <span className="production-theme-card__meta-pill production-theme-card__meta-pill--muted">
               {theme.source === "custom"
                 ? t("themes.sourceCustom", "Custom")
@@ -480,10 +503,12 @@ export default function ProductionThemeSettingsPage() {
               <button
                 className="production-btn production-btn--ghost"
                 onClick={() => startCustomising(theme)}
-                title={t("themes.customizeHint", "Make your own copy of this theme to edit")}
+                title={planLocked
+                  ? t("themes.upgradeToUnlock", "Upgrade your plan to unlock this theme")
+                  : t("themes.customizeHint", "Make your own copy of this theme to edit")}
               >
-                <Icon name="tune" size={16} />
-                {t("themes.customize", "Customize")}
+                <Icon name={planLocked ? "lock" : "tune"} size={16} />
+                {planLocked ? t("themes.unlock", "Unlock") : t("themes.customize", "Customize")}
               </button>
             )}
           </div>

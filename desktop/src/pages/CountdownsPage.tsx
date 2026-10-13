@@ -28,10 +28,12 @@ import {
   duplicateCountdown,
 } from "../countdowns/countdownStore";
 import {
-  COUNTDOWN_TEMPLATES,
   createDefaultCountdown,
-  getTemplateName,
+  createLayoutCountdown,
 } from "../countdowns/countdownDefaults";
+import CountdownStylePicker from "../countdowns/CountdownStylePicker";
+import CountdownLayerEditor from "../countdowns/CountdownLayerEditor";
+import { isLayoutDesign } from "../countdowns/layoutMode";
 import TextThemePicker from "../countdowns/TextThemePicker";
 import {
   COUNTDOWN_TEXT_THEMES,
@@ -55,6 +57,13 @@ import {
 import { validateMediaFile, backgroundFileAccept } from "../countdowns/mediaValidation";
 import { saveCountdownAsset, deleteCountdownAsset } from "../countdowns/countdownStore";
 import type { MediaItem } from "../library/libraryTypes";
+import RundownsView from "./RundownsView";
+
+function formatDesignLength(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const s = Math.floor(totalSeconds % 60);
+  return `${m}:${String(s).padStart(2, "0")} countdown`;
+}
 
 // ── Timer hook ─────────────────────────────────────────────────────────────
 
@@ -918,13 +927,13 @@ function OBSSettings({ cd, onUpdate }: { cd: CountdownConfig; onUpdate: (u: Part
 
 // ── Main Page ──────────────────────────────────────────────────────────────
 
-export default function CountdownsPage() {
+function CountdownDesignsView() {
   const [countdowns, setCountdowns] = useState<CountdownConfig[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("timer");
-  const [showTemplates, setShowTemplates] = useState(false);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
 
   const active = countdowns.find((c) => c.id === activeId) ?? null;
@@ -945,8 +954,20 @@ export default function CountdownsPage() {
     setCountdowns((prev) => [cd, ...prev]);
     saveCountdown(cd);
     setActiveId(id);
-    setShowTemplates(false);
   }, []);
+
+  const handlePickStyle = useCallback((presetId: string) => {
+    setShowPicker(false);
+    if (presetId === "classic") {
+      handleCreate("circular");
+      return;
+    }
+    const id = nanoid();
+    const cd = createLayoutCountdown(presetId, id);
+    setCountdowns((prev) => [cd, ...prev]);
+    saveCountdown(cd);
+    setActiveId(id);
+  }, [handleCreate]);
 
   const handleUpdate = useCallback((updates: Partial<CountdownConfig>) => {
     if (!activeId) return;
@@ -1035,28 +1056,11 @@ export default function CountdownsPage() {
       <div style={{ width: 280, flexShrink: 0, borderRight: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column" }}>
         <div style={{ padding: 18, borderBottom: "1px solid var(--border)" }}>
           <h3 style={{ fontSize: 16, fontWeight: 750, color: "#ffffff", marginBottom: 12 }}>My Countdowns</h3>
-          <button onClick={() => setShowTemplates(!showTemplates)}
+          <button onClick={() => setShowPicker(true)}
             style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 0", background: "var(--primary)", color: "#fff", borderRadius: 8, fontSize: 14, fontWeight: 600, border: "none", cursor: "pointer" }}>
             <Plus size={16} /> Create Countdown
           </button>
         </div>
-
-        {showTemplates && (
-          <div style={{ padding: 12, borderBottom: "1px solid var(--border)", background: "#131724" }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: "#a1a1aa", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>Choose Template</p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-              {COUNTDOWN_TEMPLATES.map((t) => (
-                <button key={t.id} onClick={() => handleCreate(t.id)}
-                  style={{ textAlign: "left", padding: "9px 12px", borderRadius: 8, fontSize: 13, background: "transparent", border: "1px solid transparent", color: "#ffffff", cursor: "pointer", transition: "all 0.15s" }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = "#1c2132"; e.currentTarget.style.borderColor = "rgba(255, 255, 255, 0.12)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = "transparent"; }}>
-                  <div style={{ fontWeight: 600 }}>{t.name}</div>
-                  <div style={{ fontSize: 12, color: "#a1a1aa", marginTop: 2 }}>{t.description}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
           {countdowns.length === 0 ? (
@@ -1070,7 +1074,7 @@ export default function CountdownsPage() {
                 style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer", marginBottom: 4, border: `1px solid ${activeId === cd.id ? "var(--primary)" : "transparent"}`, background: activeId === cd.id ? "var(--primary-soft)" : "transparent", transition: "all 0.12s" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cd.title || "Untitled"}</div>
-                  <div style={{ fontSize: 12, color: "#a1a1aa", marginTop: 2 }}>{getTemplateName(cd.templateId)}</div>
+                  <div style={{ fontSize: 12, color: "#a1a1aa", marginTop: 2 }}>{formatDesignLength(cd.timer.durationSeconds)}{cd.layout ? " · layer design" : ""}</div>
                 </div>
                 <div style={{ position: "relative" }}>
                   <button onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === cd.id ? null : cd.id); }}
@@ -1110,7 +1114,10 @@ export default function CountdownsPage() {
         </div>
       </div>
 
+      {isLayoutDesign(active) && <CountdownLayerEditor design={active} onChange={handleUpdate} />}
+
       {/* ── Center: Preview ── */}
+      {!isLayoutDesign(active) && (
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {/* Toolbar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderBottom: "1px solid var(--border)", background: "var(--surface)", flexShrink: 0 }}>
@@ -1156,7 +1163,7 @@ export default function CountdownsPage() {
               <Clock size={48} style={{ color: "var(--text-disabled)", margin: "0 auto 12px" }} />
               <h2 style={{ fontSize: 18, fontWeight: 700, color: "#ffffff", marginBottom: 6 }}>No countdown selected</h2>
               <p style={{ fontSize: 14, color: "var(--text-muted)", marginBottom: 16 }}>Create a countdown to get started</p>
-              <button onClick={() => handleCreate("circular")}
+              <button onClick={() => setShowPicker(true)}
                 style={{ padding: "10px 24px", background: "var(--primary)", color: "#fff", borderRadius: 8, fontSize: 14, fontWeight: 600, border: "none", cursor: "pointer" }}>
                 + Create Countdown
               </button>
@@ -1165,8 +1172,10 @@ export default function CountdownsPage() {
         </div>
       </div>
 
+      )}
+
       {/* ── Right Panel: Settings ── */}
-      {active && (
+      {active && !isLayoutDesign(active) && (
         <div style={{ width: 320, flexShrink: 0, borderLeft: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Tab bar */}
           <div style={{ display: "flex", gap: 3, padding: 8, borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
@@ -1188,6 +1197,7 @@ export default function CountdownsPage() {
           </div>
         </div>
       )}
+      {showPicker && <CountdownStylePicker onPick={handlePickStyle} onClose={() => setShowPicker(false)} />}
     </div>
   );
 }
@@ -1277,4 +1287,52 @@ else ct.innerHTML='<div class="t">'+t+'</div>'+(D.text.title?'<div class="tt">'+
 function tick(){if(rem>0){rem--;prog=((tot-rem)/tot)*100}render();if(rem>0)requestAnimationFrame(tick)}
 render();tick();
 </script></body></html>`;
+}
+
+// ── Page shell: Designs | Rundowns ─────────────────────────────────────────
+
+type CountdownsMode = "designs" | "rundowns";
+const MODE_STORAGE_KEY = "mce-countdowns-mode";
+
+function readStoredMode(): CountdownsMode {
+  try {
+    return localStorage.getItem(MODE_STORAGE_KEY) === "rundowns" ? "rundowns" : "designs";
+  } catch {
+    return "designs";
+  }
+}
+
+export default function CountdownsPage() {
+  const [mode, setMode] = useState<CountdownsMode>(readStoredMode);
+
+  const choose = (next: CountdownsMode) => {
+    setMode(next);
+    try { localStorage.setItem(MODE_STORAGE_KEY, next); } catch { /* ignore */ }
+  };
+
+  const tabStyle = (active: boolean): React.CSSProperties => ({
+    padding: "7px 16px",
+    borderRadius: 8,
+    border: "none",
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: 650,
+    color: active ? "#fff" : "#a1a1aa",
+    background: active ? "var(--primary)" : "transparent",
+  });
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, height: "100%", minHeight: 0, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", borderBottom: "1px solid var(--border)", background: "var(--surface)", flexShrink: 0 }}>
+        <button type="button" style={tabStyle(mode === "designs")} onClick={() => choose("designs")}>Designs</button>
+        <button type="button" style={tabStyle(mode === "rundowns")} onClick={() => choose("rundowns")}>Rundowns</button>
+        <span style={{ marginLeft: 10, fontSize: 12, color: "#94a3b8" }}>
+          {mode === "designs" ? "Design how your countdown looks." : "Build timers and messages for a service, then run them from the OBS Dock."}
+        </span>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        {mode === "designs" ? <CountdownDesignsView /> : <RundownsView />}
+      </div>
+    </div>
+  );
 }

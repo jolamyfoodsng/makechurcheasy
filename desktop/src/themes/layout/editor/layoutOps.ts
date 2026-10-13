@@ -20,9 +20,26 @@ export const TEXT_ROLES: Array<{ id: string; label: string; content: string }> =
   { id: "translation", label: "Translation (e.g. NKJV)", content: "{translation}" },
 ];
 
-export function roleForContent(content: string | undefined): string {
+/** What a text layer can show in a countdown / timer design. */
+export const COUNTDOWN_TEXT_ROLES: Array<{ id: string; label: string; content: string }> = [
+  { id: "time", label: "Time (04:58)", content: "{sign}{tm}" },
+  { id: "time-short", label: "Time, no leading zero (4:58)", content: "{sign}{time}" },
+  { id: "time-full", label: "Time with hours (00:04:58)", content: "{sign}{tmm}" },
+  { id: "days", label: "Days (02)", content: "{dd}" },
+  { id: "hours", label: "Hours (03)", content: "{hh}" },
+  { id: "minutes", label: "Minutes (04)", content: "{mm}" },
+  { id: "seconds", label: "Seconds (05)", content: "{ss}" },
+  { id: "ampm", label: "AM / PM (clock)", content: "{ampm}" },
+  { id: "title", label: "Title", content: "{title}" },
+  { id: "subtitle", label: "Subtitle", content: "{subtitle}" },
+  { id: "name", label: "Timer name (rundowns)", content: "{name}" },
+  { id: "speaker", label: "Speaker (rundowns)", content: "{speaker}" },
+  { id: "message", label: "Message", content: "{message}" },
+];
+
+export function roleForContent(content: string | undefined, roles: Array<{ id: string; content: string }> = TEXT_ROLES): string {
   const c = (content || "").trim();
-  return TEXT_ROLES.find((r) => r.content === c)?.id ?? "custom";
+  return roles.find((r) => r.content === c)?.id ?? "custom";
 }
 
 const anim = (preset: LayerAnimation["preset"], duration: number, delay = 0): LayerAnimation => ({

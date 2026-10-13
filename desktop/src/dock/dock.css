@@ -44447,3 +44447,594 @@ textarea.dock-lt-field-input {
   flex: none;
   margin-top: 2px;
 }
+
+/* ===================================================================
+   Quick Settings: compact sizing (Windows / small OBS windows)
+   The modal was built on a large Mac display. On a Windows laptop (125-150% scaling, a
+   ~1420px-wide OBS window) the "Apply changes to" panel, the header and the 42px buttons
+   used up the height, so the theme list was squeezed into a few rows. This block (last, so
+   it wins) shrinks the chrome and hands the room back to the content. Pure CSS in the
+   Vite-bundled dock.css, so it ships in the installed build with nothing extra to copy.
+   =================================================================== */
+.dtb-studio__modal--picker {
+  width: min(360px, calc((100dvw - 16px) / var(--dock-font-scale, 1))) !important;
+  max-width: 360px !important;
+  max-height: min(92dvh, calc((100dvh - 16px) / var(--dock-font-scale, 1))) !important;
+}
+
+.dtb-studio__modal--picker .dtb-studio__settings-view--picker {
+  max-height: calc(92dvh - 150px) !important;
+}
+
+.dtb-studio__modal--picker .dtb-studio__header {
+  padding: 8px 12px;
+  min-height: 40px;
+}
+
+.dtb-studio__modal--picker .dtb-studio__header-label {
+  font-size: 13px;
+}
+
+.dtb-studio__header-subtitle {
+  font-size: 10.5px;
+}
+
+.dtb-studio__modal--picker .dtb-studio__close--strong {
+  width: 26px;
+  height: 26px;
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker {
+  padding: 8px 12px 2px 12px;
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker__layout,
+.dtb-studio__modal--picker .dtb-bg-picker__layout--compact {
+  gap: 8px !important;
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker__tabs,
+.dtb-studio__modal--picker .dtb-bg-picker__layout--compact .dtb-bg-picker__tabs {
+  gap: 4px !important;
+  padding: 3px !important;
+  border-radius: 8px !important;
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker__tab,
+.dtb-studio__modal--picker .dtb-bg-picker__layout--compact .dtb-bg-picker__tab {
+  min-height: 30px !important;
+  height: 30px !important;
+  gap: 6px !important;
+  padding: 0 10px !important;
+  font-size: 12px !important;
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker__tab span,
+.dtb-studio__modal--picker .dtb-bg-picker__layout--compact .dtb-bg-picker__tab span {
+  font-size: 12px !important;
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker__tab svg,
+.dtb-studio__modal--picker .dtb-bg-picker__layout--compact .dtb-bg-picker__tab svg {
+  font-size: 14px !important;
+  width: 14px;
+  height: 14px;
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker__scroll {
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker__subtitle {
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker__background-controls {
+  margin-bottom: 6px;
+  gap: 6px;
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker__type-field {
+  gap: 3px;
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker__type-label {
+  font-size: 9.5px;
+}
+
+.dtb-studio__modal--picker .dtb-bg-picker__type-select,
+.dtb-studio__modal--picker .dtb-local-styles__select {
+  min-height: 30px;
+  font-size: 12px;
+}
+
+.dtb-studio__modal--picker .dtb-local-styles__menu-btn {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+}
+
+/* The theme list gets the room the chrome gave back. */
+.dtb-studio__modal--picker .dtb-theme-section__grid {
+  max-height: clamp(150px, 36dvh, 300px);
+}
+
+.dtb-studio__modal--picker .dtb-theme-section__item {
+  gap: 3px;
+  padding: 3px;
+}
+
+.dtb-studio__modal--picker .dtb-theme-section__name {
+  font-size: 11px;
+}
+
+.dtb-studio__modal--picker .dtb-control-section,
+.dtb-studio__modal--picker .dtb-control-card {
+  padding: 8px 10px;
+  gap: 8px;
+}
+
+/* Footer: one slim "Apply changes to" row + two slim buttons (was ~250px tall). */
+.dtb-studio__modal--picker .dtb-studio__footer {
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.dtb-studio__modal--picker .dtb-studio__sync-panel {
+  width: 100%;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.dtb-studio__modal--picker .dtb-studio__sync-header {
+  align-items: center;
+}
+
+.dtb-studio__modal--picker .dtb-studio__sync-title {
+  font-size: 12px;
+  gap: 6px;
+}
+
+/* The dropdown already says "All Tabs & Scenes" / "Current Tab & Scene", so the explaining lines
+   under the title and under the dropdown only repeat it. (The custom tab/scene chips stay.) */
+.dtb-studio__modal--picker .dtb-studio__sync-subtitle,
+.dtb-studio__modal--picker .dtb-studio__sync-hint {
+  display: none;
+}
+
+.dtb-studio__modal--picker .dtb-studio__sync-dropdown-trigger {
+  min-height: 32px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.dtb-studio__modal--picker .dtb-studio__sync-dropdown-trigger-text {
+  font-size: 12px;
+}
+
+.dtb-studio__modal--picker .dtb-studio__sync-dropdown-item {
+  padding: 6px 8px;
+}
+
+.dtb-studio__modal--picker .dtb-studio__sync-custom {
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.dtb-studio__modal--picker .dtb-studio__footer-actions {
+  gap: 8px !important;
+}
+
+.dtb-studio__modal--picker .dtb-studio__footer-btn--reset,
+.dtb-studio__modal--picker .dtb-studio__footer-btn--save {
+  min-height: 32px !important;
+  padding: 0 12px !important;
+  font-size: 12px !important;
+  gap: 6px !important;
+}
+
+.dtb-studio__modal--picker .dtb-studio__footer-btn--save {
+  box-shadow: 0 1px 8px rgba(240, 90, 22, 0.35) !important;
+}
+
+/* Short windows (a 1420px-wide Windows laptop leaves the dock about 700px tall):
+   drop the descriptive lines so the controls and the theme list fit. */
+@media (max-height: 820px) {
+  .dtb-studio__modal--picker .dtb-studio__header-subtitle,
+  .dtb-studio__modal--picker .dtb-bg-picker__subtitle {
+    display: none;
+  }
+
+  .dtb-studio__modal--picker .dtb-studio__header {
+    min-height: 36px;
+    padding: 6px 12px;
+  }
+
+  .dtb-studio__modal--picker .dtb-bg-picker__tab,
+  .dtb-studio__modal--picker .dtb-bg-picker__layout--compact .dtb-bg-picker__tab {
+    min-height: 28px !important;
+    height: 28px !important;
+  }
+}
+
+@media (max-height: 680px) {
+  .dtb-studio__modal--picker .dtb-studio__sync-header {
+    display: none;
+  }
+}
+
+/* ===================================================================
+   Narrow / short Dock panels (about 300px wide, laptop-height OBS windows)
+   =================================================================== */
+
+/* Worship song header: grid children default to min-width:auto, so the search input's own
+   width pushed the columns and the search ran into the back button. Let every cell shrink. */
+.dock-worship-summary__header > * {
+  min-width: 0;
+}
+
+.dock-worship-summary__compact-search,
+.dock-worship-summary__compact-search .dock-media-search {
+  min-width: 0;
+}
+
+.dock-worship-summary__compact-search .dock-media-search__input {
+  min-width: 0;
+  width: 100%;
+}
+
+.dock-worship-back-btn {
+  flex: 0 0 auto;
+  justify-self: start;
+}
+
+/* Short AND narrow: title + actions on the first row, the search gets its own full-width row
+   under them instead of squeezing between the back button and the buttons. */
+@media screen and (max-height: 600px) and (max-width: 360px) {
+  .dock-module--worship .dock-worship-summary__header {
+    grid-template-columns: 26px minmax(0, 1fr) auto;
+    column-gap: 6px;
+    row-gap: 4px;
+  }
+
+  .dock-module--worship .dock-worship-summary__compact-search {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .dock-module--worship .dock-worship-summary__actions {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+
+/* Dropdowns that were up to 380px wide covered the Bible toolbar, Quick Edits and the rest of a
+   300px dock. Cap them, narrower again on small panels. */
+.dock-bible-controls__book-dropdown,
+.dock-bible-topbar__book-dropdown,
+.dock-bible-browser__book-dropdown {
+  width: min(300px, calc(100vw - 24px));
+}
+
+@media screen and (max-width: 400px) {
+  .dock-bible-controls__book-dropdown,
+  .dock-bible-topbar__book-dropdown,
+  .dock-bible-browser__book-dropdown {
+    width: min(236px, calc(100vw - 32px));
+    padding: 5px;
+  }
+
+  .dock-bible-reference-popover {
+    min-width: 0;
+    max-width: calc(100vw - 24px);
+  }
+
+  .dock-shell-history-menu,
+  .bible-version-library__panel {
+    width: min(236px, calc(100vw - 24px));
+  }
+}
+
+@media screen and (max-height: 600px) {
+  .dock-bible-controls__book-dropdown,
+  .dock-bible-topbar__book-dropdown,
+  .dock-bible-browser__book-dropdown {
+    max-height: min(176px, 42vh);
+  }
+}
+
+/* ── Media tab: one Filter button (type checkboxes + order) instead of two rows of chips ── */
+.dock-media-filterbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  background: var(--dock-bg);
+  border-bottom: 1px solid var(--dock-border-soft);
+}
+
+.dock-media-filterbar__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  background: var(--dock-surface);
+  color: var(--dock-text);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.dock-media-filterbar__trigger:hover,
+.dock-media-filterbar__trigger--open {
+  border-color: var(--dock-border-active, var(--dock-accent));
+}
+
+.dock-media-filterbar__trigger--active {
+  border-color: var(--dock-accent);
+}
+
+.dock-media-filterbar__trigger > svg:first-child {
+  color: var(--dock-accent);
+  flex: 0 0 auto;
+}
+
+.dock-media-filterbar__trigger > svg:last-child {
+  margin-left: auto;
+  flex: 0 0 auto;
+  color: var(--dock-text-dim);
+}
+
+.dock-media-filterbar__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-media-filterbar__count {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dock-accent) 22%, transparent);
+  color: var(--dock-accent-bright, var(--dock-accent));
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+}
+
+.dock-media-filterbar__clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dock-text-dim);
+  cursor: pointer;
+}
+
+.dock-media-filterbar__clear:hover {
+  color: var(--dock-text);
+  border-color: var(--dock-border-active, var(--dock-accent));
+}
+
+.dock-media-filterbar__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 40;
+  width: min(230px, calc(100vw - 24px));
+  max-height: min(340px, 70vh);
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--dock-border) 92%, transparent);
+  border-radius: 6px;
+  /* Solid, not the translucent surface token, so the media thumbnails never show through. */
+  background: #141720;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
+}
+
+:root.light .dock-media-filterbar__menu {
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.22);
+}
+
+.dock-media-filterbar__heading {
+  padding: 6px 8px 3px;
+  color: var(--dock-text-dim);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dock-media-filterbar__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dock-text);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dock-media-filterbar__item:hover,
+.dock-media-filterbar__item:focus-visible {
+  background: color-mix(in srgb, var(--dock-accent) 14%, var(--dock-surface-hover, transparent));
+  outline: none;
+}
+
+.dock-media-filterbar__item--locked {
+  opacity: 0.6;
+}
+
+.dock-media-filterbar__item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-media-filterbar__item-count {
+  flex: 0 0 auto;
+  color: var(--dock-text-dim);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.dock-media-filterbar__box,
+.dock-media-filterbar__radio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--dock-border-active, var(--dock-border));
+  background: transparent;
+  color: #fff;
+}
+
+.dock-media-filterbar__box {
+  border-radius: 3px;
+}
+
+.dock-media-filterbar__radio {
+  border-radius: 50%;
+}
+
+.dock-media-filterbar__box--on {
+  border-color: var(--dock-accent);
+  background: var(--dock-accent);
+}
+
+.dock-media-filterbar__radio--on {
+  border-color: var(--dock-accent);
+  background: radial-gradient(circle, var(--dock-accent) 0 38%, transparent 42%);
+}
+
+/* ── Media tab on short docks: the Uploads / Animations / Patterns column becomes a dropdown ── */
+.dock-media-console--short-height .dock-media-tabs-column {
+  display: none;
+}
+
+.dock-media-viewswitch {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.dock-media-viewswitch__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  background: var(--dock-surface);
+  color: var(--dock-accent);
+  cursor: pointer;
+}
+
+.dock-media-viewswitch__trigger > svg:last-child {
+  color: var(--dock-text-dim);
+}
+
+.dock-media-viewswitch__trigger:hover,
+.dock-media-viewswitch__trigger--open {
+  border-color: var(--dock-accent);
+}
+
+.dock-media-viewswitch__menu {
+  width: min(190px, calc(100vw - 24px));
+}
+
+.dock-media-filterbar__item:disabled {
+  cursor: not-allowed;
+}
+
+/* Page container: lets the narrow Schedule drawer overlay the content instead of pushing it. */
+.dock-content-layout {
+  position: relative;
+}
+
+/* ── Verse right-click menu: compact, and follows the Dock scale ──
+   It is portalled to <body>, outside `.dock-root`'s zoom, so on Windows laptops
+   (125–150% scaling, auto-fit ~0.8) it rendered at full size next to a shrunken Dock.
+   `--dock-font-scale` is also set on <html> by DockPage. Scale from the click point
+   so the position stays where the operator clicked. */
+.dock-bible-context-menu {
+  min-width: 176px;
+  padding: 4px;
+  gap: 1px;
+  border-radius: 7px;
+  transform: scale(var(--dock-font-scale, 1));
+  transform-origin: top left;
+}
+
+.dock-bible-context-menu__item {
+  gap: 8px;
+  min-height: 28px;
+  padding: 5px 9px;
+  font-size: 12px;
+  border-radius: 5px;
+}
+
+.dock-bible-context-menu__item .material-icons,
+.dock-bible-context-menu__item svg {
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+}
+
+.dock-bible-context-menu__divider {
+  margin: 2px 0;
+}
+
+.dock-bible-context-menu__section {
+  gap: 4px;
+  padding: 2px 1px 1px;
+}
+
+.dock-bible-context-menu__section-header {
+  font-size: 10px;
+  padding: 0 3px;
+}
+
+.dock-bible-context-menu__lines-grid {
+  gap: 3px;
+}
+
+.dock-bible-context-menu__line-btn {
+  min-height: 24px;
+  padding: 3px 6px;
+  font-size: 11px;
+  border-radius: 4px;
+}

@@ -48,7 +48,7 @@ export function AppShell() {
   const isServiceEnded = svc.status === "ended";
   const isTranscriptDetailRoute = /^\/transcripts\/[^/]+\/?$/.test(location.pathname);
   const isSettingsRoute = /^\/settings(?:\/.*)?$/.test(location.pathname);
-  const isFixedViewportRoute = isTranscriptDetailRoute || location.pathname === "/speech-to-scripture" || isSettingsRoute;
+  const isFixedViewportRoute = isTranscriptDetailRoute || location.pathname === "/speech-to-scripture" || location.pathname === "/countdowns" || location.pathname === "/studio" || isSettingsRoute;
 
   // ── Sidebar ──
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {

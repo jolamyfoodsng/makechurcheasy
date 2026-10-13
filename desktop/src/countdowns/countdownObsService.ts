@@ -9,6 +9,7 @@
 
 import { obsService } from "../services/obsService";
 import { getOverlayBaseUrl } from "../services/overlayUrl";
+import { attachLayoutMode } from "./layoutMode";
 import type { CountdownConfig, CountdownOverlayPayload, OverlaySyncState } from "./types";
 
 const COUNTDOWN_SOURCE = "MCE Countdown";
@@ -131,12 +132,12 @@ export async function sendCountdownToObs(
   await hideSource(sceneName, sourceName);
 
   const baseUrl = await getOverlayBaseUrl();
-  const payload: CountdownOverlayPayload = {
+  const payload: CountdownOverlayPayload = attachLayoutMode({
     config,
     baseUrl,
     timestamp: Date.now(),
     ...(sync ? { sync } : {}),
-  };
+  });
 
   const url = `${baseUrl}/countdown-overlay.html#data=${encodeURIComponent(JSON.stringify(payload))}`;
   await ensureCountdownSource(sceneName, sourceName, url);

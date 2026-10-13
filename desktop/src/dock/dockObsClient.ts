@@ -6782,6 +6782,41 @@ export class DockObsClient {
     };
   }
 
+  /**
+   * Presentation Studio: the overlay packet an MCE source would get for this content,
+   * built with the same theme preparation as the fast OBS paths (dedicated lower-third
+   * theme, data URIs re-inlined) but without touching OBS. Empty text = a clear packet.
+   */
+  buildStudioOverlayPacket(input: {
+    text: string;
+    reference: string;
+    verseRange?: string;
+    lineCount?: number;
+    mode: "fullscreen" | "lower-third";
+    themeSettings: Record<string, unknown> | null;
+  }): { data: Record<string, unknown>; css: string } {
+    let cleanTheme: Record<string, unknown> | null = null;
+    let css = "";
+    if (input.themeSettings) {
+      const themeForClean = input.mode === "lower-third"
+        ? (this.prepareDedicatedLowerThirdTheme(input.themeSettings).overlayTheme ?? input.themeSettings)
+        : input.themeSettings;
+      const stripped = this.stripThemeDataUris(themeForClean);
+      cleanTheme = stripped.cleanSettings ?? null;
+      css = stripCompatModeCSS(stripped.css);
+    }
+    const text = (input.text || "").trim();
+    const slide = text
+      ? this.buildBibleSlide(text, input.reference, input.verseRange ?? "", "", "original-first", input.lineCount)
+      : null;
+    const timestamp = Date.now();
+    const data = this.buildStandaloneOverlayPacket(
+      { slide, theme: cleanTheme, live: true, blanked: false, timestamp, mode: input.mode },
+      css,
+    );
+    return { data: { ...data, revision: timestamp }, css };
+  }
+
   private publishFullscreenOverlayPacket(packet: {
     slide: Record<string, unknown> | null;
     theme: Record<string, unknown> | null;

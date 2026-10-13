@@ -1,0 +1,6 @@
+/* Fonts used by the built-in countdown designs. Bundled so they work offline in OBS. */
+@font-face { font-family: "Anton"; src: url("church/anton-400.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Kaushan Script"; src: url("church/kaushan-script-400.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: "Montserrat"; src: url("sunday/montserrat-900.woff2") format("woff2"); font-weight: 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Montserrat"; src: url("sunday/montserrat-800-italic.woff2") format("woff2"); font-weight: 800; font-style: italic; font-display: swap; }
+@font-face { font-family: "Archivo Black"; src: url("sunday/archivo-black-400.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: swap; }

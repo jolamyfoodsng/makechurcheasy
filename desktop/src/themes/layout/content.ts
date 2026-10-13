@@ -12,6 +12,8 @@ export interface ResolvedTokens {
   verses: string;
   chapterVerse: string;
   translation: string;
+  /** Countdown tokens (time, mm, ss, title…) arrive from ThemeContent.extra. */
+  [key: string]: string | undefined;
 }
 
 /**
@@ -19,7 +21,17 @@ export interface ResolvedTokens {
  * Anything that is not a scripture reference (worship titles, note titles) lands
  * in `book` with chapter/verses empty, so `{reference}` still shows it as-is.
  */
-export function parseReference(raw: string): Omit<ResolvedTokens, "text"> {
+export interface ParsedReference {
+  reference: string;
+  referenceShort: string;
+  book: string;
+  chapter: string;
+  verses: string;
+  chapterVerse: string;
+  translation: string;
+}
+
+export function parseReference(raw: string): ParsedReference {
   const reference = (raw || "").trim();
   let rest = reference;
   let translation = "";
@@ -55,10 +67,14 @@ export function parseReference(raw: string): Omit<ResolvedTokens, "text"> {
 }
 
 export function resolveTokens(content: ThemeContent): ResolvedTokens {
-  return { text: content.text || "", ...parseReference(content.reference || "") };
+  const base: ResolvedTokens = { text: content.text || "", ...parseReference(content.reference || "") };
+  return { ...base, ...(content.extra || {}) } as ResolvedTokens;
 }
 
-const TOKEN_RE = /\{(text|reference|referenceShort|book|chapter|verses|chapterVerse|translation)\}/g;
+/** Countdown tokens: {time} {sign} {tm} {tmm} {d} {dd} {h} {hh} {m} {mm} {s} {ss} {ampm} {title} {subtitle} {message} {name} {speaker} */
+export const COUNTDOWN_TOKENS = ["time", "sign", "tm", "tmm", "d", "dd", "h", "hh", "m", "mm", "s", "ss", "ampm", "title", "subtitle", "message", "name", "speaker"] as const;
+
+const TOKEN_RE = /\{(text|reference|referenceShort|book|chapter|verses|chapterVerse|translation|time|sign|tm|tmm|d|dd|h|hh|m|mm|s|ss|ampm|title|subtitle|message|name|speaker)\}/g;
 
 export function hasTokens(pattern: string | undefined): boolean {
   if (!pattern) return false;
@@ -67,7 +83,7 @@ export function hasTokens(pattern: string | undefined): boolean {
 }
 
 export function fillTokens(pattern: string, tokens: ResolvedTokens): string {
-  return pattern.replace(TOKEN_RE, (_, key: keyof ResolvedTokens) => tokens[key] ?? "").trim();
+  return pattern.replace(TOKEN_RE, (_, key: string) => tokens[key] ?? "").trim();
 }
 
 export function isVerseTextPattern(pattern: string | undefined): boolean {

@@ -543,6 +543,34 @@ export class LmDockService {
     }
   }
 
+  /**
+   * A command the OBS dock sent over the HTTP relay (/api/lm-command).
+   * Public so the app's startup relay watcher can hand over commands that
+   * arrived before this service was loaded.
+   */
+  handleRelayCommand(cmd: { type: string; commandId?: string; payload?: unknown }): void {
+    if (cmd.type === "lm:start") {
+      const payload = cmd.payload as { micId?: string } | undefined;
+      console.log("[lmDockService] 🎤 HTTP lm:start → startListening()");
+      void this.startListening(payload?.micId);
+    } else if (cmd.type === "lm:stop") {
+      this.stopListening();
+    } else if (cmd.type === "lm:keep-listening") {
+      if (this.inactivityPromptActive) this.confirmStillUsing();
+    } else if (cmd.type === "lm:navigate") {
+      // The LM dock can run in a separate OBS CEF process. Re-broadcast
+      // the relayed command so the Bible dock can focus the reference
+      // and push it through its OBS output path.
+      dockBridge.sendCommand({
+        type: "lm:navigate",
+        commandId: cmd.commandId,
+        payload: cmd.payload,
+        timestamp: Date.now(),
+      });
+      dockBridge.sendState({ type: "state:lm-status", payload: { ...this.snapshot }, timestamp: Date.now() });
+    }
+  }
+
   init(): () => void {
     if (this.initialized) return () => { };
     this.initialized = true;
@@ -609,28 +637,7 @@ export class LmDockService {
               : (item as { type: string; commandId?: string; payload?: unknown }),
           )
           : [];
-        for (const cmd of commands) {
-          if (cmd.type === "lm:start") {
-            const payload = cmd.payload as { micId?: string } | undefined;
-            console.log("[lmDockService] 🎤 HTTP lm:start → startListening()");
-            void this.startListening(payload?.micId);
-          } else if (cmd.type === "lm:stop") {
-            this.stopListening();
-          } else if (cmd.type === "lm:keep-listening") {
-            if (this.inactivityPromptActive) this.confirmStillUsing();
-          } else if (cmd.type === "lm:navigate") {
-            // The LM dock can run in a separate OBS CEF process. Re-broadcast
-            // the relayed command so the Bible dock can focus the reference
-            // and push it through its OBS output path.
-            dockBridge.sendCommand({
-              type: "lm:navigate",
-              commandId: cmd.commandId,
-              payload: cmd.payload,
-              timestamp: Date.now(),
-            });
-            dockBridge.sendState({ type: "state:lm-status", payload: { ...this.snapshot }, timestamp: Date.now() });
-          }
-        }
+        for (const cmd of commands) this.handleRelayCommand(cmd);
       } catch (err) {
         // Only log occasionally to avoid spam
         if (Math.random() < 0.05) {

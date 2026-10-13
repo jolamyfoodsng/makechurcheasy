@@ -36,6 +36,7 @@ import {
 } from "../services/productionSettings";
 import type { ServicePlannerSnapshot } from "../service-planner/types";
 import { installDockTextShortcuts } from "./dockTextShortcuts";
+import { useDockAutoFit } from "./dockAutoFit";
 import { loadDockFavoriteBibleThemes } from "./dockThemeData";
 import { announceDockThemesRefreshed } from "./dockThemeRefresh";
 import { useKeyboardShortcuts, type ShortcutDefinition, type ShortcutCategory, formatShortcut } from "./useKeyboardShortcuts";
@@ -117,6 +118,8 @@ import {
 import { coerce, gt } from "semver";
 
 import { safeLazy } from "../utils/safeLazy";
+import { emitStudioDockEvent } from "../studio/studioDockSink";
+import { DockOutputTargetContext } from "./dockOutputTargetContext";
 
 const loadDockBibleTab = () => import("./tabs/DockBibleTab");
 const loadDockMediaTab = () => import("./tabs/DockMediaTab");
@@ -296,6 +299,8 @@ interface DockPageProps {
   hideShellHeader?: boolean;
   initialProductionSettings?: DockProductionSettingsPayload;
   onActiveTabChange?: (tab: DockTab) => void;
+  /** Inside the Presentation Studio: hide the "Presentation link" help card. */
+  hidePresentationLinkCard?: boolean;
 }
 
 function DockPageContent({
@@ -309,6 +314,7 @@ function DockPageContent({
   hideShellHeader = false,
   initialProductionSettings,
   onActiveTabChange,
+  hidePresentationLinkCard = false,
 }: DockPageProps = {}) {
   const { t } = useTranslation();
   const [dockPlan, setDockPlan] = useState(() => getDockPlan());
@@ -378,6 +384,8 @@ function DockPageContent({
   );
   const [dockFontFamily, setDockFontFamily] = useState<string>(() => loadDockFontFamily());
   const [dockFontScale, setDockFontScale] = useState<number>(() => loadDockFontScale());
+  // Automatic fit for small screens / narrow panels; multiplied with the chosen font size below.
+  const dockAutoFit = useDockAutoFit();
   const typographyHydrationGenerationRef = useRef(0);
   const [upgradeModalMsg, setUpgradeModalMsg] = useState("");
   const [showPresentationLinkModal, setShowPresentationLinkModal] = useState(false);
@@ -1042,6 +1050,8 @@ function DockPageContent({
 
   const handleStage = useCallback((item: DockStagedItem | null) => {
     setStaged(item);
+    // The Presentation Studio (when open) puts the same item on its Program.
+    emitStudioDockEvent({ kind: "stage", item });
     const requestId = ++presentationPublishRequestRef.current;
     presentationPublishTailRef.current = presentationPublishTailRef.current
       .catch(() => undefined)
@@ -1180,9 +1190,16 @@ function DockPageContent({
       ...dockVariables,
       "--dock-font-body": buildDockFontFamilyStack(dockFontFamily),
       "--dock-font-heading": buildDockFontFamilyStack(dockFontFamily),
-      "--dock-font-scale": String(dockFontScale),
+      "--dock-font-scale": String(Math.round(dockFontScale * dockAutoFit * 1000) / 1000),
     } as CSSProperties;
-  }, [appearance, effective, dockFontFamily, dockFontScale]);
+  }, [appearance, effective, dockFontFamily, dockFontScale, dockAutoFit]);
+
+  // Menus and popovers portalled to <body> sit outside `.dock-root`, so they miss its
+  // CSS zoom (auto-fit + font size). Publish the same scale on <html> so they can use it.
+  const effectiveDockScale = Math.round(dockFontScale * dockAutoFit * 1000) / 1000;
+  useEffect(() => {
+    document.documentElement.style.setProperty("--dock-font-scale", String(effectiveDockScale));
+  }, [effectiveDockScale]);
 
   const updateDockVisual = useCallback((key: keyof DockVisualPreferences, enabled: boolean) => {
     setAppearance({
@@ -1208,6 +1225,7 @@ function DockPageContent({
   ].filter(Boolean).join(" ");
 
   return (
+    <DockOutputTargetContext.Provider value={presentationOutputTarget}>
     <div className={dockRootClassName} ref={dockRootRef} style={dockStyle}>
       <input
         ref={dockSessionImportInputRef}
@@ -1398,7 +1416,7 @@ function DockPageContent({
                         <Icon name="text_fields" size={14} />
                         <span>{t('page.dockFontSize', 'Dock font size')}</span>
                         <output className="dock-sidebar__value" htmlFor="dock-font-scale">
-                          {Math.round(dockFontScale * 100)}%
+                          {Math.round(dockFontScale * dockAutoFit * 100)}%
                         </output>
                       </span>
                       <select
@@ -1976,12 +1994,13 @@ function DockPageContent({
 
 
         <main id="dock-main-content" tabIndex={-1} className="dock-content">
-          {isFreePlan && presentationLinkMode && (
+          {isFreePlan && presentationLinkMode && !hidePresentationLinkCard && (
             <DockPresentationLinkCard onOpenHelp={() => setShowPresentationLinkModal(true)} />
           )}
           <div className="dock-content-layout" style={{ display: "flex", flex: 1, minHeight: 0, width: "100%", overflow: "hidden" }}>
             <DockScheduleDrawer
               initialSnapshot={servicePlanner}
+              onStage={handleStage}
               onSelectTab={(tab) => {
                 setActiveTab(tab);
                 setRenderedTab(tab);
@@ -2335,6 +2354,7 @@ function DockPageContent({
         </div>
       )}
     </div>
+    </DockOutputTargetContext.Provider>
   );
 }
 

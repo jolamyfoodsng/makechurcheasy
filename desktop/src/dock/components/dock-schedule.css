@@ -1905,3 +1905,24 @@
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
+
+/* Narrow docks: an opened (not pinned) Schedule slides over the content instead of taking 30% of
+   a ~300px panel. The 34px rail space stays reserved so the content does not jump. */
+@media screen and (max-width: 340px) {
+  .dock-content-layout:has(> .dock-schedule-container--expanded:not(.dock-schedule-container--pinned)) {
+    padding-left: 34px;
+  }
+
+  .dock-schedule-container--expanded:not(.dock-schedule-container--pinned) {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 60;
+    width: min(250px, 88vw) !important; /* beats the inline resized width */
+    min-width: 0;
+    max-width: none;
+    flex: none !important;
+    box-shadow: 8px 0 28px rgba(0, 0, 0, 0.6);
+  }
+}

@@ -9,7 +9,7 @@
  * Replaces the former "Ticker" tab.
  */
 
-import { memo, useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { memo, useState, useEffect, useCallback, useRef, useMemo, type ReactNode } from "react";
 import {
   dockObsClient,
   type DockDocumentMediaOptions,
@@ -84,6 +84,8 @@ interface Props {
 
 type DockMediaKind = "video" | "image" | "audio";
 type DockMediaFilter = "all" | DockMediaKind | "document";
+/** One ticked type in the Filter menu. No ticked type means "all". */
+type DockMediaFilterKind = Exclude<DockMediaFilter, "all">;
 type DockMediaViewMode = "uploaded" | "recent";
 type DockMediaBrowserTab = "uploads" | "templates" | "animations" | "patterns" | "text";
 type DockAddMediaTab = "background" | "template-videos";
@@ -201,6 +203,8 @@ interface DockMediaTargetKeys {
 interface DockMediaSessionState {
   browserTab: DockMediaBrowserTab;
   activeKind: DockMediaFilter;
+  /** Types ticked in the Filter menu (several allowed). Missing in older saved sessions. */
+  activeKinds?: DockMediaFilterKind[];
   viewMode: DockMediaViewMode;
   activeTargetKeys: DockMediaTargetKeys;
   pausedTargets: ActiveMediaPlaybackState;
@@ -397,6 +401,17 @@ function isDockMediaKind(value: unknown): value is DockMediaFilter {
   return value === "video" || value === "image" || value === "audio" || value === "document" || value === "all";
 }
 
+function sanitizeMediaKinds(value: unknown): DockMediaFilterKind[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const kinds = value.filter((item): item is DockMediaFilterKind => isDockMediaKind(item) && item !== "all");
+  return [...new Set(kinds)];
+}
+
+function initialMediaKinds(session: DockMediaSessionState): DockMediaFilterKind[] {
+  if (session.activeKinds) return session.activeKinds;
+  return session.activeKind === "all" ? [] : [session.activeKind];
+}
+
 function isDockTextAlign(value: unknown): value is DockTextAlign {
   return value === "left" || value === "center" || value === "right";
 }
@@ -470,6 +485,7 @@ function loadMediaSessionState(): DockMediaSessionState {
     return {
       browserTab: isDockMediaBrowserTab(storedBrowserTab) ? storedBrowserTab : fallback.browserTab,
       activeKind: isDockMediaKind(parsed.activeKind) ? parsed.activeKind : fallback.activeKind,
+      activeKinds: sanitizeMediaKinds(parsed.activeKinds),
       viewMode: (parsed.viewMode === "uploaded" || parsed.viewMode === "recent") ? parsed.viewMode : fallback.viewMode,
       activeTargetKeys: {
         active: typeof parsed.activeTargetKeys?.active === "string" ? parsed.activeTargetKeys.active : null,
@@ -827,7 +843,55 @@ function DockMediaTab({
     }
   }, [browserTab]);
   const [dockPlan, setDockPlan] = useState(() => getDockPlan());
-  const [activeKind, setActiveKind] = useState<DockMediaFilter>(() => mediaSession.activeKind);
+  // Filter menu: any number of types can be ticked (none = all). The older single-type logic below
+  // keeps reading `activeKind`: exactly one ticked type is that type, anything else counts as "all".
+  const [activeKinds, setActiveKinds] = useState<DockMediaFilterKind[]>(() => initialMediaKinds(mediaSession));
+  const activeKind: DockMediaFilter = activeKinds.length === 1 ? activeKinds[0] : "all";
+  const setActiveKind = useCallback(
+    (kind: DockMediaFilter) => setActiveKinds(kind === "all" ? [] : [kind]),
+    [],
+  );
+  const toggleMediaKind = useCallback(
+    (kind: DockMediaFilterKind) => setActiveKinds((current) => (
+      current.includes(kind) ? current.filter((item) => item !== kind) : [...current, kind]
+    )),
+    [],
+  );
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const filterMenuRef = useRef<HTMLDivElement>(null);
+  // Short docks: Uploads / Animations / Patterns collapse into one dropdown (was a third side column).
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const viewMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!viewMenuOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (viewMenuRef.current && !viewMenuRef.current.contains(event.target as Node)) setViewMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setViewMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [viewMenuOpen]);
+  useEffect(() => {
+    if (!filterMenuOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (filterMenuRef.current && !filterMenuRef.current.contains(event.target as Node)) setFilterMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setFilterMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [filterMenuOpen]);
   const [viewMode, setViewMode] = useState<DockMediaViewMode>(() => mediaSession.viewMode);
   const [assetSearch, setAssetSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -2353,10 +2417,10 @@ let _cachedGlobalUploadsDir: string | null = null;
   const isAudioLocked = isFreePlan && !isDockTrialActive();
 
   useEffect(() => {
-    if (isAudioLocked && activeKind === "audio") {
-      setActiveKind("all");
+    if (isAudioLocked && activeKinds.includes("audio")) {
+      setActiveKinds((current) => current.filter((kind) => kind !== "audio"));
     }
-  }, [isAudioLocked, activeKind]);
+  }, [isAudioLocked, activeKinds]);
 
   const animationIdentitySet = useMemo(() => new Set(
     animationEntries.flatMap((entry) => [
@@ -2369,7 +2433,15 @@ let _cachedGlobalUploadsDir: string | null = null;
   ), [animationEntries]);
 
   const filteredUploadEntries = useMemo(() => {
-    const pool = activeKind === "all"
+    const multiKindKeys = new Set<string>();
+    if (activeKinds.length > 1) {
+      if (activeKinds.includes("video")) videoEntries.forEach((entry) => multiKindKeys.add(entry.key));
+      if (activeKinds.includes("image")) imageEntries.forEach((entry) => multiKindKeys.add(entry.key));
+      if (activeKinds.includes("audio")) audioEntries.forEach((entry) => multiKindKeys.add(entry.key));
+    }
+    const pool = activeKinds.length > 1
+      ? nonDocumentMediaEntries.filter((entry) => multiKindKeys.has(entry.key))
+      : activeKind === "all"
       ? nonDocumentMediaEntries
       : activeKind === "video"
         ? videoEntries
@@ -2399,7 +2471,7 @@ let _cachedGlobalUploadsDir: string | null = null;
       return !identities.some((identity) => animationIdentitySet.has(identity));
     });
     return withoutTemplateDuplicates;
-  }, [activeFolder, activeKind, animationIdentitySet, assetSearch, audioEntries, imageEntries, mediaPrefs, nonDocumentMediaEntries, videoEntries]);
+  }, [activeFolder, activeKind, activeKinds, animationIdentitySet, assetSearch, audioEntries, imageEntries, mediaPrefs, nonDocumentMediaEntries, videoEntries]);
 
   const filteredDocumentDecks = useMemo(() => {
     const query = assetSearch.trim().toLowerCase();
@@ -2717,6 +2789,7 @@ let _cachedGlobalUploadsDir: string | null = null;
       localStorage.setItem(MEDIA_SESSION_STORAGE_KEY, JSON.stringify({
         browserTab,
         activeKind,
+        activeKinds,
         viewMode,
         activeTargetKeys,
         pausedTargets,
@@ -2726,7 +2799,7 @@ let _cachedGlobalUploadsDir: string | null = null;
     } catch {
       // Dock session persistence is convenience-only.
     }
-  }, [activeKind, activeTargetKeys, browserTab, pausedTargets, textOverlay, textOverlayTargets, viewMode]);
+  }, [activeKind, activeKinds, activeTargetKeys, browserTab, pausedTargets, textOverlay, textOverlayTargets, viewMode]);
 
   useEffect(() => {
     if (activeKind === "video" && videoEntries.length === 0 && imageEntries.length > 0) {
@@ -4363,8 +4436,20 @@ let _cachedGlobalUploadsDir: string | null = null;
     </div>
   );
 
-  const hasVisibleDocumentDecks = (activeKind === "all" || activeKind === "document") && filteredDocumentDecks.length > 0;
+  const hasVisibleDocumentDecks = (activeKinds.length === 0 || activeKinds.includes("document")) && filteredDocumentDecks.length > 0;
   const hasVisibleMediaEntries = filteredUploadEntries.length > 0;
+  const mediaKindOptions: Array<{ id: DockMediaFilterKind; label: string; count: number; locked?: boolean }> = [
+    { id: "video", label: t('media.tabVideos'), count: videoEntries.length },
+    { id: "image", label: t('media.tabImages'), count: imageEntries.length },
+    { id: "audio", label: "Audio", count: audioEntries.length, locked: isAudioLocked },
+    { id: "document", label: "Docs", count: documentDecks.length },
+  ];
+  const mediaFilterSummary = activeKinds.length === 0
+    ? t('media.all')
+    : activeKinds.length <= 2
+      ? mediaKindOptions.filter((option) => activeKinds.includes(option.id)).map((option) => option.label).join(", ")
+      : `${activeKinds.length} ${t('media.types', 'types')}`;
+  const mediaFilterCount = filteredUploadEntries.length + (hasVisibleDocumentDecks ? filteredDocumentDecks.length : 0);
   const activeKindSearchLabel = activeKind === "audio"
     ? "audio"
     : activeKind === "video"
@@ -4473,6 +4558,52 @@ let _cachedGlobalUploadsDir: string | null = null;
       )}
     </div>
   );
+
+  const renderMediaViewSwitch = () => {
+    const views: Array<{ id: "uploads" | "animations" | "patterns"; icon: string; label: string; count: ReactNode; locked?: boolean; onPick: () => void }> = [
+      { id: "uploads", icon: "perm_media", label: t('media.uploads'), count: mediaEntries.length, onPick: () => setBrowserTab("uploads") },
+      { id: "animations", icon: "movie", label: t('media.tabAnimations'), count: animationsLocked ? <Icon name="lock" size={10} /> : animationCatalogCount, locked: animationsLocked, onPick: openAnimationsTab },
+      { id: "patterns", icon: "grid_view", label: t('media.patterns', 'Patterns'), count: BACKGROUND_PATTERNS.length, onPick: () => setBrowserTab("patterns") },
+    ];
+    const current = views.find((view) => view.id === browserTab) ?? views[0];
+    return (
+      <div className="dock-media-viewswitch" ref={viewMenuRef}>
+        <button
+          type="button"
+          className={`dock-media-viewswitch__trigger${viewMenuOpen ? " dock-media-viewswitch__trigger--open" : ""}`}
+          onClick={() => setViewMenuOpen((open) => !open)}
+          aria-haspopup="menu"
+          aria-expanded={viewMenuOpen}
+          aria-label={t('media.mediaBrowserViews')}
+          title={current.label}>
+          <Icon name={current.icon} size={14} />
+          <Icon name="expand_more" size={12} />
+        </button>
+        {viewMenuOpen && (
+          <div className="dock-media-filterbar__menu dock-media-viewswitch__menu" role="menu" aria-label={t('media.mediaBrowserViews')}>
+            {views.map((view) => (
+              <button
+                key={view.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={browserTab === view.id}
+                disabled={view.locked}
+                className={`dock-media-filterbar__item${view.locked ? " dock-media-filterbar__item--locked" : ""}`}
+                onClick={() => {
+                  view.onPick();
+                  setViewMenuOpen(false);
+                }}>
+                <span className={`dock-media-filterbar__radio${browserTab === view.id ? " dock-media-filterbar__radio--on" : ""}`} />
+                <Icon name={view.icon} size={13} />
+                <span className="dock-media-filterbar__item-label">{view.label}</span>
+                <span className="dock-media-filterbar__item-count">{view.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderMediaFolderFilter = () => {
     if (mediaFolders.length === 0 || (browserTab !== "uploads" && browserTab !== "animations")) {
@@ -4630,6 +4761,7 @@ let _cachedGlobalUploadsDir: string | null = null;
       {/* ── Search Bar (collapsible) ── */}
       {browserTab !== "text" && (
         <div className={`dock-media-search-row${isCompactHeight ? " dock-media-search-row--compact" : ""}`}>
+          {isCompactHeight && renderMediaViewSwitch()}
           <div
             role={searchOpen ? undefined : "button"}
             tabIndex={searchOpen ? undefined : 0}
@@ -5073,95 +5205,101 @@ let _cachedGlobalUploadsDir: string | null = null;
                   );
                 })() : (
                   <>
-                    {/* Kind toggle */}
-                    <div className="dock-media-pills" role="tablist" aria-label={t('media.uploadType')}>
+                    {/* Filter: pick one or several types and the order, in one menu. */}
+                    <div className="dock-media-filterbar" ref={filterMenuRef}>
                       <button
                         type="button"
-                        role="tab"
-                        aria-selected={activeKind === "all"}
-                        className={`dock-media-pill${activeKind === "all" ? " dock-media-pill--active" : ""}`}
-                        onClick={() => setActiveKind("all")}
-                        title={t('media.all')}>
-                        {t('media.all')}
-                        <span className="dock-media-pill__count">{nonDocumentMediaEntries.length + documentDecks.length}</span>
+                        className={`dock-media-filterbar__trigger${filterMenuOpen ? " dock-media-filterbar__trigger--open" : ""}${activeKinds.length > 0 ? " dock-media-filterbar__trigger--active" : ""}`}
+                        onClick={() => setFilterMenuOpen((open) => !open)}
+                        aria-haspopup="menu"
+                        aria-expanded={filterMenuOpen}
+                        aria-label={t('media.filter', 'Filter')}
+                        title={t('media.filter', 'Filter')}>
+                        <Icon name="filter_list" size={13} />
+                        <span className="dock-media-filterbar__label">{mediaFilterSummary}</span>
+                        <span className="dock-media-filterbar__count">{mediaFilterCount}</span>
+                        <Icon name={filterMenuOpen ? "expand_less" : "expand_more"} size={14} />
                       </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={activeKind === "video"}
-                        className={`dock-media-pill${activeKind === "video" ? " dock-media-pill--active" : ""}`}
-                        onClick={() => setActiveKind("video")}
-                        title={t('media.tabVideos')}>
-                        {t('media.tabVideos')}
-                        <span className="dock-media-pill__count">{videoEntries.length}</span>
-                      </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={activeKind === "audio"}
-                        aria-disabled={isAudioLocked}
-                        className={`dock-media-pill${activeKind === "audio" ? " dock-media-pill--active" : ""}${isAudioLocked ? " dock-media-pill--disabled" : ""}`}
-                        onClick={() => {
-                          if (isAudioLocked) {
-                            showUpgradeModal("Audio library and playback are available on Basic and Growth plans. Upgrade to unlock.");
-                            return;
-                          }
-                          setActiveKind("audio");
-                        }}
-                        title={isAudioLocked ? "Audio is locked on Free plan. Upgrade to unlock." : "Audio"}>
-                        {isAudioLocked && <Icon name="lock" size={10} style={{ marginRight: 2 }} />}
-                        Audio
-                        <span className="dock-media-pill__count">
-                          {isAudioLocked ? <Icon name="lock" size={10} /> : audioEntries.length}
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={activeKind === "image"}
-                        className={`dock-media-pill${activeKind === "image" ? " dock-media-pill--active" : ""}`}
-                        onClick={() => setActiveKind("image")}
-                        title={t('media.tabImages')}>
-                        {t('media.tabImages')}
-                        <span className="dock-media-pill__count">{imageEntries.length}</span>
-                      </button>
-                      <button
-                        type="button"
-                        role="tab"
-                        aria-selected={activeKind === "document"}
-                        className={`dock-media-pill${activeKind === "document" ? " dock-media-pill--active" : ""}`}
-                        onClick={() => setActiveKind("document")}
-                        title="Documents">
-                        Docs
-                        <span className="dock-media-pill__count">{documentDecks.length}</span>
-                      </button>
+                      {activeKinds.length > 0 && (
+                        <button
+                          type="button"
+                          className="dock-media-filterbar__clear"
+                          onClick={() => setActiveKinds([])}
+                          aria-label={t('media.clearFilter', 'Clear filter')}
+                          title={t('media.clearFilter', 'Clear filter')}>
+                          <Icon name="close" size={12} />
+                        </button>
+                      )}
+                      {filterMenuOpen && (
+                        <div className="dock-media-filterbar__menu" role="menu" aria-label={t('media.filter', 'Filter')}>
+                          <div className="dock-media-filterbar__heading">{t('media.filterType', 'Type')}</div>
+                          <button
+                            type="button"
+                            role="menuitemcheckbox"
+                            aria-checked={activeKinds.length === 0}
+                            className="dock-media-filterbar__item"
+                            onClick={() => setActiveKinds([])}>
+                            <span className={`dock-media-filterbar__box${activeKinds.length === 0 ? " dock-media-filterbar__box--on" : ""}`}>
+                              {activeKinds.length === 0 && <Icon name="check" size={10} />}
+                            </span>
+                            <span className="dock-media-filterbar__item-label">{t('media.all')}</span>
+                            <span className="dock-media-filterbar__item-count">{nonDocumentMediaEntries.length + documentDecks.length}</span>
+                          </button>
+                          {mediaKindOptions.map((option) => {
+                            const checked = activeKinds.includes(option.id);
+                            return (
+                              <button
+                                key={option.id}
+                                type="button"
+                                role="menuitemcheckbox"
+                                aria-checked={checked}
+                                aria-disabled={option.locked || undefined}
+                                className={`dock-media-filterbar__item${option.locked ? " dock-media-filterbar__item--locked" : ""}`}
+                                onClick={() => {
+                                  if (option.locked) {
+                                    showUpgradeModal("Audio library and playback are available on Basic and Growth plans. Upgrade to unlock.");
+                                    return;
+                                  }
+                                  toggleMediaKind(option.id);
+                                }}>
+                                <span className={`dock-media-filterbar__box${checked ? " dock-media-filterbar__box--on" : ""}`}>
+                                  {checked && <Icon name="check" size={10} />}
+                                </span>
+                                <span className="dock-media-filterbar__item-label">{option.label}</span>
+                                <span className="dock-media-filterbar__item-count">
+                                  {option.locked ? <Icon name="lock" size={10} /> : option.count}
+                                </span>
+                              </button>
+                            );
+                          })}
+                          {!isFreePlan && (
+                            <>
+                              <div className="dock-media-filterbar__heading">{t('media.sortOrder')}</div>
+                              {([
+                                { id: "recent", label: t('media.recentlyUsed') },
+                                { id: "uploaded", label: t('media.newlyUploaded') },
+                              ] as const).map((option) => (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  role="menuitemradio"
+                                  aria-checked={viewMode === option.id}
+                                  className="dock-media-filterbar__item"
+                                  onClick={() => {
+                                    setViewMode(option.id);
+                                    setFilterMenuOpen(false);
+                                  }}>
+                                  <span className={`dock-media-filterbar__radio${viewMode === option.id ? " dock-media-filterbar__radio--on" : ""}`} />
+                                  <span className="dock-media-filterbar__item-label">{option.label}</span>
+                                </button>
+                              ))}
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {renderMediaFolderFilter()}
-
-                    {/* View mode toggle — hidden for free plan users */}
-                    {!isFreePlan && (
-                      <div className="dock-media-pills dock-media-pills--secondary" role="tablist" aria-label={t('media.sortOrder')}>
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={viewMode === "recent"}
-                          className={`dock-media-pill dock-media-pill--small${viewMode === "recent" ? " dock-media-pill--active" : ""}`}
-                          onClick={() => setViewMode("recent")}
-                          title={t('media.recentlyUsed')}>
-                          {isUltraCompactHeight ? t('media.recentShort', 'Recent') : t('media.recentlyUsed')}
-                        </button>
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={viewMode === "uploaded"}
-                          className={`dock-media-pill dock-media-pill--small${viewMode === "uploaded" ? " dock-media-pill--active" : ""}`}
-                          onClick={() => setViewMode("uploaded")}
-                          title={t('media.newlyUploaded')}>
-                          {isUltraCompactHeight ? t('media.uploadedShort', 'Uploaded') : t('media.newlyUploaded')}
-                        </button>
-                      </div>
-                    )}
 
                     {/* Feedback banners */}
                     {downloadSuccess && (
@@ -5213,7 +5351,7 @@ let _cachedGlobalUploadsDir: string | null = null;
                         )}
                       </div>
                     ) : (
-                      <div key={`${browserTab}-${activeKind}`} className="dock-media-list">
+                      <div key={`${browserTab}-${activeKinds.join("+")}`} className="dock-media-list">
                         {hasVisibleDocumentDecks && filteredDocumentDecks.map((deck) => renderDocumentCard(deck))}
                         {filteredUploadEntries.map((entry) => renderMediaCard(entry))}
                       </div>

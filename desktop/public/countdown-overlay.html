@@ -103,6 +103,57 @@
       opacity: 0;
     }
 
+    /* ── Rundown extras (only active when payload.rundown is present) ── */
+    .timer-display.warn-green { color: #22c55e; }
+    .timer-display.warn-yellow { color: #eab308; }
+    .timer-display.warn-red { color: #ef4444; }
+
+    .progress-track {
+      display: none;
+      width: 60%;
+      max-width: 1100px;
+      height: clamp(8px, 1.4vw, 24px);
+      margin-top: clamp(10px, 2vw, 36px);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.18);
+      overflow: hidden;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+    }
+
+    .progress-track.on { display: block; }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: #22c55e;
+      transition: width 0.25s linear, background-color 0.25s linear;
+    }
+
+    .message-display.rundown-message {
+      margin-top: clamp(10px, 2vw, 36px);
+      font-size: clamp(22px, 4.5vw, 90px);
+    }
+
+    .message-display.flash { animation: rundown-flash 0.9s steps(1, end) infinite; }
+
+    @keyframes rundown-flash {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.15; }
+    }
+
+    /* ── Layer designs (payload.layoutMode): the renderer draws the timer, so the classic elements step aside ── */
+    html.lm-on #timer, html.lm-on #progress { display: none !important; }
+    html.lm-on #countdown-container { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
+    html.lm-on .message-display.rundown-message {
+      position: fixed; left: 50%; bottom: 5%; transform: translateX(-50%); margin: 0;
+    }
+    #lm-host { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .message-display.flash { animation: none !important; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       .timer-display.reveal {
         animation: none;
@@ -120,9 +171,11 @@
 <body>
   <div id="countdown-container">
     <div id="timer" class="timer-display"></div>
+    <div id="progress" class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
     <div id="message" class="message-display hidden"></div>
   </div>
 
+  <script src="/theme-renderer.js"></script>
   <script>
     let countdownTimer = null;
     let totalDuration = 0;
@@ -133,6 +186,15 @@
 
     const timerEl = document.getElementById("timer");
     const messageEl = document.getElementById("message");
+    const progressEl = document.getElementById("progress");
+    const progressFillEl = document.getElementById("progress-fill");
+    // Rundown mode (set from payload.rundown; null = classic countdown behaviour)
+    let rd = null;
+    let rdPaused = false;
+    let rdBase = 0;
+    let rdStartedAt = 0;
+    const WARN_COLORS = { green: "#22c55e", yellow: "#eab308", red: "#ef4444" };
+    const MSG_COLORS = { white: "#ffffff", green: "#4ade80", yellow: "#facc15", red: "#f87171" };
 
     function parsePayload() {
       try {
@@ -155,7 +217,88 @@
       return parts.join(":") || "00:00";
     }
 
+    function formatSigned(v, ceil) {
+      const n = ceil ? Math.ceil(v) : Math.floor(v);
+      const sign = n < 0 ? "-" : "";
+      const a = Math.abs(n);
+      const h = Math.floor(a / 3600);
+      const m = Math.floor((a % 3600) / 60);
+      const s = a % 60;
+      const mm = String(m).padStart(2, "0");
+      const ss = String(s).padStart(2, "0");
+      return h > 0 ? sign + h + ":" + mm + ":" + ss : sign + mm + ":" + ss;
+    }
+
+    function formatClockNow() {
+      const d = new Date();
+      const h = d.getHours();
+      const h12 = h % 12 === 0 ? 12 : h % 12;
+      return h12 + ":" + String(d.getMinutes()).padStart(2, "0") + ":" + String(d.getSeconds()).padStart(2, "0") + " " + (h < 12 ? "AM" : "PM");
+    }
+
+    function rundownTick() {
+      const kind = rd.kind;
+      let text;
+      let level = "green";
+      let fraction = 0;
+      if (kind === "timeofday") {
+        text = formatClockNow();
+      } else {
+        const dt = rdPaused ? 0 : (Date.now() - rdStartedAt) / 1000;
+        const value = kind === "countdown" ? rdBase - dt : rdBase + dt;
+        text = formatSigned(value, kind === "countdown");
+        const left = kind === "countdown" ? value : (rd.durationSeconds > 0 ? rd.durationSeconds - value : null);
+        if (left !== null) {
+          if (rd.warnRedSeconds > 0 && left <= rd.warnRedSeconds) level = "red";
+          else if (rd.warnYellowSeconds > 0 && left <= rd.warnYellowSeconds) level = "yellow";
+          else if (left <= 0) level = "red";
+        }
+        if (rd.durationSeconds > 0) {
+          const elapsed = kind === "countdown" ? rd.durationSeconds - value : value;
+          fraction = Math.min(1, Math.max(0, elapsed / rd.durationSeconds));
+        }
+      }
+      timerEl.textContent = text;
+      timerEl.classList.remove("warn-green", "warn-yellow", "warn-red");
+      if (kind !== "timeofday") timerEl.classList.add("warn-" + level);
+      progressFillEl.style.width = (fraction * 100).toFixed(2) + "%";
+      progressFillEl.style.backgroundColor = WARN_COLORS[level];
+    }
+
+    function applyRundownStyle() {
+      const st = rd.style || {};
+      timerEl.style.fontFamily = st.fontFamily || "";
+      timerEl.style.fontWeight = st.fontWeight ? String(st.fontWeight) : "";
+      timerEl.style.textShadow = st.textShadow || "";
+      timerEl.style.textTransform = st.textTransform || "";
+      if (st.fontUrl && !document.querySelector('link[data-rd-font="' + st.fontUrl + '"]')) {
+        const l = document.createElement("link");
+        l.rel = "stylesheet";
+        l.href = st.fontUrl;
+        l.setAttribute("data-rd-font", st.fontUrl);
+        document.head.appendChild(l);
+      }
+      progressEl.classList.toggle("on", !!rd.showProgressBar && rd.kind !== "timeofday");
+    }
+
+    function renderRundownMessage() {
+      const m = rd.message;
+      messageEl.classList.add("rundown-message");
+      if (m && m.text && String(m.text).trim()) {
+        messageEl.textContent = m.text;
+        messageEl.style.color = MSG_COLORS[m.color] || "#ffffff";
+        messageEl.style.fontWeight = m.bold ? "800" : "500";
+        messageEl.classList.toggle("flash", !!m.flash);
+        messageEl.classList.remove("hidden");
+        messageEl.classList.add("visible");
+      } else {
+        messageEl.classList.remove("visible", "flash");
+        messageEl.classList.add("hidden");
+      }
+    }
+
     function tick() {
+      if (rd) { rundownTick(); return; }
       const elapsed = Math.floor((Date.now() - startedAt) / 1000);
       const remaining = Math.max(0, totalDuration - elapsed);
 
@@ -237,9 +380,121 @@
       }, 220);
     }
 
+    // ── Layer-design mode (payload.layoutMode) ──
+    // The theme renderer draws the whole design (digits, cards, bars). We only keep time here and hand it
+    // the tokens + warning level every tick, so one design works for countdown, count-up, clock and rundown timers.
+    let lm = null;
+    let lmRenderer = null;
+    let lmHost = null;
+    let lmLayoutKey = "";
+    let lmShown = false;
+    let lmPaused = false;
+    let lmBase = 0;
+    let lmStartedAt = 0;
+    let lmTimer = null;
+    let lmInstant = false;
+
+    function stopLayoutMode() {
+      if (lmTimer) { clearInterval(lmTimer); lmTimer = null; }
+      if (lmRenderer) { try { lmRenderer.destroy(); } catch { } lmRenderer = null; }
+      if (lmHost) { lmHost.remove(); lmHost = null; }
+      lm = null;
+      lmShown = false;
+      lmLayoutKey = "";
+      document.documentElement.classList.remove("lm-on");
+    }
+
+    function lmValue() {
+      if (lm.kind === "timeofday") return 0;
+      const dt = lmPaused ? 0 : (Date.now() - lmStartedAt) / 1000;
+      if (lm.kind === "countdown") {
+        const v = lmBase - dt;
+        return lm.overtime ? Math.ceil(v) : Math.max(0, Math.ceil(v));
+      }
+      return Math.floor(lmBase + dt);
+    }
+
+    function lmContent() {
+      return window.MCECountdownContent({
+        kind: lm.kind,
+        value: lmValue(),
+        durationSeconds: lm.durationSeconds || 0,
+        warnYellowSeconds: lm.warnYellowSeconds || 0,
+        warnRedSeconds: lm.warnRedSeconds || 0,
+        title: lm.title || "",
+        subtitle: lm.subtitle || "",
+        message: lm.message || "",
+        name: lm.name || lm.title || "",
+        speaker: lm.speaker || "",
+        now: new Date(),
+        hour12: lm.hour12 !== false,
+      });
+    }
+
+    function lmTick() {
+      if (!lm || !lmRenderer) return;
+      const content = lmContent();
+      if (!lmShown) { lmShown = true; if (lmInstant) lmRenderer.showInstant(content); else lmRenderer.show(content); }
+      else lmRenderer.updateLive(content);
+      if (!lm.overtime && lm.kind === "countdown" && lmValue() <= 0 && lmTimer) {
+        clearInterval(lmTimer);
+        lmTimer = null;
+        handleAutoAction();
+      }
+    }
+
+    function startLayoutMode(payload) {
+      const next = payload.layoutMode;
+      const key = JSON.stringify(next.layout);
+      if (lmRenderer && key !== lmLayoutKey) stopLayoutMode();
+      if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+      if (lmTimer) { clearInterval(lmTimer); lmTimer = null; }
+      const sync = payload.sync;
+      lm = next;
+      lmInstant = payload.reveal === false;
+      currentCfg = payload.config || {};
+      lmPaused = !!(sync && sync.paused);
+      lmStartedAt = Date.now();
+      if (sync && typeof sync.remaining === "number") lmBase = sync.remaining;
+      else if (lm.kind === "countdown") lmBase = lm.durationSeconds || 0;
+      else lmBase = 0;
+      document.documentElement.classList.add("lm-on");
+      rd = payload.rundown || null;
+      if (rd) {
+        document.getElementById("countdown-container").appendChild(messageEl);
+        renderRundownMessage();
+      } else {
+        messageEl.classList.remove("visible", "reveal", "flash");
+        messageEl.classList.add("hidden");
+      }
+      if (!lmRenderer) {
+        lmHost = document.createElement("div");
+        lmHost.id = "lm-host";
+        document.body.appendChild(lmHost);
+        const origin = window.location.origin;
+        lmRenderer = new window.MCEThemeRenderer(lmHost, {
+          resolveAsset: function (src) {
+            if (!src || /^(data:|blob:|https?:)/i.test(src)) return src;
+            return src.charAt(0) === "/" ? origin + src : src;
+          },
+        });
+        lmRenderer.setLayout(next.layout);
+        lmLayoutKey = key;
+        lmShown = false;
+      }
+      lmTick();
+      if (!lmPaused || lm.kind === "timeofday") lmTimer = setInterval(lmTick, 250);
+    }
+
     function render() {
       const payload = parsePayload();
       if (!payload || !payload.config) return;
+
+      if (payload.layoutMode && payload.layoutMode.layout && window.MCEThemeRenderer && window.MCECountdownContent) {
+        startLayoutMode(payload);
+        return;
+      }
+      if (lmRenderer || lm) stopLayoutMode();
 
       if (countdownTimer) {
         clearInterval(countdownTimer);
@@ -250,6 +505,41 @@
       const timer = currentCfg.timer || {};
       const sync = payload.sync;
       let paused = false;
+
+      // ── Rundown mode: value/paused come from sync, kind-specific rendering ──
+      if (payload.rundown) {
+        rd = payload.rundown;
+        rdPaused = !!(sync && sync.paused);
+        rdBase = sync && typeof sync.remaining === "number" ? sync.remaining : 0;
+        rdStartedAt = Date.now();
+        lastSyncState = sync || null;
+        const cont = document.getElementById("countdown-container");
+        cont.insertBefore(timerEl, progressEl);
+        cont.appendChild(messageEl);
+        applyRundownStyle();
+        rundownTick();
+        renderRundownMessage();
+        if (payload.reveal === false) {
+          if (revealTimer) { clearTimeout(revealTimer); revealTimer = null; }
+          timerEl.classList.remove("reveal");
+          timerEl.classList.add("visible");
+        } else {
+          if (revealTimer) clearTimeout(revealTimer);
+          timerEl.classList.remove("visible", "reveal");
+          revealTimer = window.setTimeout(() => { timerEl.classList.add("reveal"); revealTimer = null; }, 220);
+        }
+        if (!rdPaused || rd.kind === "timeofday") countdownTimer = setInterval(rundownTick, 250);
+        return;
+      }
+      rd = null;
+      timerEl.style.fontFamily = "";
+      timerEl.style.fontWeight = "";
+      timerEl.style.textShadow = "";
+      timerEl.style.textTransform = "";
+      messageEl.style.fontWeight = "";
+      progressEl.classList.remove("on");
+      timerEl.classList.remove("warn-green", "warn-yellow", "warn-red");
+      messageEl.classList.remove("rundown-message", "flash");
 
       // If sync state provided, use remaining directly instead of calculating
       if (sync && typeof sync.remaining === "number") {

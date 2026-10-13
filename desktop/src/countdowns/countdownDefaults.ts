@@ -2,6 +2,7 @@
  * countdownDefaults.ts — Default values for countdown templates and configs
  */
 
+import { countdownPresetById, DEFAULT_COUNTDOWN_PRESET_ID } from "./layouts/presets";
 import type {
   CountdownConfig,
   CountdownTemplate,
@@ -203,6 +204,29 @@ export function createDefaultCountdown(
     },
     createdAt: now,
     updatedAt: now,
+  };
+}
+
+/** A countdown made from a built-in layer style (countdowns/layouts/presets.ts). Fully editable afterwards. */
+export function createLayoutCountdown(presetId: string, id: string): CountdownConfig {
+  const preset = countdownPresetById(presetId) ?? countdownPresetById(DEFAULT_COUNTDOWN_PRESET_ID)!;
+  const base = createDefaultCountdown("custom", id);
+  const seconds = preset.sample.durationSeconds > 0 ? preset.sample.durationSeconds : 300;
+  return {
+    ...base,
+    title: preset.name,
+    presetId: preset.id,
+    layout: JSON.parse(JSON.stringify(preset.layout)) as CountdownConfig["layout"],
+    warnYellowSeconds: preset.sample.warnYellowSeconds,
+    warnRedSeconds: preset.sample.warnRedSeconds,
+    timer: {
+      ...base.timer,
+      durationSeconds: seconds,
+      showHours: seconds >= 3600,
+      showMinutes: true,
+      showSeconds: true,
+    },
+    text: { ...base.text, title: preset.sample.title, subtitle: preset.sample.subtitle },
   };
 }
 

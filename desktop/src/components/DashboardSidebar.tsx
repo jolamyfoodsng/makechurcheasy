@@ -25,6 +25,7 @@ import {
   PanelLeftOpen,
   LogOut,
   LayoutGrid,
+  Timer,
   Tv,
   Zap,
   GraduationCap,
@@ -140,6 +141,7 @@ export default function DashboardSidebar({
     if (
       currentPath.startsWith("/broadcast-graphics") ||
       currentPath.startsWith("/production/themes") ||
+      currentPath.startsWith("/countdowns") ||
       currentPath.startsWith("/gallery") ||
       currentPath.startsWith("/multiview")
     ) {
@@ -151,6 +153,7 @@ export default function DashboardSidebar({
   const templatesActive =
     currentPath.startsWith("/broadcast-graphics") ||
     currentPath.startsWith("/production/themes") ||
+    currentPath.startsWith("/countdowns") ||
     currentPath.startsWith("/gallery") ||
     currentPath.startsWith("/multiview");
 
@@ -413,10 +416,24 @@ export default function DashboardSidebar({
                 <Palette className="sidebar-subnav-icon" />
                 <span>{t("sidebar.themes", { defaultValue: "Themes" })}</span>
               </a>
+
+              <a
+                className={`sidebar-subnav-item${currentPath.startsWith("/countdowns") ? " sidebar-subnav-item-active" : ""}`}
+                href="#"
+                title={t("sidebar.countdowns", { defaultValue: "Countdowns & Timers" })}
+                onClick={(e) => {
+                  e.preventDefault();
+                  onNavigate("/countdowns");
+                }}
+              >
+                <Timer className="sidebar-subnav-icon" />
+                <span>{t("sidebar.countdowns", { defaultValue: "Countdowns & Timers" })}</span>
+              </a>
             </div>
           )}
 
           {navItem("/broadcast", Radio, t("sidebar.multiStream", { defaultValue: "Multi-Stream" }), !isFreePlan, isFreePlan)}
+          {navItem("/studio", MonitorPlay, t("sidebar.studio", { defaultValue: "Studio" }))}
           {navItem("/presentation", Tv, t("sidebar.presentation"))}
         </div>
       </div>

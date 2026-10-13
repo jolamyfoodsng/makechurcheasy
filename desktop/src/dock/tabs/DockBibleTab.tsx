@@ -8683,8 +8683,8 @@ function DockBibleTab({
                       onContextMenu={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        const menuWidth = 210;
-                        const menuHeight = 280;
+                        const menuWidth = 190;
+                        const menuHeight = 240;
                         const viewportW = window.innerWidth || 800;
                         const viewportH = window.innerHeight || 600;
                         const clampedX = Math.max(8, Math.min(e.clientX, viewportW - menuWidth - 8));

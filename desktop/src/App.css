@@ -23981,3 +23981,16 @@ html.mv-theme-light .tc-preview-area {
   width: auto;
   min-width: 150px;
 }
+
+/* Ready-made themes the plan has not unlocked yet */
+.production-theme-card--locked .production-theme-card__preview {
+  opacity: 0.55;
+  filter: saturate(0.7);
+}
+
+.production-theme-card__meta-pill--locked {
+  gap: 4px;
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.1);
+}

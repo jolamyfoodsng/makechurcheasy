@@ -8,6 +8,7 @@ import { useDockSceneRoute } from "../dockSceneRouting";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import { readNativeDockSetting, writeNativeDockSetting } from "../../services/localDockSettings";
 import DockCountdownsTab from "./DockCountdownsTab";
+import DockRundownTab from "./DockRundownTab";
 import {
   DOCK_TIME_LOWER_THIRD_SOURCE_NAME,
   DOCK_TIME_SOURCE_NAME,
@@ -22,7 +23,7 @@ import {
 } from "../timeOverlay";
 import { DOCK_PRESENTATION_SCENE_NAME } from "./dockCountdownScene";
 
-type TimeSubTab = "countdown" | "clock";
+type TimeSubTab = "countdown" | "rundown" | "clock";
 
 interface TimerSettings extends DockTimerOverlayState {
   label: string;
@@ -617,6 +618,10 @@ export default function DockTimeTab({
       return <DockCountdownsTab presentationOutputTarget={presentationOutputTarget} />;
     }
 
+    if (activeTab === "rundown") {
+      return <DockRundownTab presentationOutputTarget={presentationOutputTarget} />;
+    }
+
     const currentMode = stagedClock.mode;
     const currentPlacement = stagedClock.placement;
     const currentLabel = stagedClock.label;
@@ -821,6 +826,16 @@ export default function DockTimeTab({
         >
           <Icon name="hourglass" size={12} />
           <span>Countdown</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "rundown"}
+          className={activeTab === "rundown" ? "dock-time-tabs__button dock-time-tabs__button--active" : "dock-time-tabs__button"}
+          onClick={() => setActiveTab("rundown")}
+        >
+          <Icon name="checklist" size={12} />
+          <span>Rundown</span>
         </button>
         <button
           type="button"

@@ -1,6 +1,7 @@
 import type { CountdownConfig } from "../countdowns/types";
 import type { MediaItem } from "../library/libraryTypes";
 import { toStoredOverlayAssetUrl } from "./overlayUrl";
+import { emitStudioDockEvent } from "../studio/studioDockSink";
 import { getPresentationSettings } from "./presentationSettings";
 import {
   clearPresentationState,
@@ -159,6 +160,7 @@ export async function publishMediaToPresentation(
   if (media.type === "audio") {
     throw new Error("Audio playback requires a direct OBS connection.");
   }
+  emitStudioDockEvent({ kind: "media", media, fit: options?.fit });
   const url = getRemoteViewerAssetUrl(media);
   const fit: PresentationMediaFit = options?.fit ?? "cover";
   const backgroundColor = options?.backgroundColor ?? "transparent";
@@ -375,6 +377,7 @@ export async function clearGraphicFromPresentation(): Promise<void> {
 }
 
 export async function clearPresentationScreen(): Promise<void> {
+  emitStudioDockEvent({ kind: "clear" });
   const { sessionId } = getPresentationSettings();
   await clearPresentationState(sessionId);
 }

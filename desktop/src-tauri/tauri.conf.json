@@ -21,7 +21,8 @@
         "minWidth": 800,
         "minHeight": 600,
         "center": true,
-        "visible": true
+        "visible": true,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
       }
     ],
     "security": {
@@ -40,6 +41,7 @@
       "../dist/mce-bible-overlay.html",
       "../dist/mce-worship-overlay.html",
       "../dist/mce-note.html",
+      "../dist/studio-output.html",
       "../dist/mce-media-overlay.html",
       "../dist/bible-overlay-bg.html",
       "../dist/bible-kjv.json",
@@ -48,6 +50,7 @@
       "../dist/pre-service-media.html",
       "../dist/countdown-overlay.html",
       "../dist/countdown-bg-overlay.html",
+      "../dist/rundown-presenter.html",
       "../dist/live-tool-overlay.html",
       "../dist/time-overlay.html",
       "../dist/mce-template-overlay.html",

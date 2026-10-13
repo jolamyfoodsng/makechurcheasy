@@ -5,13 +5,14 @@
 import { useState } from "react";
 import { Eye, EyeOff, Lock, Unlock } from "lucide-react";
 import "./layerEditor.css";
-import type { AnimationPreset, LayerAnimation, LayerType, ThemeLayer, ThemeLayout } from "../types";
+import type { AnimationPreset, LayerAnimation, LayerStyle, LayerType, SegmentStyle, ThemeLayer, ThemeLayout, WarnLevel } from "../types";
 import {
   addLayer,
   duplicateLayer,
   getLayer,
   moveLayer,
   removeLayer,
+  COUNTDOWN_TEXT_ROLES,
   roleForContent,
   TEXT_ROLES,
   updateLayer,
@@ -34,6 +35,11 @@ const FONTS = [
   "Libre Baskerville", "Playfair Display", "Source Serif 4", "EB Garamond", "Cormorant Garamond", "Cinzel",
   "Caveat", "Dancing Script", "Great Vibes", "Satisfy", "Arial",
 ];
+
+/** Extra fonts the built-in countdown designs ship (public/fonts/countdown-fonts.css). */
+const COUNTDOWN_FONTS = [...FONTS.slice(0, -1), "Anton", "Kaushan Script", "Archivo Black", "Arial"];
+
+const WARN_DEFAULT_COLORS: Record<WarnLevel, string> = { green: "#22c55e", yellow: "#eab308", red: "#ef4444" };
 
 const ANIMATIONS: Array<{ id: AnimationPreset; label: string }> = [
   { id: "none", label: "None" },
@@ -234,14 +240,99 @@ function AnimField({ label, value, onChange }: { label: string; value: LayerAnim
   );
 }
 
+type StylePatch = (patch: Partial<LayerStyle>) => void;
+
+/** Colour that follows the timer's green / yellow / red level. */
+function WarnControls({ s, onStyle, targets }: { s: LayerStyle; onStyle: StylePatch; targets: Array<"text" | "fill" | "border"> }) {
+  const labels = { text: "Text colour", fill: "Fill colour", border: "Border colour" } as const;
+  return (
+    <>
+      <label className="le-field">
+        <span>Follows timer level</span>
+        <select className="tc-input tc-select" value={s.warn ?? ""} onChange={(e) => onStyle({ warn: (e.target.value || undefined) as LayerStyle["warn"] })}>
+          <option value="">No (fixed colour)</option>
+          {targets.map((t) => <option key={t} value={t}>{labels[t]}</option>)}
+        </select>
+      </label>
+      {s.warn && (
+        <>
+          {(["green", "yellow", "red"] as WarnLevel[]).map((lvl) => (
+            <ColorField
+              key={lvl}
+              label={lvl === "green" ? "Normal (green)" : lvl === "yellow" ? "Warning (yellow)" : "Time almost up (red)"}
+              value={s.warnColors?.[lvl] ?? WARN_DEFAULT_COLORS[lvl]}
+              onChange={(v) => onStyle({ warnColors: { ...s.warnColors, [lvl]: v ?? WARN_DEFAULT_COLORS[lvl] } })}
+            />
+          ))}
+          <p className="le-hint">Set the yellow and red times in the Timer tab. With no times set, the colour stays green.</p>
+        </>
+      )}
+    </>
+  );
+}
+
+const DEFAULT_SEGMENT: SegmentStyle = { thickness: 12, gap: 2.4, spacing: 18, slant: 0, offOpacity: 0.1, glow: 0 };
+
+/** Seven-segment, flip, one-line and distressed controls for time digits. */
+function TimerTextControls({ s, onStyle }: { s: LayerStyle; onStyle: StylePatch }) {
+  const seg = s.segment;
+  const setSeg = (patch: Partial<SegmentStyle>) => onStyle({ segment: { ...DEFAULT_SEGMENT, ...seg, ...patch } });
+  return (
+    <>
+      <div className="le-subtitle">Timer digits</div>
+      <div className="le-chips">
+        <button type="button" className={`le-chip${s.nowrap ? " le-chip--on" : ""}`} title="Keep on one line and shrink to fit the width" onClick={() => onStyle({ nowrap: !s.nowrap })}>One line</button>
+        <button type="button" className={`le-chip${s.flip ? " le-chip--on" : ""}`} title="Flip animation each time the number changes" onClick={() => onStyle({ flip: !s.flip })}>Flip on change</button>
+        <button type="button" className={`le-chip${seg ? " le-chip--on" : ""}`} title="Draw the digits as a seven-segment display" onClick={() => onStyle({ segment: seg ? undefined : { ...DEFAULT_SEGMENT } })}>7-segment</button>
+      </div>
+      {seg && (
+        <div className="le-grid-2">
+          <Num label="Thickness %" value={seg.thickness ?? 12} min={4} max={30} onChange={(v) => setSeg({ thickness: v })} />
+          <Num label="Segment gap" value={seg.gap ?? 2.4} step={0.2} min={0} onChange={(v) => setSeg({ gap: v })} />
+          <Num label="Digit spacing %" value={seg.spacing ?? 18} min={0} onChange={(v) => setSeg({ spacing: v })} />
+          <Num label="Lean (deg)" value={seg.slant ?? 0} min={0} max={25} onChange={(v) => setSeg({ slant: v })} />
+          <Num label="Unlit opacity" value={seg.offOpacity ?? 0} step={0.02} min={0} max={1} onChange={(v) => setSeg({ offOpacity: v })} />
+          <Num label="Glow (px)" value={seg.glow ?? 0} min={0} max={60} onChange={(v) => setSeg({ glow: v })} />
+        </div>
+      )}
+      <Num label="Rough edges (0–10)" value={s.roughen ?? 0} min={0} max={10} onChange={(v) => onStyle({ roughen: v || undefined })} />
+      <WarnControls s={s} onStyle={onStyle} targets={["text"]} />
+    </>
+  );
+}
+
+/** Progress bar / marker / zones for box layers in a countdown design. */
+function TimerBoxControls({ s, onStyle }: { s: LayerStyle; onStyle: StylePatch }) {
+  return (
+    <>
+      <div className="le-subtitle">Timer bar</div>
+      <label className="le-field">
+        <span>Behaves as</span>
+        <select className="tc-input tc-select" value={s.progress ?? ""} onChange={(e) => onStyle({ progress: (e.target.value || undefined) as LayerStyle["progress"] })}>
+          <option value="">Normal box</option>
+          <option value="elapsed">Progress bar — fills as time passes</option>
+          <option value="remaining">Progress bar — shrinks as time passes</option>
+          <option value="marker">Marker — slides along its parent</option>
+          <option value="zones">Zones — green / yellow / red stretches</option>
+        </select>
+      </label>
+      {s.progress === "marker" && <p className="le-hint">Put this layer inside a wide box (Parent) and it slides across it as time passes.</p>}
+      <WarnControls s={s} onStyle={onStyle} targets={["fill", "border"]} />
+    </>
+  );
+}
+
 export default function LayerPanel({ layout, selectedId, onSelect, onChange, mediaItems = [], mediaPreviewSrc = (item) => item.url || "" }: Props) {
+  const isCountdown = layout.kind === "countdown";
+  const roles = isCountdown ? COUNTDOWN_TEXT_ROLES : TEXT_ROLES;
+  const fonts = isCountdown ? COUNTDOWN_FONTS : FONTS;
   const [addOpen, setAddOpen] = useState(false);
   const layer = getLayer(layout, selectedId);
   const ordered = [...layout.layers].reverse(); // top of the list = drawn on top
   const set = (patch: Partial<ThemeLayer>) => layer && onChange(updateLayer(layout, layer.id, patch));
   const style = (patch: Partial<ThemeLayer["style"]>) => layer && onChange(updateLayerStyle(layout, layer.id, patch));
   const s = layer?.style ?? {};
-  const role = layer?.type === "text" ? roleForContent(layer.content) : "";
+  const role = layer?.type === "text" ? roleForContent(layer.content, roles) : "";
   const parentName = (id?: string) => layout.layers.find((l) => l.id === id)?.name;
   const heading = headingLayers(layout);
   const isHeadingLayer = (id: string) => heading.text.has(id) || heading.decor.has(id);
@@ -363,7 +454,7 @@ export default function LayerPanel({ layout, selectedId, onSelect, onChange, med
             <input className="tc-input" value={layer.name} onChange={(e) => set({ name: e.target.value })} />
           </label>
           {layer.parentId && <p className="le-hint">Inside “{parentName(layer.parentId)}”: positions are measured from its top-left corner.</p>}
-          {layer.type !== "image" && !(layer.type === "text" && roleForContent(layer.content) === "verse") && (
+          {!isCountdown && layer.type !== "image" && !(layer.type === "text" && roleForContent(layer.content) === "verse") && (
             <label className="le-check" title="Heading layers hide together when the heading is switched off, or when Worship / Notes send no label.">
               <input type="checkbox" checked={isHeadingLayer(layer.id)} onChange={(e) => setHeading(layer.id, e.target.checked)} />
               <span>Part of the heading</span>
@@ -378,12 +469,12 @@ export default function LayerPanel({ layout, selectedId, onSelect, onChange, med
                   className="tc-input tc-select"
                   value={role}
                   onChange={(e) => {
-                    const r = TEXT_ROLES.find((x) => x.id === e.target.value);
+                    const r = roles.find((x) => x.id === e.target.value);
                     if (r) set({ content: r.content });
-                    else set({ content: layer.content && roleForContent(layer.content) === "custom" ? layer.content : "Your text" });
+                    else set({ content: layer.content && roleForContent(layer.content, roles) === "custom" ? layer.content : "Your text" });
                   }}
                 >
-                  {TEXT_ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                  {roles.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
                   <option value="custom">Fixed text (type it below)</option>
                 </select>
               </label>
@@ -415,7 +506,7 @@ export default function LayerPanel({ layout, selectedId, onSelect, onChange, med
               <label className="le-field">
                 <span>Font</span>
                 <select className="tc-input tc-select" value={s.fontFamily ?? "Montserrat"} onChange={(e) => style({ fontFamily: e.target.value })}>
-                  {FONTS.map((f) => <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>)}
+                  {fonts.map((f) => <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>)}
                 </select>
               </label>
               <div className="le-grid-2">
@@ -452,6 +543,7 @@ export default function LayerPanel({ layout, selectedId, onSelect, onChange, med
               {role === "verse" && (
                 <ColorField label="Verse number colour" value={s.verseNumberColor} onChange={(v) => style({ verseNumberColor: v })} />
               )}
+              {isCountdown && <TimerTextControls s={s} onStyle={style} />}
             </>
           )}
 
@@ -495,6 +587,7 @@ export default function LayerPanel({ layout, selectedId, onSelect, onChange, med
                   {s.gradient && <p className="le-hint">This layer uses a gradient. Picking a fill colour replaces it.</p>}
                 </>
               )}
+              {isCountdown && layer.type === "box" && <TimerBoxControls s={s} onStyle={style} />}
               <div className="le-grid-2">
                 <Num label="Corners" value={s.radius ?? 0} min={0} onChange={(v) => style({ radius: v })} />
                 <Num label="Border" value={s.borderWidth ?? 0} min={0} onChange={(v) => style({ borderWidth: v })} />

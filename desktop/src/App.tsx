@@ -47,7 +47,7 @@ import {
   refreshAppSettings,
   type ForcedUpdateState,
 } from "./services/forcedUpdateService";
-import { initOverlayUrl } from "./services/overlayUrl";
+import { getOverlayBaseUrl, initOverlayUrl } from "./services/overlayUrl";
 import { migrateFromLegacyDatabases } from "./services/db";
 import { getSettings, MV_SETTINGS_UPDATED_EVENT, seedTemplates, syncLayoutsToDock, type MVSettings as MVSettingsType } from "./multiview/mvStore";
 import { STARTER_TEMPLATES } from "./multiview/templates";
@@ -149,6 +149,7 @@ const TutorialsPage = safeLazy(() => import("./pages/TutorialsPage"));
 const TemplatesPage = safeLazy(() => import("./pages/TemplatesPage"));
 const DesignStudioPage = safeLazy(() => import("./pages/DesignStudioPage"));
 const BroadcastPage = safeLazy(() => import("./pages/BroadcastPage"));
+const StudioPage = safeLazy(() => import("./pages/StudioPage"));
 
 type LmDockService = typeof import("./services/lmDockService").lmDockService;
 let lmDockServicePromise: Promise<LmDockService> | null = null;
@@ -685,6 +686,68 @@ function App() {
       return lmService;
     };
 
+    // The Verse AI dock in OBS runs in its own browser process, so its Start /
+    // Stop buttons reach the app only through the HTTP relay (/api/lm-command),
+    // not BroadcastChannel. The LM service polls that relay once loaded, but it
+    // loads lazily (Verse AI page). Until then, watch the relay here (cheap), and
+    // load the service the moment the dock asks for it. Also tell the dock the
+    // app is here (idle), so it shows "Connected" instead of "Offline".
+    let lmRelayTimer: ReturnType<typeof setInterval> | null = null;
+    let lmRelayBusy = false;
+    const stopLmRelayWatch = () => {
+      if (lmRelayTimer) clearInterval(lmRelayTimer);
+      lmRelayTimer = null;
+    };
+    void (async () => {
+      try {
+        const base = await getOverlayBaseUrl();
+        const current = await fetch(`${base}/api/lm-state`, { cache: "no-store" }).then((r) => r.json()).catch(() => null);
+        if (!current || typeof current !== "object" || !("status" in current)) {
+          await fetch(`${base}/api/lm-state`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "idle", entries: [], candidates: [], queue: [], suggestions: [], matching: false, error: null }),
+          }).catch(() => undefined);
+        }
+        lmRelayTimer = setInterval(async () => {
+          if (lmRelayBusy || lmService) {
+            if (lmService) stopLmRelayWatch();
+            return;
+          }
+          lmRelayBusy = true;
+          try {
+            const raw = await fetch(`${base}/api/lm-command`, { cache: "no-store" }).then((r) => r.json()).catch(() => []);
+            const commands = (Array.isArray(raw) ? raw : [])
+              .map((item: unknown) => {
+                try {
+                  return (typeof item === "string" ? JSON.parse(item) : item) as { type: string; commandId?: string; payload?: unknown };
+                } catch {
+                  return null;
+                }
+              })
+              .filter((cmd): cmd is { type: string; commandId?: string; payload?: unknown } => Boolean(cmd?.type));
+            if (!commands.length) return;
+            const needsService = commands.some((cmd) => cmd.type === "lm:start" || cmd.type === "lm:stop" || cmd.type === "lm:keep-listening");
+            if (needsService) {
+              const service = await ensureLmService();
+              stopLmRelayWatch();
+              for (const cmd of commands) service.handleRelayCommand(cmd);
+            } else {
+              for (const cmd of commands) {
+                if (cmd.type === "lm:navigate") {
+                  dockBridge.sendCommand({ type: "lm:navigate", commandId: cmd.commandId, payload: cmd.payload, timestamp: Date.now() });
+                }
+              }
+            }
+          } finally {
+            lmRelayBusy = false;
+          }
+        }, 1000);
+      } catch (err) {
+        console.warn("[App] Verse AI relay watch unavailable:", err);
+      }
+    })();
+
     // Relay OBS connection status to the dock
     const unsubObs = obsService.onStatusChange((status) => {
       dockBridge.sendObsStatus(status === "connected");
@@ -1009,6 +1072,7 @@ function App() {
       unsubDockCmd();
       unsubMobileRemote?.();
       unsubLmDock?.();
+      stopLmRelayWatch();
       unsubAppStatus();
     };
   }, []);
@@ -1556,6 +1620,7 @@ function App() {
                                       <Route path="service-control-hub" element={<Navigate to="/" replace />} />
                                       <Route path="quick-merge" element={<Navigate to="/" replace />} />
                                       <Route path="broadcast" element={<BroadcastPage />} />
+                                      <Route path="studio" element={<StudioPage />} />
                                       <Route path="bible" element={<Navigate to="/settings" replace />} />
                                       <Route path="bible/*" element={<Navigate to="/settings" replace />} />
                                       <Route path="worship" element={<Navigate to="/resources?tab=worship" replace />} />

@@ -15,7 +15,8 @@ describe("Basic plan entitlements", () => {
       maxMultiviewTemplates: 5,
       multiview: true,
       tickers: true,
-      maxLowerThirds: -1,
+      maxLowerThirds: 15,
+      maxThemes: 10,
       maxTickerThemes: -1,
       speechToScripture: true,
       translation: false,
@@ -32,7 +33,8 @@ describe("Basic plan entitlements", () => {
       multiviewTemplates: 5,
       multiview: true,
       tickers: true,
-      lowerThirds: -1,
+      lowerThirds: 15,
+      themes: 10,
       tickerThemes: -1,
       speechToScripture: true,
       translation: false,
@@ -48,6 +50,7 @@ describe("Basic plan entitlements", () => {
       multiview: false,
       tickers: true,
       lowerThirds: 3,
+      themes: 2,
       tickerThemes: 3,
       countdowns: false,
     });
@@ -56,6 +59,7 @@ describe("Basic plan entitlements", () => {
       multiview: true,
       tickers: true,
       lowerThirds: -1,
+      themes: -1,
       countdowns: true,
     });
   });

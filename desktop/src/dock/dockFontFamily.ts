@@ -44,7 +44,7 @@ export interface DockTypographyPreferences {
 export const DEFAULT_DOCK_FONT_SCALE = 1;
 export const DOCK_FONT_SCALE_OPTIONS = [
   { id: "small", label: "Small (90%)", value: 0.9 },
-  { id: "default", label: "Default (100%)", value: 1 },
+  { id: "default", label: "Default (auto-fit)", value: 1 },
   { id: "large", label: "Large (110%)", value: 1.1 },
   { id: "extra-large", label: "Extra large (125%)", value: 1.25 },
 ] as const;

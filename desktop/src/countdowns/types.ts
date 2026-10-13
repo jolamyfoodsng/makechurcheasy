@@ -172,6 +172,16 @@ export interface CountdownConfig {
   obs: OBSSettings;
   /** Message displayed below timer in the overlay */
   message?: MessageSettings;
+  /**
+   * Layer design (layout.kind === "countdown"), edited in the same layer editor as Themes.
+   * When present the overlay draws it instead of the classic timer text/background.
+   */
+  layout?: import("../themes/layout/types").ThemeLayout;
+  /** Built-in style this design started from (countdowns/layouts/presets.ts). */
+  presetId?: string;
+  /** Layer designs: turn yellow / red at this many seconds left (0 = off). */
+  warnYellowSeconds?: number;
+  warnRedSeconds?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -195,6 +205,32 @@ export interface CountdownOverlayPayload {
   sync?: OverlaySyncState;
   /** Reveal text after the background has had time to appear on a new push. */
   reveal?: boolean;
+  /**
+   * Rundown mode (optional, backward compatible). When present the overlay
+   * treats `sync.remaining` as the current value (remaining for countdowns,
+   * elapsed for count-up) and renders warning colours, progress bar and message.
+   */
+  rundown?: import("./rundownTypes").RundownOverlayExtras;
+  /** Layer-design mode: set by attachLayoutMode() when config.layout exists. */
+  layoutMode?: CountdownLayoutMode;
+}
+
+/** What countdown-overlay.html needs to draw a layer design and keep its own time. */
+export interface CountdownLayoutMode {
+  layout: import("../themes/layout/types").ThemeLayout;
+  kind: import("./rundownTypes").RundownTimerKind;
+  /** Total length (countdown start / count-up cap). */
+  durationSeconds: number;
+  warnYellowSeconds: number;
+  warnRedSeconds: number;
+  title: string;
+  subtitle: string;
+  name: string;
+  speaker: string;
+  message: string;
+  /** Rundown timers keep counting below zero; plain countdowns stop at 0. */
+  overtime: boolean;
+  hour12: boolean;
 }
 
 // ── Snapshot for sync ──────────────────────────────────────────────────────

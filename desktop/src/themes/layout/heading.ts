@@ -17,7 +17,9 @@ export interface HeadingLayers {
 const isLabelText = (l: ThemeLayer) =>
   l.type === "text" && l.heading !== false && hasTokens(l.content) && !isVerseTextPattern(l.content);
 
-export function headingLayers(layout: Pick<ThemeLayout, "layers">): HeadingLayers {
+export function headingLayers(layout: Pick<ThemeLayout, "layers"> & { kind?: ThemeLayout["kind"] }): HeadingLayers {
+  // Timer designs have no scripture heading.
+  if (layout.kind === "countdown") return { text: new Set(), decor: new Set() };
   const flagged = layout.layers.filter((l) => l.heading === true);
   if (flagged.length) {
     return {

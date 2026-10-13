@@ -443,7 +443,8 @@ export default function BroadcastGraphicsPage() {
     window.addEventListener(BROADCAST_GRAPHICS_CATALOG_UPDATED_EVENT, sync);
     return () => window.removeEventListener(BROADCAST_GRAPHICS_CATALOG_UPDATED_EVENT, sync);
   }, []);
-  const availabilityOf = useCallback(
+  /** Admin catalog view only (paused / limited to a plan). The plan allowance is layered on top below. */
+  const catalogAvailabilityOf = useCallback(
     (themeId: string): GraphicAvailability => getGraphicAvailability(themeId, graphicsCatalog),
     [graphicsCatalog],
   );
@@ -485,6 +486,33 @@ export default function BroadcastGraphicsPage() {
   const effectivePlan = authUser ? getEffectivePlan(authUser) : "free";
   const [upgradePrompt, setUpgradePrompt] = useState<{ message: string; feature: string; requiredPlan?: string } | null>(null);
 
+  // ── Plan allowance: the first N graphics of the library are open, the rest are locked ──
+  // N is the plan's broadcast-graphics limit (Free 3, Basic 15, Growth unlimited). The order is the
+  // library's own order (not the shuffled grid), so the same graphics stay open for everyone on a plan.
+  // Anything already added to OBS stays usable, so a church that downgrades never loses a live graphic.
+  const graphicsPlanLimit = checkEntitlementSync("lowerThirds", effectivePlan, 0).limit;
+  const planLockedIds = useMemo(() => {
+    const locked = new Set<string>();
+    if (graphicsPlanLimit < 0) return locked;
+    const keep = new Set<string>(obsFavorites);
+    for (const graphic of savedGraphics) if (graphic.isAddedToObs) keep.add(graphic.templateId);
+    allTemplates.forEach((template, index) => {
+      if (index >= graphicsPlanLimit && !keep.has(template.id)) locked.add(template.id);
+    });
+    return locked;
+  }, [allTemplates, graphicsPlanLimit, obsFavorites, savedGraphics]);
+
+  const availabilityOf = useCallback(
+    (themeId: string): GraphicAvailability & { planLocked?: boolean } => {
+      const base = catalogAvailabilityOf(themeId);
+      if (base.usable && planLockedIds.has(themeId)) {
+        return { ...base, usable: false, reason: "locked", planLocked: true };
+      }
+      return base;
+    },
+    [catalogAvailabilityOf, planLockedIds],
+  );
+
   /** Graphics counted against the plan: library graphics added to OBS + saved graphics. */
   const graphicsUsed = useMemo(() => {
     const visibleFavorites = [...obsFavorites].filter((id) => availabilityOf(id).visible).length;
@@ -522,6 +550,15 @@ export default function BroadcastGraphicsPage() {
     (themeId: string, noun: "graphic" | "ticker" = "graphic"): boolean => {
       const availability = availabilityOf(themeId);
       if (availability.usable) return true;
+      if (availability.planLocked) {
+        const next = checkEntitlementSync("lowerThirds", effectivePlan, graphicsPlanLimit);
+        setUpgradePrompt({
+          feature: "lowerThirds",
+          requiredPlan: next.requiredPlan || "basic",
+          message: `Your plan includes the first ${graphicsPlanLimit} broadcast graphics. Upgrade to unlock this one and the rest of the library.`,
+        });
+        return false;
+      }
       showToast(
         availability.reason === "paused"
           ? `This ${noun} is paused for now. Please pick another one.`
@@ -530,7 +567,7 @@ export default function BroadcastGraphicsPage() {
       );
       return false;
     },
-    [availabilityOf, showToast],
+    [availabilityOf, effectivePlan, graphicsPlanLimit, showToast],
   );
 
   // Combine tickers
@@ -621,8 +658,13 @@ export default function BroadcastGraphicsPage() {
       list = mixAcrossCategories(list, getTemplateCategory, mixSeed);
     }
 
+    // Plan-locked graphics go to the end (stable), so the open ones are the first in the grid.
+    if (planLockedIds.size > 0) {
+      list = [...list.filter((t) => !planLockedIds.has(t.id)), ...list.filter((t) => planLockedIds.has(t.id))];
+    }
+
     return list;
-  }, [allTemplates, selectedCategory, searchQuery, sortBy, mixSeed]);
+  }, [allTemplates, selectedCategory, searchQuery, sortBy, mixSeed, planLockedIds]);
 
   const visibleSavedGraphics = useMemo(
     () => savedGraphics.filter((graphic) => availabilityOf(graphic.templateId).visible),
@@ -1330,7 +1372,7 @@ export default function BroadcastGraphicsPage() {
                           <span
                             className="bg-card__obs-badge"
                             style={{ left: "auto", right: 44, background: availability.reason === "paused" ? "#475569" : "#b45309" }}
-                            title={availability.reason === "paused" ? "Paused by Make Church Eazy" : `For ${describeGraphicTiers(availability.tiers).toLowerCase()}`}
+                            title={availability.reason === "paused" ? "Paused by Make Church Eazy" : availability.planLocked ? "Upgrade your plan to unlock" : `For ${describeGraphicTiers(availability.tiers).toLowerCase()}`}
                           >
                             {availability.reason === "paused" ? "PAUSED" : "LOCKED"}
                           </span>
@@ -1540,7 +1582,7 @@ export default function BroadcastGraphicsPage() {
                             className="bg-card__obs-badge"
                             style={{ left: "auto", right: 44, background: savedAvailability.reason === "locked" ? "#b45309" : "#475569" }}
                             title={savedAvailability.reason === "locked"
-                              ? `For ${describeGraphicTiers(savedAvailability.tiers).toLowerCase()}`
+                              ? (savedAvailability.planLocked ? "Upgrade your plan to unlock" : `For ${describeGraphicTiers(savedAvailability.tiers).toLowerCase()}`)
                               : "Not available right now"}
                           >
                             {savedAvailability.reason === "locked" ? "LOCKED" : savedAvailability.visible ? "PAUSED" : "UNAVAILABLE"}

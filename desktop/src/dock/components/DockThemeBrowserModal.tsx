@@ -2,7 +2,8 @@ import { useState, useMemo, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import type { BibleTheme } from "../../bible/types";
 import { loadDockFavoriteBibleThemes } from "../dockThemeData";
-import { dockEntitlementGuard, requireEntitlement } from "../dockEntitlement";
+import { dockEntitlementGuard, showUpgradeModal } from "../dockEntitlement";
+import { lockedThemeMessage, planLockedThemeIds } from "../../themes/planLocks";
 import DockIcon from "../DockIcon";
 import ThemePreviewSurface from "../../components/ThemePreviewSurface";
 
@@ -84,10 +85,9 @@ export default function DockThemeBrowserModal({
 
   if (!open) return null;
 
-  const isUnlimited = themeLimit === -1 || themeLimit === Infinity;
-  const lockedThemeIds = new Set(
-    isUnlimited ? [] : allThemes.slice(themeLimit).map((t) => t.id),
-  );
+  // The first N ready-made themes (curated order, Caption Rule first) are open on this plan, the
+  // rest are locked. The theme in use and the church's own themes are never locked.
+  const lockedThemeIds = planLockedThemeIds(allThemes, themeLimit, [selectedThemeId]);
 
   const renderThemeCard = (theme: BibleTheme) => {
     const isActive = theme.id === selectedThemeId;
@@ -105,7 +105,7 @@ export default function DockThemeBrowserModal({
         className={`dtb-card${isActive ? " dtb-card--active" : ""}${isLocked ? " dtb-card--locked" : ""}`}
         onClick={() => {
           if (isLocked) {
-            void requireEntitlement("themes", themeCount);
+            showUpgradeModal(lockedThemeMessage(themeLimit));
             return;
           }
           onSelect(theme);

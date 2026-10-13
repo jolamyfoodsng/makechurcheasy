@@ -304,6 +304,11 @@ mod app_nap {
 }
 
 static LM_STATE: OnceLock<Mutex<String>> = OnceLock::new();
+/// Presentation Studio program state: (revision, JSON). Written by the app, read by studio-output.html.
+static STUDIO_STATE: OnceLock<Mutex<(u64, String)>> = OnceLock::new();
+/// Live rundown/timer state shared between the OBS Dock (controller) and the
+/// presenter screen (rundown-presenter.html), possibly on another LAN device.
+static RUNDOWN_STATE: OnceLock<Mutex<String>> = OnceLock::new();
 static LM_COMMAND_QUEUE: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
 /// Navigation commands have a second consumer: the Bible tab running in the
 /// OBS CEF process. Keep a copy separate from the main-app LM queue so the
@@ -1199,12 +1204,15 @@ fn overlay_is_allowed_app_document(clean_path: &str) -> bool {
             | "bible-overlay-lower-third.html"
             | "countdown-overlay.html"
             | "countdown-bg-overlay.html"
+            | "rundown-presenter.html"
             | "pre-service-countdown.html"
             | "pre-service-media.html"
             | "live-tool-overlay.html"
             | "time-overlay.html"
             | "mce-template-overlay.html"
             | "presentation.html"
+            // Presentation Studio projector window (loads the three overlay pages).
+            | "studio-output.html"
     )
 }
 
@@ -7069,6 +7077,94 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 continue;
             }
 
+            // API: Presentation Studio program state. The app POSTs the whole state
+            // (with a numeric "revision"); studio-output.html GETs it, passing
+            // ?since=<revision> so an unchanged state answers with a tiny body.
+            if clean == "api/studio-state" {
+                let studio_state =
+                    STUDIO_STATE.get_or_init(|| Mutex::new((0, "{}".to_string())));
+                let header = tiny_http::Header::from_bytes(
+                    "Content-Type",
+                    "application/json; charset=utf-8",
+                )
+                .unwrap();
+                let cors =
+                    tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
+                let no_store =
+                    tiny_http::Header::from_bytes("Cache-Control", "no-store").unwrap();
+
+                if request.method() == &tiny_http::Method::Options {
+                    let resp = tiny_http::Response::from_string("")
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "GET, POST, OPTIONS",
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Headers",
+                                "Content-Type",
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(cors);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                if request.method() == &tiny_http::Method::Post {
+                    let mut body = String::new();
+                    if request.as_reader().read_to_string(&mut body).is_err() {
+                        let resp =
+                            tiny_http::Response::from_string("Bad Request").with_status_code(400);
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+                    let revision = serde_json::from_str::<serde_json::Value>(&body)
+                        .ok()
+                        .and_then(|v| v.get("revision").and_then(|r| r.as_u64()))
+                        .unwrap_or(0);
+                    if let Ok(mut state) = studio_state.lock() {
+                        if revision >= state.0 {
+                            *state = (revision, body);
+                        }
+                    }
+                    let resp = tiny_http::Response::from_string(r#"{"ok":true}"#)
+                        .with_header(header)
+                        .with_header(cors);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                // GET
+                let since = request
+                    .url()
+                    .split_once('?')
+                    .and_then(|(_, query)| {
+                        query
+                            .split('&')
+                            .find_map(|pair| pair.strip_prefix("since="))
+                            .and_then(|v| v.parse::<u64>().ok())
+                    });
+                let json = studio_state
+                    .lock()
+                    .map(|state| match since {
+                        Some(seen) if seen >= state.0 => {
+                            format!(r#"{{"unchanged":true,"revision":{}}}"#, state.0)
+                        }
+                        _ => state.1.clone(),
+                    })
+                    .unwrap_or_else(|_| "{}".to_string());
+                let resp = tiny_http::Response::from_string(json)
+                    .with_header(header)
+                    .with_header(cors)
+                    .with_header(no_store);
+                let _ = request.respond(resp);
+                continue;
+            }
+
             // API: LM state relay — GET returns current state, POST updates it
             // Used for cross-process communication between Tauri app and OBS dock
             if clean == "api/lm-state" {
@@ -7128,6 +7224,86 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                 let resp = tiny_http::Response::from_string(json)
                     .with_header(header)
                     .with_header(cors);
+                let _ = request.respond(resp);
+                continue;
+            }
+
+            // API: Rundown state relay — GET returns the live rundown state, POST
+            // replaces it. The Dock posts on every control change; the presenter
+            // screen polls it. State carries a value snapshot + timestamp, so the
+            // presenter computes the running time locally.
+            if clean == "api/rundown-state" {
+                let rundown_state = RUNDOWN_STATE.get_or_init(|| Mutex::new("{}".to_string()));
+                let header = tiny_http::Header::from_bytes(
+                    "Content-Type",
+                    "application/json; charset=utf-8",
+                )
+                .unwrap();
+                let cors =
+                    tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
+                let no_store =
+                    tiny_http::Header::from_bytes("Cache-Control", "no-store").unwrap();
+
+                if request.method() == &tiny_http::Method::Options {
+                    let resp = tiny_http::Response::from_string("")
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "GET, POST, OPTIONS",
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Headers",
+                                "Content-Type",
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(cors);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                if request.method() == &tiny_http::Method::Post {
+                    let mut body = String::new();
+                    if request
+                        .as_reader()
+                        .take(65_536)
+                        .read_to_string(&mut body)
+                        .is_err()
+                    {
+                        let resp =
+                            tiny_http::Response::from_string("Bad Request").with_status_code(400);
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+                    if serde_json::from_str::<serde_json::Value>(&body).is_err() {
+                        let resp = tiny_http::Response::from_string(r#"{"error":"Invalid JSON"}"#)
+                            .with_status_code(400)
+                            .with_header(cors);
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+                    if let Ok(mut state) = rundown_state.lock() {
+                        *state = body;
+                    }
+                    let resp = tiny_http::Response::from_string(r#"{"ok":true}"#)
+                        .with_header(header)
+                        .with_header(cors)
+                        .with_header(no_store);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                let json = rundown_state
+                    .lock()
+                    .map(|s| s.clone())
+                    .unwrap_or_else(|_| "{}".to_string());
+                let resp = tiny_http::Response::from_string(json)
+                    .with_header(header)
+                    .with_header(cors)
+                    .with_header(no_store);
                 let _ = request.respond(resp);
                 continue;
             }

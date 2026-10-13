@@ -9,7 +9,6 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { ALL_THEMES, canonicalizeLowerThirdThemeId, type ThemeLike } from "../../lowerthirds/themes";
 import { loadDockLTFavorites } from "../dockThemeData";
-import { requireEntitlement } from "../dockEntitlement";
 import { dockClient, type DockStateMessage } from "../../services/dockBridge";
 import { FAVORITE_THEMES_UPDATED_EVENT } from "../../services/favoriteThemes";
 import DockIcon from "../DockIcon";
@@ -159,17 +158,16 @@ export default function DockLTThemePicker({ selectedThemeId, onSelect, category,
 
   const handleSelect = useCallback(
     (theme: ThemeLike) => {
-      void requireEntitlement("themes", filteredThemes.length).then((allowed) => {
-        if (!allowed) return;
-        onSelect({
-          id: theme.id,
-          html: theme.html || "",
-          css: theme.css || "",
-        });
-        setOpen(false);
+      // Picking a look is not creating one: how many broadcast graphics a church may keep is
+      // enforced where they are added (Dock slots / the Broadcast Graphics page), not here.
+      onSelect({
+        id: theme.id,
+        html: theme.html || "",
+        css: theme.css || "",
       });
+      setOpen(false);
     },
-    [onSelect, filteredThemes.length],
+    [onSelect],
   );
 
   // Auto-pick a visible theme so staged payloads don't fall back to generic defaults.

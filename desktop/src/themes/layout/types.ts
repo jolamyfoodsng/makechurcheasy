@@ -67,6 +67,26 @@ export interface LayerGradient {
   stops: GradientStop[];
 }
 
+export type WarnLevel = "green" | "yellow" | "red";
+
+/** Seven-segment digits drawn as SVG (countdown designs). */
+export interface SegmentStyle {
+  /** Segment thickness as % of the digit height. Default 12. */
+  thickness?: number;
+  /** Gap between segment tips, design px. Default 2.4. */
+  gap?: number;
+  /** Space between digits as % of a digit's width. Default 18. */
+  spacing?: number;
+  /** Lean in degrees (0–25) for an italic look. */
+  slant?: number;
+  /** Colour of unlit segments. Default: same as the digit colour. */
+  offColor?: string;
+  /** Opacity of unlit segments, 0–1. 0 hides them. */
+  offOpacity?: number;
+  /** Glow blur in px. 0 = none. */
+  glow?: number;
+}
+
 export interface LayerStyle {
   // ── Surface (box / divider / text background) ──
   fill?: string;
@@ -118,6 +138,26 @@ export interface LayerStyle {
    * `w` wide — for tabs and labels with a fill behind the words. Use with h "auto".
    */
   hug?: boolean;
+
+  // ── Countdown designs ──
+  /** Text layers: draw the digits as a seven-segment display instead of a font. */
+  segment?: SegmentStyle;
+  /** Colour follows the timer's green / yellow / red level: the text, the fill, or the border. */
+  warn?: "text" | "fill" | "border";
+  /** Custom colours for the levels (defaults: green #22c55e, yellow #eab308, red #ef4444). */
+  warnColors?: Partial<Record<WarnLevel, string>>;
+  /**
+   * Box layers bound to the timer: "elapsed" / "remaining" resize the fill as a progress bar,
+   * "marker" slides the layer along its parent's width, "zones" paints green / yellow / red
+   * stretches matching the warning times.
+   */
+  progress?: "elapsed" | "remaining" | "marker" | "zones";
+  /** Text layers: flip animation each time the value changes (flip clocks). */
+  flip?: boolean;
+  /** Text layers: keep to one line and shrink to fit the width (times, never wrapped). */
+  nowrap?: boolean;
+  /** Text layers: roughen the edges (stamp / distressed look), 0–10. */
+  roughen?: number;
 }
 
 export interface ThemeLayer {
@@ -174,6 +214,8 @@ export interface ThemeLayout {
   swap?: "content" | "all";
   /** false hides the heading (reference / label and its box). Default true. */
   showHeading?: boolean;
+  /** "countdown": a timer design (tokens come from the timer, no scripture heading). */
+  kind?: "bible" | "countdown";
 }
 
 /** Live content the overlays already receive (BibleSlide subset). */
@@ -182,6 +224,20 @@ export interface ThemeContent {
   reference: string;
   /** Lines per slide from the packet; 1 hides verse numbers like the legacy overlay. */
   lineCount?: number;
+  /** Extra token values (countdown designs: time, mm, ss, title…). */
+  extra?: Record<string, string>;
+  /** Timer state for warning colours and progress bars. */
+  live?: ThemeLive;
+}
+
+export interface ThemeLive {
+  /** undefined = no warnings for this timer. */
+  level?: WarnLevel;
+  /** 0–1 of the timer used up. */
+  fraction: number;
+  /** Fraction of the timer where yellow starts / red starts (for the zones bar). */
+  yellowFrom?: number;
+  redFrom?: number;
 }
 
 export function isThemeLayout(value: unknown): value is ThemeLayout {

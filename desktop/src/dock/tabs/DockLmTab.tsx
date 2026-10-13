@@ -710,6 +710,9 @@ export default function DockLmTab({
       try {
         const res = await fetch(`${getOverlayBaseUrlSync()}/api/lm-state`);
         const state = await res.json();
+        // The relay lives inside the app's own local server: any answer means
+        // the app is running, even before Verse AI has published a status.
+        if (res.ok) setAppConnected(true);
         if (state && state.status) {
           setAppConnected(true);
           setLmStatus(state.status);

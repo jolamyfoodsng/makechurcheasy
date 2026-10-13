@@ -21,6 +21,7 @@ import {
   totalDuration,
 } from "./animations";
 import { headingLayers } from "./heading";
+import { segmentSvg } from "./segments";
 import { fillTokens, hasTokens, isVerseTextPattern, resolveTokens, splitVerseLines, type ResolvedTokens } from "./content";
 import {
   DESIGN_HEIGHT,
@@ -30,7 +31,11 @@ import {
   type ThemeContent,
   type ThemeLayer,
   type ThemeLayout,
+  type ThemeLive,
+  type WarnLevel,
 } from "./types";
+
+const WARN_DEFAULTS: Record<WarnLevel, string> = { green: "#22c55e", yellow: "#eab308", red: "#ef4444" };
 
 export interface ThemeRendererOptions {
   /** Rewrites image URLs (e.g. to the overlay asset server). */
@@ -41,6 +46,29 @@ export interface ThemeRendererOptions {
   static?: boolean;
   /** Max wait for fonts/images before the first show, ms. Default 1500. */
   preloadTimeoutMs?: number;
+  /**
+   * Fill any screen shape (projectors that aren't 16:9): the stage is centred
+   * (lower thirds sit at the bottom) and the theme's full-screen background
+   * layers stretch to cover the whole screen. Text keeps its 16:9 layout, so it
+   * is never stretched or cropped. No change on a 16:9 host such as OBS.
+   */
+  fillViewport?: boolean;
+  /**
+   * Endless background loops (drift, pulse, shimmer). Default OFF: on virtual or
+   * weak GPUs (Windows VMs, cloud laptops, software rendering) a never-ending,
+   * screen-wide animation could leave the whole page blank. Patterns and glows
+   * still show, just standing still. Entrance/exit animations are not affected.
+   */
+  loops?: boolean;
+}
+
+/** A top-level box/image covering (nearly) the whole canvas: the theme's background. */
+function isFullFrameBackground(layer: ThemeLayer): boolean {
+  return !layer.parentId
+    && (layer.type === "box" || layer.type === "image")
+    && layer.w >= DESIGN_WIDTH * 0.9
+    && typeof layer.h === "number"
+    && layer.h >= DESIGN_HEIGHT * 0.9;
 }
 
 interface LayerNode {
@@ -81,6 +109,9 @@ const BASE_CSS = `
 .mtl-media{position:absolute;left:0;top:0}
 .mtl-dim{position:absolute;inset:0;pointer-events:none}
 .mtl-hidden{display:none!important}
+.mtl-text.is-nowrap{white-space:nowrap}
+.mtl-text.is-segment{padding:0}
+.mtl-text.is-segment>svg{display:block;overflow:visible}
 `;
 
 const ANCHOR_SHIFT: Record<LayerAnchor, [number, number]> = {
@@ -110,6 +141,40 @@ function gradientCss(layer: ThemeLayer): string {
   if (!g || !g.stops?.length) return "";
   const stops = g.stops.map((s) => `${s.color} ${s.at}%`).join(", ");
   return g.type === "radial" ? `radial-gradient(circle at 30% 50%, ${stops})` : `linear-gradient(${g.angle ?? 90}deg, ${stops})`;
+}
+
+/** One SVG displacement filter per roughness level (stamp / distressed text). */
+function ensureRoughFilter(doc: Document, amount: number): string {
+  const level = Math.min(10, Math.max(1, Math.round(amount)));
+  const id = `mtl-rough-${level}`;
+  if (doc.getElementById(id)) return id;
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = doc.createElementNS(NS, "svg");
+  svg.setAttribute("width", "0");
+  svg.setAttribute("height", "0");
+  svg.setAttribute("style", "position:absolute");
+  svg.setAttribute("aria-hidden", "true");
+  const filter = doc.createElementNS(NS, "filter");
+  filter.setAttribute("id", id);
+  filter.setAttribute("x", "-5%");
+  filter.setAttribute("y", "-5%");
+  filter.setAttribute("width", "110%");
+  filter.setAttribute("height", "110%");
+  const turb = doc.createElementNS(NS, "feTurbulence");
+  turb.setAttribute("type", "fractalNoise");
+  turb.setAttribute("baseFrequency", "0.045");
+  turb.setAttribute("numOctaves", "3");
+  turb.setAttribute("seed", "7");
+  turb.setAttribute("result", "n");
+  const disp = doc.createElementNS(NS, "feDisplacementMap");
+  disp.setAttribute("in", "SourceGraphic");
+  disp.setAttribute("in2", "n");
+  disp.setAttribute("scale", String(level * 1.6));
+  filter.appendChild(turb);
+  filter.appendChild(disp);
+  svg.appendChild(filter);
+  doc.body.appendChild(svg);
+  return id;
 }
 
 function ensureBaseStyle(doc: Document) {
@@ -204,6 +269,7 @@ export class ThemeRenderer {
     this.layout = layout;
     this.hash = nextHash;
     this.build(layout);
+    if (this.opts.fillViewport) this.rescale();
     this.preload = this.preloadAssets(layout);
     if (this.content) this.applyAllContent(this.content);
     if (wasVisible) {
@@ -216,6 +282,22 @@ export class ThemeRenderer {
   show(content: ThemeContent): Promise<void> {
     this.pending = { kind: "show", content };
     return this.drain();
+  }
+
+  /**
+   * Show with no entrance animation (a page reload mid-countdown must not replay the intro).
+   * Waits for fonts like show(); looping effects still run.
+   */
+  async showInstant(content: ThemeContent): Promise<void> {
+    if (!this.layout) return;
+    await this.withTimeout(this.preload);
+    this.cancelRunning();
+    this.content = content;
+    this.timeSwap(() => this.applyAllContent(content));
+    this.stage.classList.add("is-visible");
+    const was = this.visibleState;
+    this.visibleState = true;
+    if (!was) this.startLoops();
   }
 
   /**
@@ -267,7 +349,48 @@ export class ThemeRenderer {
     const w = this.root.clientWidth || this.host.clientWidth || DESIGN_WIDTH;
     const h = this.root.clientHeight || this.host.clientHeight || DESIGN_HEIGHT;
     const scale = Math.min(w / DESIGN_WIDTH, h / DESIGN_HEIGHT);
-    this.stage.style.transform = `scale(${scale})`;
+    if (!this.opts.fillViewport) {
+      this.stage.style.transform = `scale(${scale})`;
+      return;
+    }
+    const spareX = Math.max(0, w - DESIGN_WIDTH * scale);
+    const spareY = Math.max(0, h - DESIGN_HEIGHT * scale);
+    const offsetX = spareX / 2;
+    const offsetY = this.layout?.format === "lower-third" ? spareY : spareY / 2;
+    this.stage.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+    // Spare space in stage pixels on each side, for the backgrounds to bleed into.
+    this.bleed = {
+      left: offsetX / scale,
+      right: (spareX - offsetX) / scale,
+      top: offsetY / scale,
+      bottom: (spareY - offsetY) / scale,
+    };
+    this.applyBleed();
+  }
+
+  private bleed = { left: 0, right: 0, top: 0, bottom: 0 };
+
+  /** Stretch the full-frame background layers over the spare space. */
+  private applyBleed() {
+    if (!this.opts.fillViewport) return;
+    const b = this.bleed;
+    for (const node of this.nodes) {
+      const layer = node.layer;
+      if (!isFullFrameBackground(layer) || typeof layer.h !== "number") continue;
+      const width = Math.max(1, layer.w) + b.left + b.right;
+      const height = Math.max(1, layer.h) + b.top + b.bottom;
+      if (layer.anchor === "top-left" || !layer.anchor) {
+        node.pos.style.left = `${layer.x - b.left}px`;
+        node.pos.style.top = `${layer.y - b.top}px`;
+      } else if (layer.anchor === "center") {
+        node.pos.style.left = `${layer.x + (b.right - b.left) / 2}px`;
+        node.pos.style.top = `${layer.y + (b.bottom - b.top) / 2}px`;
+      } else {
+        continue;
+      }
+      node.pos.style.width = `${width}px`;
+      node.pos.style.height = `${height}px`;
+    }
   }
 
   // ───────────────────────────── queue ─────────────────────────────
@@ -314,6 +437,7 @@ export class ThemeRenderer {
     this.timeSwap(() => {
       for (const n of changed) this.applyContent(n, tokens, content);
       this.syncHeadingDecor(headingEmpty);
+      this.applyLive(content.live);
     });
     await this.playIn(changed.filter((n) => !n.empty), 0.8);
   }
@@ -470,10 +594,12 @@ export class ThemeRenderer {
 
     let surface: HTMLDivElement | null = null;
     let shine: HTMLDivElement | null = null;
-    const bg = gradientCss(layer) || s.fill || "";
+    let bg = gradientCss(layer) || s.fill || "";
+    if (!bg && layer.type === "box" && (s.progress === "elapsed" || s.progress === "remaining" || s.progress === "zones")) bg = WARN_DEFAULTS.green;
     if (bg && layer.type !== "image") {
       surface = d.createElement("div");
-      surface.className = layer.loop?.preset === "drift" ? "mtl-surface is-drift" : "mtl-surface";
+      // The double-width surface is only needed while a drift loop pans it.
+      surface.className = this.opts.loops && layer.loop?.preset === "drift" ? "mtl-surface is-drift" : "mtl-surface";
       surface.style.background = bg;
       el.appendChild(surface);
     }
@@ -482,7 +608,7 @@ export class ThemeRenderer {
       es.overflow = "hidden";
     }
     if (layer.type === "box") this.appendDim(el, s);
-    if (layer.loop?.preset === "shimmer") {
+    if (this.opts.loops && layer.loop?.preset === "shimmer") {
       shine = d.createElement("div");
       shine.className = "mtl-shine";
       el.appendChild(shine);
@@ -509,6 +635,10 @@ export class ThemeRenderer {
       if (s.letterSpacing) ts.letterSpacing = `${s.letterSpacing}px`;
       if (s.textTransform) ts.textTransform = s.textTransform;
       if (s.textShadow) ts.textShadow = s.textShadow;
+      if (s.nowrap) text.classList.add("is-nowrap");
+      if (s.segment) text.classList.add("is-segment");
+      if (s.flip) pos.style.perspective = "900px";
+      if (s.roughen) ts.filter = `url(#${ensureRoughFilter(d, s.roughen)})`;
       if (s.underline) {
         ts.textDecoration = "underline";
         ts.textUnderlineOffset = "0.18em";
@@ -546,6 +676,7 @@ export class ThemeRenderer {
     const tokens = resolveTokens(content);
     for (const n of this.nodes) this.applyContent(n, tokens, content);
     this.syncHeadingDecor(this.headingEmpty(tokens, content));
+    this.applyLive(content.live);
   }
 
   /** The heading is empty when it's switched off or every heading text is blank. */
@@ -569,9 +700,16 @@ export class ThemeRenderer {
     if (n.layer.type !== "text" || !n.text) return;
     const value = this.valueFor(n, tokens, content);
     if (value === n.lastValue) return;
+    const previous = n.lastValue;
     n.lastValue = value;
     const d = this.doc;
     const s = n.layer.style;
+    if (s.segment) {
+      n.text.innerHTML = value ? segmentSvg(value, s.segment, s.align || "center") : "";
+      n.empty = value.length === 0 && n.layer.hideWhenEmpty !== false;
+      n.pos.classList.toggle("mtl-hidden", n.empty);
+      return;
+    }
     const split = isSplitPreset(n.layer.in.preset) || isSplitPreset(n.layer.out.preset);
     const lineRise = n.layer.in.preset === "line-rise" || n.layer.out.preset === "line-rise";
     const inner = d.createElement("div");
@@ -630,6 +768,54 @@ export class ThemeRenderer {
     n.empty = isEmpty && n.layer.hideWhenEmpty !== false;
     n.pos.classList.toggle("mtl-hidden", n.empty);
     if (!n.empty) this.fitText(n);
+    if (s.flip && previous !== "\u0000" && !this.opts.static && !n.empty) {
+      n.text.animate(
+        [{ transform: "rotateX(-80deg)", opacity: 0.25 }, { transform: "rotateX(0deg)", opacity: 1 }],
+        { duration: 260, easing: "ease-out" },
+      );
+    }
+  }
+
+  // ───────────────────────────── timer (countdown designs) ─────────────────────────────
+
+  /**
+   * Timer tick: swaps changed text and updates warning colours and progress bars
+   * with no in/out animation. Use after the first show().
+   */
+  updateLive(content: ThemeContent) {
+    this.content = content;
+    const tokens = resolveTokens(content);
+    for (const n of this.nodes) this.applyContent(n, tokens, content);
+    this.applyLive(content.live);
+  }
+
+  /** Colours and sizes that follow the timer: warn colours, progress bars, markers, zones. */
+  private applyLive(live?: ThemeLive) {
+    for (const n of this.nodes) {
+      const s = n.layer.style;
+      if (s.warn) {
+        const level = live?.level;
+        const color = level ? s.warnColors?.[level] ?? WARN_DEFAULTS[level] : "";
+        if (s.warn === "text" && n.text) n.text.style.color = color || s.color || "#ffffff";
+        else if (s.warn === "fill" && n.surface) n.surface.style.background = color || gradientCss(n.layer) || s.fill || "";
+        else if (s.warn === "border") n.el.style.borderColor = color || s.borderColor || "rgba(255,255,255,.2)";
+      }
+      if (!s.progress) continue;
+      const frac = Math.min(1, Math.max(0, live?.fraction ?? 0));
+      if (s.progress === "elapsed" && n.surface) n.surface.style.width = `${(frac * 100).toFixed(2)}%`;
+      else if (s.progress === "remaining" && n.surface) n.surface.style.width = `${((1 - frac) * 100).toFixed(2)}%`;
+      else if (s.progress === "marker") n.pos.style.left = `${(frac * 100).toFixed(2)}%`;
+      else if (s.progress === "zones" && n.surface) {
+        const y = live?.yellowFrom;
+        const r = live?.redFrom;
+        const g = s.warnColors?.green ?? WARN_DEFAULTS.green;
+        const yc = s.warnColors?.yellow ?? WARN_DEFAULTS.yellow;
+        const rc = s.warnColors?.red ?? WARN_DEFAULTS.red;
+        const yp = y === undefined ? 100 : Math.min(100, Math.max(0, y * 100));
+        const rp = r === undefined ? 100 : Math.min(100, Math.max(yp, r * 100));
+        n.surface.style.background = `linear-gradient(90deg, ${g} 0%, ${g} ${yp}%, ${yc} ${yp}%, ${yc} ${rp}%, ${rc} ${rp}%, ${rc} 100%)`;
+      }
+    }
   }
 
   /** Shrinks the font until the text fits its box (fixed height) or maxLines (auto height). */
@@ -646,11 +832,14 @@ export class ThemeRenderer {
       fixed ? (n.layer.h as number) - pt - pb : s.maxLines ? s.maxLines * lh * size + 1 : Infinity;
     const inner = t.firstElementChild as HTMLElement | null;
     if (!inner) return;
+    const nowrap = s.nowrap === true;
+    const padX = (s.padding?.[1] ?? 0) + (s.padding?.[3] ?? 0);
     const fits = (size: number) => {
       t.style.fontSize = `${size}px`;
-      return inner.offsetHeight <= limitFor(size) + 1;
+      const widthOk = !nowrap || inner.scrollWidth <= Math.max(1, n.layer.w - padX) + 1;
+      return widthOk && inner.offsetHeight <= limitFor(size) + 1;
     };
-    if (limitFor(max) === Infinity || fits(max)) {
+    if ((!nowrap && limitFor(max) === Infinity) || fits(max)) {
       t.style.fontSize = `${max}px`;
       return;
     }
@@ -758,7 +947,7 @@ export class ThemeRenderer {
   }
 
   private startLoops() {
-    if (this.opts.static) return;
+    if (this.opts.static || !this.opts.loops) return;
     for (const n of this.nodes) {
       const loop = n.layer.loop;
       if (!loop || loop.preset === "none") continue;

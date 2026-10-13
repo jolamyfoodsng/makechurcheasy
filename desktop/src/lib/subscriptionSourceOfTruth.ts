@@ -10,6 +10,8 @@ export interface CanonicalPlanEntitlements {
   maxVideos: number;
   maxBibleVersions: number;
   maxTeams: number;
+  /** Themes a church may use/create: the first N of the curated list are open, the rest lock. -1 = unlimited. */
+  maxThemes?: number;
   maxDevices: number;
   maxMultiviewTemplates: number;
   tickers: boolean;
@@ -239,6 +241,7 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     maxVideos: 5,
     maxBibleVersions: 5,
     maxTeams: 3,
+    maxThemes: 2,
     maxDevices: 1,
     maxMultiviewTemplates: 0,
     tickers: true,
@@ -274,10 +277,11 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     maxVideos: -1,
     maxBibleVersions: -1,
     maxTeams: 5,
+    maxThemes: 10,
     maxDevices: 3,
     maxMultiviewTemplates: 5,
     tickers: true,
-    maxLowerThirds: -1,
+    maxLowerThirds: 15,
     maxTickerThemes: -1,
     multiview: true,
     remoteControl: false,
@@ -309,6 +313,7 @@ export const PLAN_ENTITLEMENTS: Record<CanonicalPlanId, CanonicalPlanEntitlement
     maxVideos: -1,
     maxBibleVersions: -1,
     maxTeams: 20,
+    maxThemes: -1,
     maxDevices: 10,
     maxMultiviewTemplates: -1,
     tickers: true,
@@ -505,7 +510,7 @@ export function toLegacyCompatibleEntitlements(
     songs: entitlements.maxSongs,
     images: entitlements.maxImages,
     videos: entitlements.maxVideos,
-    themes: planId === "free" ? 2 : isPaid ? -1 : 10,
+    themes: entitlements.maxThemes ?? (planId === "free" ? 2 : isPaid ? -1 : 10),
     lowerThirds: entitlements.maxLowerThirds ?? (entitlements.lowerThirds ? -1 : 0),
     devices: entitlements.maxDevices,
     bibleVersions: entitlements.maxBibleVersions,

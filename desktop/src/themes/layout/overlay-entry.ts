@@ -11,6 +11,7 @@
 import { ThemeRenderer } from "./renderer";
 import { isThemeLayout, type ThemeLayout } from "./types";
 import { applyLayoutAdjust } from "./adjust";
+import { buildCountdownContent } from "../../countdowns/countdownTime";
 
 interface OverlayPacket {
   slide?: { text?: string; reference?: string; lineCount?: number } | null;
@@ -63,7 +64,7 @@ function ensureHost(hooks: OverlayHooks): ThemeRenderer {
   host.id = "mtl-theme-host";
   host.style.cssText = "position:fixed;inset:0;z-index:50;pointer-events:none";
   doc.body.appendChild(host);
-  renderer = new ThemeRenderer(host, { resolveAsset: hooks.resolveAsset });
+  renderer = new ThemeRenderer(host, { resolveAsset: hooks.resolveAsset, fillViewport: true });
   return renderer;
 }
 
@@ -228,7 +229,13 @@ const api = {
 declare global {
   interface Window {
     MCEThemeOverlay?: typeof api;
+    /** The renderer class itself, for pages that draw their own layouts (countdown overlay). */
+    MCEThemeRenderer?: typeof ThemeRenderer;
+    /** Timer reading -> layer-design content (tokens + warning level); see countdowns/countdownTime.ts. */
+    MCECountdownContent?: typeof buildCountdownContent;
   }
 }
 
 window.MCEThemeOverlay = api;
+window.MCEThemeRenderer = ThemeRenderer;
+window.MCECountdownContent = buildCountdownContent;
