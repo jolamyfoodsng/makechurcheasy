@@ -92,6 +92,8 @@ function textLook(s: LayerStyle): LayerStyle {
     textShadow: s.textShadow,
     underline: s.underline,
     verseNumberColor: s.verseNumberColor,
+    emphasisColor: s.emphasisColor,
+    emphasisWeight: s.emphasisWeight,
   };
 }
 

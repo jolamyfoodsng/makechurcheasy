@@ -20,6 +20,7 @@ import {
   timing,
   totalDuration,
 } from "./animations";
+import { emphasisColorFor, emphasisWeightFor, parseEmphasis } from "./emphasis";
 import { headingLayers } from "./heading";
 import { segmentSvg } from "./segments";
 import { fillTokens, hasTokens, isVerseTextPattern, resolveTokens, splitVerseLines, type ResolvedTokens } from "./content";
@@ -103,6 +104,7 @@ const BASE_CSS = `
 .mtl-text-inner{display:block}
 .mtl-line{display:inline}
 .mtl-line.is-block{display:block}
+.mtl-em{font-weight:700}
 .mtl-num{font-size:.55em;vertical-align:super;line-height:0;margin-right:.25em;font-weight:inherit;opacity:.85}
 .mtl-w{display:inline-block;white-space:pre}
 .mtl-img{display:block;width:100%;height:100%}
@@ -191,6 +193,13 @@ function nextFrame(): Promise<void> {
 
 /** Longest the old layout may take to play out on a Full <-> Lower third switch. */
 const MODE_SWITCH_MAX_OUT_MS = 450;
+/**
+ * Next verse / slide while one is already on screen: only the first show plays
+ * the theme's full entrance. Later swaps are squeezed into these budgets so
+ * stepping through verses or lyrics feels instant (a quick out, a quick in).
+ */
+const QUICK_SWAP_OUT_MS = 100;
+const QUICK_SWAP_IN_MS = 220;
 /** Stage fade used on a mode switch when the layers have no out animation. */
 const MODE_SWITCH_FALLBACK_FADE_MS = 220;
 
@@ -422,9 +431,9 @@ export class ThemeRenderer {
     const prev = this.content;
     this.content = content;
     if (this.layout.swap === "all") {
-      await this.playOut(this.nodes);
+      await this.playOut(this.nodes, this.quickSpeed(this.nodes, "out", QUICK_SWAP_OUT_MS));
       this.timeSwap(() => this.applyAllContent(content));
-      await this.playIn(this.nodes);
+      await this.playIn(this.nodes, this.quickSpeed(this.nodes, "in", QUICK_SWAP_IN_MS));
       return;
     }
     const tokens = resolveTokens(content);
@@ -433,13 +442,21 @@ export class ThemeRenderer {
     const headingEmpty = this.headingEmpty(tokens, content);
     changed.push(...this.nodes.filter((n) => n.heading === "decor" && n.empty !== headingEmpty));
     if (!changed.length && prev) return;
-    await this.playOut(changed, 0.6);
+    await this.playOut(changed, this.quickSpeed(changed, "out", QUICK_SWAP_OUT_MS));
     this.timeSwap(() => {
       for (const n of changed) this.applyContent(n, tokens, content);
       this.syncHeadingDecor(headingEmpty);
       this.applyLive(content.live);
     });
-    await this.playIn(changed.filter((n) => !n.empty), 0.8);
+    const entering = changed.filter((n) => !n.empty);
+    await this.playIn(entering, this.quickSpeed(entering, "in", QUICK_SWAP_IN_MS));
+  }
+
+  /** Speed multiplier that fits these nodes' in/out animations inside `maxMs` (never slows them down). */
+  private quickSpeed(nodes: LayerNode[], dir: "in" | "out", maxMs: number): number {
+    const anims = nodes.filter((n) => !n.empty).map((n) => (dir === "in" ? n.layer.in : n.layer.out));
+    const total = totalDuration(anims);
+    return total > maxMs ? maxMs / total : 1;
   }
 
   private async runSwitch(layout: ThemeLayout, content: ThemeContent | null) {
@@ -734,6 +751,24 @@ export class ThemeRenderer {
       }
     };
 
+    // *Important words*: coloured and bolder, in the theme's own highlight colour.
+    const emColor = emphasisColorFor(this.layout, n.layer);
+    const emWeight = emphasisWeightFor(s);
+    const appendRich = (parent: HTMLElement, body: string) => {
+      for (const part of parseEmphasis(body)) {
+        if (!part.em) {
+          appendWords(parent, part.text);
+          continue;
+        }
+        const em = d.createElement("span");
+        em.className = "mtl-em";
+        em.style.color = emColor;
+        em.style.fontWeight = String(emWeight);
+        appendWords(em, part.text);
+        parent.appendChild(em);
+      }
+    };
+
     let isEmpty: boolean;
     if (n.isVerse) {
       const lines = splitVerseLines(tokens.text, content.lineCount);
@@ -748,7 +783,7 @@ export class ThemeRenderer {
           if (s.verseNumberColor) num.style.color = s.verseNumberColor;
           span.appendChild(num);
         }
-        appendWords(span, line.body);
+        appendRich(span, line.body);
         if (!lineRise && i < lines.length - 1) span.appendChild(d.createTextNode(" "));
         inner.appendChild(span);
       });
@@ -757,10 +792,10 @@ export class ThemeRenderer {
       if (lineRise) {
         const span = d.createElement("span");
         span.className = "mtl-line is-block";
-        span.textContent = value;
+        appendRich(span, value);
         inner.appendChild(span);
       } else {
-        appendWords(inner, value);
+        appendRich(inner, value);
       }
     }
 

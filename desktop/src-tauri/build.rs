@@ -1,4 +1,11 @@
 fn main() {
+    // The licence public key is compiled into the binary (see license_verify.rs).
+    println!("cargo:rerun-if-env-changed=VITE_SUBSCRIPTION_PUBLIC_KEY");
+    if std::env::var("PROFILE").map(|p| p == "release").unwrap_or(false)
+        && std::env::var("VITE_SUBSCRIPTION_PUBLIC_KEY").map(|v| v.trim().is_empty()).unwrap_or(true)
+    {
+        println!("cargo:warning=VITE_SUBSCRIPTION_PUBLIC_KEY is not set: this release build will reject every signed licence (everyone runs as Free).");
+    }
     tauri_build::build();
 
     #[cfg(target_os = "macos")]

@@ -11,7 +11,8 @@
     every theme looks the same as in OBS, plus a media layer (pictures, videos).
 
     The app keeps one program state on its local server (/api/studio-state):
-      { revision, active, screen, logoUrl?, churchName?, packets: {bible, worship, notes}, media }
+      { revision, active, screen, logoUrl?, churchName?, packets: {bible, worship, notes}, media, mix? }
+    `mix` is the Screen Mix: video / picture / camera layers behind the words, banners and the logo on top.
     This page reads it (immediately when the relay pings, otherwise every 400 ms)
     and gives each overlay page its packet through the URL hash, the same way the
     Studio's Preview works. The overlay pages ignore the relay (mceRelay=0), so the
@@ -53,6 +54,43 @@
       height: 100%;
       object-fit: contain;
     }
+    /* Screen Mix: backdrops sit behind the words (DOM order), banners and the logo in front. */
+    #mix-back, #mix-front { position: absolute; inset: 0; pointer-events: none; }
+    .mix-item { position: absolute; inset: 0; opacity: 0; transition: opacity 0.45s ease; }
+    .mix-item.is-on { opacity: 1; }
+    .mix-item video, .mix-item img.mix-fill { width: 100%; height: 100%; display: block; background: #000; }
+    .mix-banner {
+      position: absolute;
+      inset: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5vh;
+      max-width: 62vw;
+      padding: 1.6vh 2.4vw 1.8vh;
+      border-left: 0.6vw solid #e11d48;
+      border-radius: 0.6vw;
+      background: linear-gradient(90deg, rgba(8, 10, 20, 0.92), rgba(8, 10, 20, 0.78));
+      color: #fff;
+      font-family: Inter, "Segoe UI", system-ui, sans-serif;
+      opacity: 0;
+      transform: translateY(3vh);
+      transition: opacity 0.45s ease, transform 0.45s ease;
+    }
+    .mix-banner.is-on { opacity: 1; transform: none; }
+    .mix-banner .t { font-weight: 800; font-size: 3.2vw; line-height: 1.15; }
+    .mix-banner .s { font-weight: 500; font-size: 1.8vw; line-height: 1.25; opacity: 0.85; }
+    .mix-banner.c-bottom-left { left: 3vw; bottom: 6vh; }
+    .mix-banner.c-bottom-center { left: 50%; bottom: 6vh; margin-left: -31vw; width: 62vw; align-items: center; text-align: center; border-left: 0; border-bottom: 0.5vh solid #e11d48; }
+    .mix-banner.c-bottom-right { right: 3vw; bottom: 6vh; }
+    .mix-banner.c-top-left { left: 3vw; top: 5vh; }
+    .mix-banner.c-top-right { right: 3vw; top: 5vh; }
+    .mix-logo { position: absolute; max-width: 14vw; max-height: 16vh; object-fit: contain; opacity: 0; transition: opacity 0.45s ease; }
+    .mix-logo.is-on { opacity: 1; }
+    .mix-logo.c-bottom-left { left: 3vw; bottom: 4vh; }
+    .mix-logo.c-bottom-center { left: 50%; bottom: 4vh; transform: translateX(-50%); }
+    .mix-logo.c-bottom-right { right: 3vw; bottom: 4vh; }
+    .mix-logo.c-top-left { left: 3vw; top: 4vh; }
+    .mix-logo.c-top-right { right: 3vw; top: 4vh; }
     #curtain {
       position: absolute;
       inset: 0;
@@ -135,10 +173,12 @@
   </style>
 </head>
 <body>
+  <div id="mix-back" aria-hidden="true"></div>
   <iframe class="layer" id="layer-bible" title="Bible" src="mce-bible-overlay.html?tab=bible&amp;mceRelay=0&amp;mceSource=studio-output-bible"></iframe>
   <iframe class="layer" id="layer-worship" title="Worship" src="mce-worship-overlay.html?mceRelay=0&amp;mceSource=studio-output-worship"></iframe>
   <iframe class="layer" id="layer-notes" title="Notes" src="mce-note.html?mceRelay=0&amp;mceSource=studio-output-notes"></iframe>
   <div class="layer" id="layer-media"></div>
+  <div id="mix-front" aria-hidden="true"></div>
   <div id="curtain" aria-hidden="true"></div>
   <div id="hint" role="status"></div>
   <div id="menu" role="menu"><button type="button" id="menu-close" role="menuitem">Close projector <span>Esc</span></button></div>
@@ -269,11 +309,174 @@
         curtain.classList.toggle('is-on', screen === 'black' || screen === 'logo');
       }
 
+      // ── Screen Mix ──
+      // Each layer keeps one element; it is rebuilt only when its content changes, and
+      // `shown` just fades it in or out. Cameras are opened only while shown.
+      var mixBack = document.getElementById('mix-back');
+      var mixFront = document.getElementById('mix-front');
+      var mixEntries = {};
+      var mixOrder = '';
+
+      function mixSig(layer) {
+        return [layer.kind, layer.url, layer.fit, layer.loop, layer.muted, layer.deviceId,
+          layer.text, layer.subtext, layer.corner, layer.logoUrl].join('|');
+      }
+
+      function buildMixElement(layer) {
+        var el, media = null;
+        if (layer.kind === 'video') {
+          el = document.createElement('div');
+          el.className = 'mix-item';
+          media = document.createElement('video');
+          media.loop = layer.loop !== false;
+          media.muted = isMonitor || layer.muted === true;
+          media.playsInline = true;
+          media.src = layer.url || '';
+          media.style.objectFit = layer.fit === 'contain' ? 'contain' : 'cover';
+          el.appendChild(media);
+        } else if (layer.kind === 'image') {
+          el = document.createElement('div');
+          el.className = 'mix-item';
+          media = document.createElement('img');
+          media.className = 'mix-fill';
+          media.alt = '';
+          media.src = layer.url || '';
+          media.style.objectFit = layer.fit === 'contain' ? 'contain' : 'cover';
+          el.appendChild(media);
+        } else if (layer.kind === 'camera') {
+          el = document.createElement('div');
+          el.className = 'mix-item';
+          media = document.createElement('video');
+          media.muted = true;
+          media.playsInline = true;
+          media.style.objectFit = layer.fit === 'contain' ? 'contain' : 'cover';
+          el.appendChild(media);
+        } else if (layer.kind === 'banner') {
+          el = document.createElement('div');
+          el.className = 'mix-banner c-' + (layer.corner || 'bottom-left');
+          var t = document.createElement('div');
+          t.className = 't';
+          t.textContent = layer.text || '';
+          el.appendChild(t);
+          if (layer.subtext) {
+            var sub = document.createElement('div');
+            sub.className = 's';
+            sub.textContent = layer.subtext;
+            el.appendChild(sub);
+          }
+        } else if (layer.kind === 'logo') {
+          el = document.createElement('img');
+          el.className = 'mix-logo c-' + (layer.corner || 'top-right');
+          el.alt = '';
+          el.src = layer.logoUrl || '';
+        } else {
+          return null;
+        }
+        return { el: el, media: media, stream: null };
+      }
+
+      function stopCamera(entry) {
+        if (entry.stream) {
+          entry.stream.getTracks().forEach(function (track) { try { track.stop(); } catch (e) { /* ignore */ } });
+          entry.stream = null;
+        }
+        if (entry.media && entry.layer && entry.layer.kind === 'camera') entry.media.srcObject = null;
+      }
+
+      function setMixShown(entry, shown) {
+        var layer = entry.layer;
+        if (shown) {
+          if (layer.kind === 'camera') {
+            if (!entry.stream && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+              var token = entry.token = (entry.token || 0) + 1;
+              var video = layer.deviceId ? { deviceId: { exact: layer.deviceId } } : true;
+              navigator.mediaDevices.getUserMedia({ video: video, audio: false }).then(function (stream) {
+                if (entry.token !== token || !entry.layer.shown) { stream.getTracks().forEach(function (tr) { tr.stop(); }); return; }
+                entry.stream = stream;
+                entry.media.srcObject = stream;
+                try { entry.media.play(); } catch (e) { /* ignore */ }
+              }).catch(function () { /* no camera or no permission: the layer stays empty */ });
+            }
+          } else if (layer.kind === 'video' && entry.media) {
+            try { entry.media.play(); } catch (e) { /* ignore */ }
+          }
+          requestAnimationFrame(function () { entry.el.classList.add('is-on'); });
+        } else {
+          entry.el.classList.remove('is-on');
+          if (layer.kind === 'camera') {
+            entry.token = (entry.token || 0) + 1;
+            setTimeout(function () { if (!entry.layer.shown) stopCamera(entry); }, 500);
+          } else if (layer.kind === 'video' && entry.media) {
+            setTimeout(function () { if (!entry.layer.shown) { try { entry.media.pause(); } catch (e) { /* ignore */ } } }, 500);
+          }
+        }
+      }
+
+      function applyMix(layers) {
+        layers = Array.isArray(layers) ? layers : [];
+        var keep = {};
+        layers.forEach(function (layer) {
+          if (!layer || !layer.id) return;
+          keep[layer.id] = true;
+          var sig = mixSig(layer);
+          var entry = mixEntries[layer.id];
+          if (entry && entry.sig !== sig) {
+            stopCamera(entry);
+            if (entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
+            entry = null;
+          }
+          if (!entry) {
+            var built = buildMixElement(layer);
+            if (!built) return;
+            entry = built;
+            entry.sig = sig;
+            entry.layer = layer;
+            entry.shownNow = false;
+            mixEntries[layer.id] = entry;
+            var host = (layer.kind === 'banner' || layer.kind === 'logo') ? mixFront : mixBack;
+            host.appendChild(entry.el);
+            mixOrder = '';
+          }
+          entry.layer = layer;
+          var shown = layer.shown === true;
+          if (shown !== entry.shownNow) {
+            entry.shownNow = shown;
+            setMixShown(entry, shown);
+          }
+        });
+        Object.keys(mixEntries).forEach(function (id) {
+          if (keep[id]) return;
+          var entry = mixEntries[id];
+          delete mixEntries[id];
+          entry.layer = { shown: false, kind: entry.layer.kind };
+          entry.el.classList.remove('is-on');
+          setTimeout(function () {
+            stopCamera(entry);
+            if (entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
+          }, 500);
+        });
+        // Keep the layers in the order of the list (moving a video element pauses it, so only when it changed).
+        var order = layers.map(function (l) { return l && l.id; }).join(',');
+        if (order !== mixOrder) {
+          mixOrder = order;
+          layers.forEach(function (layer) {
+            var entry = layer && mixEntries[layer.id];
+            if (entry && entry.el.parentNode) {
+              entry.el.parentNode.appendChild(entry.el);
+              if (entry.shownNow && entry.layer.kind === 'video' && entry.media) {
+                try { entry.media.play(); } catch (e) { /* ignore */ }
+              }
+            }
+          });
+        }
+      }
+
       function applyState(state) {
         if (!state || typeof state !== 'object' || state.unchanged) return;
         var revision = Number(state.revision) || 0;
         if (revision <= lastRevision) return;
         lastRevision = revision;
+        var mixLayers = state.mix || [];
         if (feed === 'preview') {
           var pv = state.preview || { active: null, packets: {}, media: null };
           state = { active: pv.active, packets: pv.packets || {}, media: pv.media || null, screen: 'live' };
@@ -282,6 +485,7 @@
         ['bible', 'worship', 'notes'].forEach(function (key) {
           if (packets[key]) sendPacket(key, packets[key]);
         });
+        applyMix(mixLayers);
         applyMedia(state.media || null);
         applyActive(state.active || null);
         applyScreen(state);

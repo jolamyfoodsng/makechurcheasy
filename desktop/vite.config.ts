@@ -443,7 +443,7 @@ function capitalize(s: string): string {
 }
 
 // https://vite.dev/config/
-export default defineConfig(async () => ({
+export default defineConfig(async ({ mode }) => ({
   plugins: [standaloneHtmlGuardPlugin(), overlayHtmlRestartPlugin(), react(), authSessionPlugin(), entitlementServerPlugin()],
 
   resolve: {
@@ -456,10 +456,20 @@ export default defineConfig(async () => ({
   define: {
     __APP_VERSION__: JSON.stringify(APP_VERSION),
     __MCE_OVERLAY_HTML_VERSION__: JSON.stringify(OVERLAY_HTML_VERSION),
+    // Never compile the speech key into a production bundle, even if it is present
+    // in the environment. Release builds get a short-lived token from the API.
+    ...(mode === "production"
+      ? {
+        "import.meta.env.VITE_ASSEMBLYAI_API_KEYS": '""',
+        "import.meta.env.VITE_ASSEMBLYAI_API_KEY": '""',
+      }
+      : {}),
   },
 
   // Multi-page build: main app + standalone dock + LM dock + floating assistant
   build: {
+    // Never ship source maps: they hand out the original TypeScript.
+    sourcemap: false,
     rollupOptions: {
       input: {
         main: resolve(root, "index.html"),

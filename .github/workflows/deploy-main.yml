@@ -34,7 +34,6 @@ jobs:
           VITE_AUTH_API_URL: ${{ secrets.PROD_AUTH_API_URL }}
           VITE_API_BASE_URL: ${{ secrets.PROD_API_BASE_URL }}
           VITE_WS_URL: ${{ secrets.PROD_WS_URL }}
-          VITE_ASSEMBLYAI_API_KEYS: ${{ secrets.VITE_ASSEMBLYAI_API_KEYS }}
 
   deploy-api:
     name: Deploy API (Cloudflare)
@@ -89,6 +88,7 @@ jobs:
 
   deploy-dashboard:
     name: Deploy Dashboard (Cloudflare)
+    needs: [deploy-api]
     runs-on: ubuntu-latest
     environment: production
     defaults:

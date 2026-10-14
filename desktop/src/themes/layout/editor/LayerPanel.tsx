@@ -543,6 +543,9 @@ export default function LayerPanel({ layout, selectedId, onSelect, onChange, med
               {role === "verse" && (
                 <ColorField label="Verse number colour" value={s.verseNumberColor} onChange={(v) => style({ verseNumberColor: v })} />
               )}
+              {(role === "verse" || layer.content === "{text}") && (
+                <ColorField label="Important words colour (*words*)" value={s.emphasisColor} onChange={(v) => style({ emphasisColor: v })} />
+              )}
               {isCountdown && <TimerTextControls s={s} onStyle={style} />}
             </>
           )}

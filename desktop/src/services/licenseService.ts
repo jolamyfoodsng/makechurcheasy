@@ -43,6 +43,7 @@ import {
 } from "../lib/subscriptionSourceOfTruth";
 import { getLocalDevPlanOverride } from "./localDevPlanOverride";
 import { capPlanForOffline, getOfflineEntitlementState } from "./offlineEntitlement";
+import { getVerifiedPlanCap } from "./verifiedLicense";
 
 export type { PlanTier } from "./planConfigTypes";
 
@@ -281,6 +282,14 @@ export function getUserPlan(user: AuthUser | null): PlanTier {
   return normalizedUserPlan as PlanTier;
 }
 
+const PLAN_RANK: Record<string, number> = { free: 0, basic: 1, growth: 2 };
+
+/** The lower of two plans (unknown names count as Free). */
+function lowerPlan(a: PlanTier, b: string): PlanTier {
+  const bPlan = normalizePlanId(b) as PlanTier;
+  return (PLAN_RANK[a] ?? 0) <= (PLAN_RANK[bPlan] ?? 0) ? a : bPlan;
+}
+
 /** Whether the user's trial is currently active. */
 export function isInTrial(user: AuthUser | null): boolean {
   const trialActive = isCanonicalTrialActive(user as any);
@@ -319,10 +328,21 @@ export function getEffectivePlan(user: AuthUser | null): PlanTier {
 
   const userPlan = getUserPlan(user);
   const resolved = userPlan !== "free" ? normalizePlanId(userPlan) : resolveCanonicalPlan({ ...user, plan: userPlan });
+  // On production builds the plan and the admin flag come from the server-signed
+  // licence. The user object is kept in localStorage and can be edited, so it can
+  // only lower the plan, never raise it. Before the first licence check finishes,
+  // and on dev builds, the user object is used as before.
+  const cap = getVerifiedPlanCap();
+  const isAdminUser = cap.active
+    ? cap.isAdmin
+    : String(user.role || "").toLowerCase() === "admin";
+  const cappedResolved: PlanTier = cap.active && !isAdminUser
+    ? (cap.known ? lowerPlan(resolved, cap.plan) : "free")
+    : resolved;
   // Offline rules: Free once the paid period ends (even offline) or after 21 days without a sync.
-  const plan = String(user.role || "").toLowerCase() === "admin"
-    ? resolved
-    : (capPlanForOffline(resolved, getOfflineEntitlementState()) as PlanTier);
+  const plan = isAdminUser
+    ? cappedResolved
+    : (capPlanForOffline(cappedResolved, getOfflineEntitlementState()) as PlanTier);
   console.debug(
     "[licenseService] getEffectivePlan=%s (user.plan=%s, trial.active=%s, trial.status=%s, trial.endsAt=%s)",
     plan, user.plan, user.trial?.active, user.trial?.status, user.trial?.endsAt,

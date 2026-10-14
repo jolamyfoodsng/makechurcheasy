@@ -6,7 +6,7 @@ import { lockedThemeMessage, planLockedThemeIds, planOpenThemeIds } from "./plan
 const builtins = BUILTIN_THEMES.map((theme) => ({ id: theme.id, source: theme.source }));
 
 describe("plan theme locks", () => {
-  it("opens the first N ready-made themes, Caption Rule first", () => {
+  it("opens the first N ready-made themes, the default first", () => {
     const open = [...planOpenThemeIds(2)];
     expect(open).toHaveLength(2);
     expect(open[0]).toBe(STARTER_DEFAULT_THEME_ID);

@@ -118,6 +118,23 @@ export function signPayload(payload: SubscriptionPayload): string {
 }
 
 /**
+ * Sign an exact string (UTF-8 bytes). Used for the device license: the client
+ * verifies the signature over the very same string it then parses, so there is
+ * no canonicalisation step that could differ between server and client.
+ * Returns base64, or null when no signing key is configured (the caller then
+ * serves the license unsigned rather than failing the request).
+ */
+export function signString(value: string): string | null {
+  try {
+    const sig = ed25519Sign(null, Buffer.from(value, "utf8"), getPrivateKey());
+    return sig.toString("base64");
+  } catch (err) {
+    console.error("[subscriptionSigner] Could not sign license:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+/**
  * Get the Ed25519 public key as base64-encoded DER (for embedding in the desktop app).
  */
 export function getPublicKeyBase64(): string {

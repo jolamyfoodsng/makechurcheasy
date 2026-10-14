@@ -1,51 +1,78 @@
 /**
  * StudioPage.tsx — Presentation Studio: run the projector without OBS.
  *
- * Left: the real Dock (the same component as /dock.html in OBS), so Bible,
- * Worship, Notes, Media and Full / Lower third work exactly as in OBS.
- * Right: Preview | Go live | Program, and projectors on any screen.
+ * Layout (as designed): Bible / Worship / Notes / Media tabs on top; the library on
+ * the left (Bible doc, songs, notes, media); Program and Preview in the middle with
+ * Go live, Previous and Next; today's schedule on the right; and along the bottom the
+ * Holyrics-style picker (books, chapters, verses) or one card per slide.
  *
- * Whatever the Dock puts on screen comes through studioDockSink and goes to
- * Program (or to Preview first, when "Preview first" is on).
- * Modelled on OBS Studio Mode (Preview / Program, right-click → Open Projector).
+ * Click a card or verse = Preview. Double-click = Live. Space = Go live and move on.
+ * The engine in ../studio/studioEngine.ts sends the slide to the projector with the
+ * theme picked for that module, the same look the Dock gives in OBS.
  */
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import {
+  ArrowLeft,
+  BookOpen,
   Check,
   ChevronRight,
   Copy,
   Eye,
+  FileText,
+  Layers,
+  Image as ImageIcon,
   Maximize2,
   Minimize2,
   Monitor,
   MonitorOff,
   MonitorPlay,
+  Music,
   Play,
   Radio,
+  Settings as SettingsIcon,
   Square,
   Sun,
   Wifi,
   X,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import DockPage from "../dock/DockPage";
 import { getSettings as getMvSettings } from "../multiview/mvStore";
+import { getAllSongs, WORSHIP_SONGS_UPDATED_EVENT } from "../worship/worshipDb";
+import type { Song } from "../worship/types";
+import { DOCK_NOTES_UPDATED_EVENT, loadDockNotes, type DockNote } from "../dock/dockNotesStorage";
+import { addWholeNoteToActiveSchedule } from "../dock/dockScheduleService";
+import type { VoiceBibleCandidate } from "../services/voiceBibleTypes";
+import { getAllMedia } from "../library/libraryDb";
+import type { MediaItem } from "../library/libraryTypes";
+import type { ServicePlanItem } from "../service-planner/types";
 import {
+  bibleSlides,
   clearProgram,
-  goLiveItem,
+  goLive,
+  loadStudioThemes,
+  noteSlides,
   previewMonitorUrl,
-  programFrameUrl,
-  setPreviewItem,
+  setPreviewState,
+  setProgramMix,
   setProgramScreen,
   studioBaseUrl,
-  type StudioItem,
   type StudioMode,
   type StudioScreen,
+  type StudioThemes,
   type StudioTransition,
 } from "../studio/studioEngine";
-import { dockItemMode, studioItemFromDock, studioItemFromMedia } from "../studio/studioDockAdapter";
-import { setStudioDockSink, type StudioDockEvent } from "../studio/studioDockSink";
+import { mediaSlide, songSlides, type DeckSlide } from "../studio/studioSlides";
+import { useStudioBible } from "../studio/useStudioBible";
+import { useVerseAi } from "../studio/useVerseAi";
+import { loadMix, saveMix, type StudioMixLayer } from "../studio/studioMix";
+import { BibleNav, BibleVerses } from "../studio/ui/BibleDoc";
+import SlideCards from "../studio/ui/SlideCards";
+import SchedulePanel from "../studio/ui/SchedulePanel";
+import VerseAiPanel from "../studio/ui/VerseAiPanel";
+import MixPanel from "../studio/ui/MixPanel";
+import { MediaList, NoteList, SongList } from "../studio/ui/LibraryLists";
 import {
   closeAllProjectors,
   closeProjector,
@@ -63,15 +90,30 @@ import {
 import "./StudioPage.css";
 
 const PREFS_KEY = "mce-studio-prefs";
-const IMMERSIVE_CLASS = "studio-immersive";
+/** The Studio has the whole window: the app sidebar and status strips are hidden while it is open. */
+const PAGE_CLASS = "studio-page";
+
+type Source = "bible" | "worship" | "notes" | "media" | "lower";
+/** The bottom panel always has two tabs: the content of the open source, and Verse AI. */
+type BottomTab = "slides" | "verseai";
+
+const SOURCES: Array<{ id: Source; label: string; icon: typeof BookOpen }> = [
+  { id: "bible", label: "Bible", icon: BookOpen },
+  { id: "worship", label: "Worship", icon: Music },
+  { id: "notes", label: "Notes", icon: FileText },
+  { id: "media", label: "Media", icon: ImageIcon },
+  { id: "lower", label: "Lower thirds", icon: Layers },
+];
 
 interface StudioPrefs {
   transition: StudioTransition;
   previewFirst: boolean;
+  source: Source;
+  look: StudioMode;
 }
 
 function readPrefs(): StudioPrefs {
-  const fallback: StudioPrefs = { transition: "fade", previewFirst: false };
+  const fallback: StudioPrefs = { transition: "fade", previewFirst: true, source: "bible", look: "fullscreen" };
   try {
     const raw = localStorage.getItem(PREFS_KEY);
     return raw ? { ...fallback, ...(JSON.parse(raw) as Partial<StudioPrefs>) } : fallback;
@@ -94,6 +136,12 @@ function logoUrlFromPath(path: string): string {
   if (/^(data:|https?:|blob:)/i.test(value) || value.startsWith("/uploads/")) return value;
   const name = value.replace(/^file:\/\//i, "").split(/[\\/]/).pop();
   return name ? `/uploads/${encodeURIComponent(name)}` : "";
+}
+
+function isTyping(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el || !el.tagName) return false;
+  return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable;
 }
 
 /** A 1920×1080 page scaled to fit its box, so the monitors look exactly like the projector. */
@@ -119,18 +167,37 @@ function ScaledFrame({ src, title }: { src: string; title: string }) {
 }
 
 export default function StudioPage() {
+  const navigate = useNavigate();
   const initialPrefs = useState(readPrefs)[0];
   const [base, setBase] = useState("");
   const [transition, setTransition] = useState<StudioTransition>(initialPrefs.transition);
   const [previewFirst, setPreviewFirst] = useState(initialPrefs.previewFirst);
+  const [source, setSource] = useState<Source>(initialPrefs.source);
+  const [look, setLook] = useState<StudioMode>(initialPrefs.look);
   const [message, setMessage] = useState("");
   const [immersive, setImmersive] = useState(false);
 
+  // Library
+  const bible = useStudioBible();
+  const [songs, setSongs] = useState<Song[]>([]);
+  const [songId, setSongId] = useState("");
+  const [notes, setNotes] = useState<DockNote[]>([]);
+  const [noteId, setNoteId] = useState("");
+  const [media, setMedia] = useState<MediaItem[]>([]);
+  const [mediaId, setMediaId] = useState("");
+  const [themes, setThemes] = useState<StudioThemes | null>(null);
+
   // Preview / Program
-  const [previewItem, setPreviewItemState] = useState<StudioItem | null>(null);
-  const [liveItem, setLiveItem] = useState<StudioItem | null>(null);
+  const [previewIdx, setPreviewIdx] = useState(0);
+  const [pendingVerse, setPendingVerse] = useState<number | null>(null);
+  const [pendingLive, setPendingLive] = useState(false);
+  const [bottomTab, setBottomTab] = useState<BottomTab>("slides");
+  const [aiOpened, setAiOpened] = useState(false);
+  const [mix, setMix] = useState<StudioMixLayer[]>(loadMix);
+  const mixRef = useRef<StudioMixLayer[]>(mix);
+  const mixTimers = useRef<Record<string, number>>({});
+  const [liveKey, setLiveKey] = useState("");
   const [screen, setScreen] = useState<StudioScreen>("live");
-  const modeRef = useRef<StudioMode>("fullscreen");
 
   // Outputs
   const [monitors, setMonitors] = useState<StudioMonitor[]>([]);
@@ -138,6 +205,7 @@ export default function StudioPage() {
   const [projectorList, setProjectorList] = useState<OpenProjector[]>(() => listOpenProjectors());
   const [busy, setBusy] = useState(false);
   const [outputsPanel, setOutputsPanel] = useState(false);
+  const [settingsPanel, setSettingsPanel] = useState(false);
   const [wifiLink, setWifiLink] = useState("");
   const [copied, setCopied] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; feed: ProjectorFeed } | null>(null);
@@ -146,8 +214,33 @@ export default function StudioPage() {
   useEffect(() => onProjectorsChange(setProjectorList), []);
 
   useEffect(() => {
-    savePrefs({ transition, previewFirst });
-  }, [transition, previewFirst]);
+    savePrefs({ transition, previewFirst, source, look });
+  }, [transition, previewFirst, source, look]);
+
+  // ── Load the library ──
+  useEffect(() => {
+    let cancelled = false;
+    const loadSongs = () => void getAllSongs().then((list) => { if (!cancelled) setSongs(list); }).catch(() => undefined);
+    const loadNotes = () => { if (!cancelled) setNotes(loadDockNotes()); };
+    const loadMedia = () => void getAllMedia()
+      .then((list) => { if (!cancelled) setMedia(list.filter((m) => m.type === "image" || m.type === "video")); })
+      .catch(() => undefined);
+    const loadThemes = () => void loadStudioThemes().then((t) => { if (!cancelled) setThemes(t); }).catch(() => undefined);
+    loadSongs();
+    loadNotes();
+    loadMedia();
+    loadThemes();
+    const onFocus = () => { loadSongs(); loadNotes(); loadMedia(); loadThemes(); };
+    window.addEventListener(WORSHIP_SONGS_UPDATED_EVENT, loadSongs);
+    window.addEventListener(DOCK_NOTES_UPDATED_EVENT, loadNotes);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(WORSHIP_SONGS_UPDATED_EVENT, loadSongs);
+      window.removeEventListener(DOCK_NOTES_UPDATED_EVENT, loadNotes);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
 
   const refreshMonitors = useCallback(async () => {
     try {
@@ -173,54 +266,68 @@ export default function StudioPage() {
     };
   }, [refreshMonitors]);
 
-  // ── Program / Preview ──
-  const sendLive = useCallback((item: StudioItem | null) => {
-    if (!item) return;
-    goLiveItem(item, modeRef.current);
-    setLiveItem(item);
-    setScreen("live");
-  }, []);
+  // ── The slides of what is open ──
+  const bibleReady = bible.loadedKey === `${bible.book}|${bible.chapter}|${bible.translation}`;
 
-  const showInPreview = useCallback((item: StudioItem | null) => {
-    setPreviewItem(item);
-    setPreviewItemState(item);
-  }, []);
+  const deck: DeckSlide[] = useMemo(() => {
+    if (source === "bible") {
+      return bibleReady ? bibleSlides(bible.book, bible.chapter, bible.translation, bible.verses) : [];
+    }
+    if (source === "worship") {
+      const song = songs.find((s) => s.id === songId);
+      return song ? songSlides(song) : [];
+    }
+    if (source === "notes") {
+      const note = notes.find((n) => n.id === noteId);
+      return note ? noteSlides(note.id, note.title || "Note", note.content) : [];
+    }
+    if (source === "lower") return [];
+    return media.map(mediaSlide).filter((s): s is DeckSlide => s !== null);
+  }, [source, bibleReady, bible.book, bible.chapter, bible.translation, bible.verses, songs, songId, notes, noteId, media]);
+
+  const safeIdx = Math.min(previewIdx, Math.max(0, deck.length - 1));
+  const previewSlide = deck[safeIdx] ?? null;
+  const liveIdx = deck.findIndex((s) => s.key === liveKey);
+  const liveSlide = liveIdx >= 0 ? deck[liveIdx] : null;
+  const previewIsLive = liveIdx >= 0 && liveIdx === safeIdx;
+
+  // Keep the Preview screen on the selected slide.
+  useEffect(() => {
+    setPreviewState(previewSlide, themes, look);
+  }, [previewSlide, themes, look]);
+
+  // ── Program / Preview ──
+  const sendLive = useCallback((index: number) => {
+    const slide = deck[index];
+    if (!slide) return;
+    goLive(slide, themes, look, transition);
+    setLiveKey(slide.key);
+    setScreen("live");
+    if (previewFirst) setPreviewIdx(Math.min(deck.length - 1, index + 1));
+    else setPreviewIdx(index);
+  }, [deck, themes, look, transition, previewFirst]);
+
+  const select = useCallback((index: number) => {
+    const next = Math.max(0, Math.min(deck.length - 1, index));
+    setPreviewIdx(next);
+    if (!previewFirst) sendLive(next);
+  }, [deck.length, previewFirst, sendLive]);
+
+  // Jump to a verse once its chapter has loaded (and show it, if it was asked to go live).
+  useEffect(() => {
+    if (source !== "bible" || !bibleReady || pendingVerse === null) return;
+    const index = bible.verses.findIndex((v) => v.verse === pendingVerse);
+    setPendingVerse(null);
+    setPendingLive(false);
+    if (pendingLive && index >= 0) sendLive(index);
+    else setPreviewIdx(index >= 0 ? index : 0);
+  }, [source, bibleReady, pendingVerse, pendingLive, bible.verses, sendLive]);
 
   const handleClear = useCallback(() => {
-    clearProgram(modeRef.current);
-    setLiveItem(null);
+    clearProgram(look);
+    setLiveKey("");
     setScreen("live");
-  }, []);
-
-  // ── Follow the Dock ──
-  const followRef = useRef({ previewFirst, transition, sendLive, showInPreview, handleClear, liveItem });
-  followRef.current = { previewFirst, transition, sendLive, showInPreview, handleClear, liveItem };
-
-  useEffect(() => setStudioDockSink((event: StudioDockEvent) => {
-    const f = followRef.current;
-    if (event.kind === "stage") {
-      if (!event.item) {
-        // The Dock took its item off screen.
-        if (f.liveItem && f.liveItem.module !== "media") f.handleClear();
-        return;
-      }
-      const item = studioItemFromDock(event.item, f.transition);
-      if (!item) return;
-      modeRef.current = dockItemMode(event.item);
-      f.showInPreview(item);
-      if (!f.previewFirst) f.sendLive(item);
-      return;
-    }
-    if (event.kind === "media") {
-      const item = studioItemFromMedia(event.media, event.fit);
-      if (!item) return;
-      f.showInPreview(item);
-      if (!f.previewFirst) f.sendLive(item);
-      return;
-    }
-    // "clear" comes from Media stop (and Countdowns / Ministry): only take media down.
-    if (f.liveItem?.module === "media") f.handleClear();
-  }), []);
+  }, [look]);
 
   const toggleScreen = useCallback((next: StudioScreen) => {
     const target: StudioScreen = screen === next ? "live" : next;
@@ -233,38 +340,159 @@ export default function StudioPage() {
     setScreen(target);
   }, [screen]);
 
-  // ── Full screen mode (hide the sidebars and fill the screen) ──
+  // ── Choosing what to open ──
+  const chooseSource = useCallback((next: Source) => {
+    setSource(next);
+    setBottomTab("slides");
+    setPreviewIdx(0);
+  }, []);
+
+  const goToReference = useCallback((book: string, chapter: number, verse?: number) => {
+    setSource("bible");
+    bible.goTo(book, chapter);
+    setPendingVerse(verse ?? 1);
+  }, [bible]);
+
+  const openScheduleItem = useCallback((item: ServicePlanItem) => {
+    const payload = item.payloadSnapshot || {};
+    if (item.type === "bible") {
+      const book = String(payload.book || "");
+      const chapter = Number(payload.chapter);
+      if (book && Number.isFinite(chapter)) {
+        const translation = String(payload.translation || "");
+        if (translation && bible.translations.includes(translation)) bible.setTranslation(translation);
+        goToReference(book, chapter, Number(payload.verse) || 1);
+      }
+      return;
+    }
+    if (item.type === "worship") {
+      const id = String(payload.songId || item.sourceId || "");
+      if (id && songs.some((s) => s.id === id)) {
+        setSongId(id);
+        chooseSource("worship");
+      }
+      return;
+    }
+    if (item.type === "sermon") {
+      const id = String(payload.noteId || item.sourceId || "");
+      if (id && notes.some((n) => n.id === id)) {
+        setNoteId(id);
+        chooseSource("notes");
+      }
+      return;
+    }
+    if (item.type === "media") {
+      const id = String(item.sourceId || "");
+      const index = media.findIndex((m) => m.id === id);
+      if (index >= 0) {
+        setMediaId(id);
+        setSource("media");
+        setPreviewIdx(index);
+      }
+    }
+  }, [bible, goToReference, songs, notes, media, chooseSource]);
+
+  // ── Screen Mix ──
+  useEffect(() => {
+    mixRef.current = mix;
+    setProgramMix(mix);
+    saveMix(mix);
+  }, [mix]);
+
+  useEffect(() => () => {
+    Object.values(mixTimers.current).forEach((id) => window.clearTimeout(id));
+  }, []);
+
+  const toggleMixLayer = useCallback((id: string) => {
+    const layer = mixRef.current.find((l) => l.id === id);
+    if (!layer) return;
+    const shown = !layer.shown;
+    window.clearTimeout(mixTimers.current[id]);
+    setMix((current) => current.map((l) => (l.id === id ? { ...l, shown } : l)));
+    // A banner can hide itself after a few seconds.
+    if (shown && layer.kind === "banner" && (layer.seconds ?? 0) > 0) {
+      mixTimers.current[id] = window.setTimeout(() => {
+        setMix((current) => current.map((l) => (l.id === id ? { ...l, shown: false } : l)));
+      }, (layer.seconds ?? 0) * 1000);
+    }
+  }, []);
+
+  // ── Verse AI ──
+  const ai = useVerseAi(aiOpened);
+
+  const openVerse = useCallback((candidate: VoiceBibleCandidate, live: boolean) => {
+    goToReference(candidate.book, candidate.chapter, candidate.verse);
+    setPendingLive(live);
+  }, [goToReference]);
+
+  const convertNote = useCallback((target: DockNote) => {
+    const title = target.title || "Sermon notes";
+    const count = target.content.split(/\n\s*\n/).filter((p) => p.trim()).length;
+    addWholeNoteToActiveSchedule({ noteTitle: title, noteContent: target.content, noteId: target.id });
+    setNoteId(target.id);
+    chooseSource("notes");
+    setBottomTab("slides");
+    setMessage(`“${title}” is now ${count} slide${count === 1 ? "" : "s"} and is in today's schedule.`);
+  }, [chooseSource]);
+
+  // ── Full screen mode (the window itself fills the screen) ──
   const toggleImmersive = useCallback(async (force?: boolean) => {
     const next = force ?? !immersive;
-    document.documentElement.classList.toggle(IMMERSIVE_CLASS, next);
     setImmersive(next);
     try {
       await getCurrentWindow().setFullscreen(next);
     } catch {
-      /* browser preview: the sidebars still hide */
+      /* browser preview */
     }
   }, [immersive]);
 
-  // Leaving the page always brings the sidebars back.
-  useEffect(() => () => {
-    document.documentElement.classList.remove(IMMERSIVE_CLASS);
-    void getCurrentWindow().setFullscreen(false).catch(() => undefined);
+  // No app sidebar on the Studio; leaving the page brings it back.
+  useEffect(() => {
+    document.documentElement.classList.add(PAGE_CLASS);
+    return () => {
+      document.documentElement.classList.remove(PAGE_CLASS);
+      void getCurrentWindow().setFullscreen(false).catch(() => undefined);
+    };
   }, []);
 
-  // ── Keyboard: only keys the Dock doesn't use ──
+  const goBack = useCallback(() => {
+    if (window.history.length > 1) navigate(-1);
+    else navigate("/");
+  }, [navigate]);
+
+  // ── Keyboard ──
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "F11") {
         event.preventDefault();
         void toggleImmersive();
-      } else if (event.key === "Escape" && (menu || outputsPanel)) {
+        return;
+      }
+      if (event.key === "Escape" && (menu || outputsPanel || settingsPanel)) {
         setMenu(null);
         setOutputsPanel(false);
+        setSettingsPanel(false);
+        return;
+      }
+      if (isTyping(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (event.key === " " || event.key === "PageDown") {
+        event.preventDefault();
+        // Show what is in Preview and move on; if Preview is already live, show the next one.
+        if (deck.length) sendLive(previewIsLive ? Math.min(deck.length - 1, safeIdx + 1) : safeIdx);
+      } else if (event.key === "PageUp") {
+        event.preventDefault();
+        if (deck.length) sendLive(Math.max(0, (liveIdx >= 0 ? liveIdx : safeIdx) - 1));
+      } else if (event.key === "ArrowRight") {
+        select(safeIdx + 1);
+      } else if (event.key === "ArrowLeft") {
+        select(safeIdx - 1);
+      } else if (event.key === "b" || event.key === "B") {
+        toggleScreen("black");
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [toggleImmersive, menu, outputsPanel]);
+  }, [toggleImmersive, menu, outputsPanel, settingsPanel, deck.length, sendLive, previewIsLive, safeIdx, liveIdx, select, toggleScreen]);
 
   // ── Projectors ──
   const openProjectorOn = useCallback(async (feed: ProjectorFeed, target: string) => {
@@ -324,17 +552,44 @@ export default function StudioPage() {
     });
   }, [refreshMonitors]);
 
-  const programUrl = base ? programFrameUrl(base) : "";
+  // ── Labels ──
   const previewUrl = base ? previewMonitorUrl(base) : "";
   const outputMonitorName = projectorList.find((p) => p.feed === "program")?.where ?? "";
-  const previewIsLive = Boolean(previewItem && liveItem && previewItem === liveItem);
+  const slideName = (slide: DeckSlide | null) => (slide ? (slide.reference || `${slide.itemTitle} · ${slide.label}`) : "");
+  const liveName = slideName(liveSlide);
+  const liveScheduleLabel = liveSlide ? (liveSlide.reference || liveSlide.itemTitle) : "";
+
+  const song = songs.find((s) => s.id === songId);
+  const note = notes.find((n) => n.id === noteId);
+  const bottomTitle = source === "bible"
+    ? `${bible.book} ${bible.chapter} · ${bible.translation}`
+    : source === "worship" ? (song?.metadata.title || "Worship") : source === "notes" ? (note?.title || "Notes") : source === "lower" ? "Lower thirds and overlays" : "Pictures and videos";
+  const bottomHint = source === "bible"
+    ? "Click to preview, double-click to go live"
+    : source === "media"
+      ? "Click to preview, double-click to show"
+      : source === "lower" ? "Add a banner, then show or hide it"
+      : deck.length ? "Click a card to preview it, double-click to go live" : "";
+
+  const previewVerse = previewSlide?.verse ?? 0;
+  const liveVerse = liveSlide?.verse ?? null;
+  const verseIdx = (verse: number) => deck.findIndex((s) => s.verse === verse);
 
   return (
-    <div className={`studio studio--dock${immersive ? " studio--immersive" : ""}`}>
-      <header className="studio-bar">
+    <div className={`studio sx${immersive ? " studio--immersive" : ""}`}>
+      <header className="studio-bar sx-bar">
         <div className="studio-bar__group">
+          <button type="button" className="studio-btn sx-back" onClick={goBack} title="Back to the app">
+            <ArrowLeft size={15} /> Back
+          </button>
           <MonitorPlay size={18} />
-          <strong>Studio</strong>
+          <div className="sx-sources" role="tablist" aria-label="What to show">
+            {SOURCES.map(({ id, label, icon: Icon }) => (
+              <button key={id} type="button" role="tab" aria-selected={source === id} className={`sx-source${source === id ? " is-on" : ""}`} onClick={() => chooseSource(id)}>
+                <Icon size={14} /> {label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="studio-bar__group studio-outputs-anchor">
           <button
@@ -395,29 +650,44 @@ export default function StudioPage() {
             </div>
           )}
         </div>
+        <div className="studio-bar__group studio-outputs-anchor">
+          <button type="button" className="studio-btn" onClick={() => setSettingsPanel((v) => !v)} aria-expanded={settingsPanel} title="Settings">
+            <SettingsIcon size={15} />
+          </button>
+          {settingsPanel && (
+            <div className="studio-popover" role="dialog" aria-label="Studio settings">
+              <div className="sx-settings">
+                <div className="sx-settings__row">
+                  <span>Clicking a slide</span>
+                  <div className="studio-seg" role="group" aria-label="Clicking a slide">
+                    <button type="button" className={previewFirst ? "is-on" : ""} onClick={() => setPreviewFirst(true)}>Previews it</button>
+                    <button type="button" className={!previewFirst ? "is-on" : ""} onClick={() => setPreviewFirst(false)}>Shows it at once</button>
+                  </div>
+                </div>
+                <div className="sx-settings__row">
+                  <span>Bible and notes look</span>
+                  <div className="studio-seg" role="group" aria-label="Look">
+                    <button type="button" className={look === "fullscreen" ? "is-on" : ""} onClick={() => setLook("fullscreen")}>Full screen</button>
+                    <button type="button" className={look === "lower-third" ? "is-on" : ""} onClick={() => setLook("lower-third")}>Lower third</button>
+                  </div>
+                </div>
+                <p className="studio-popover__hint">Themes are the ones you set up in Themes. Screens and the Wi-Fi link are under Outputs.</p>
+              </div>
+            </div>
+          )}
+        </div>
         <div className="studio-bar__group">
-          <div className="studio-seg" role="group" aria-label="Transition">
-            <button type="button" className={transition === "fade" ? "is-on" : ""} onClick={() => setTransition("fade")} title="Use the theme's animation">Fade</button>
-            <button type="button" className={transition === "cut" ? "is-on" : ""} onClick={() => setTransition("cut")} title="Change instantly">Cut</button>
-          </div>
-          <label className="studio-toggle" title="The Dock sends to Preview; press Go live to show it">
+          <label className="studio-toggle" title="Clicking a slide only previews it; press Go live to show it">
             <input type="checkbox" checked={previewFirst} onChange={(e) => setPreviewFirst(e.target.checked)} />
             <span>Preview first</span>
           </label>
         </div>
-        <div className="studio-bar__group">
-          <button type="button" className={`studio-btn${screen === "black" ? " studio-btn--on" : ""}`} onClick={() => toggleScreen("black")} title="Black screen">
-            <Square size={14} /> Black
-          </button>
-          <button type="button" className="studio-btn" onClick={handleClear} title="Clear the screen">Clear</button>
-          <button type="button" className={`studio-btn${screen === "logo" ? " studio-btn--on" : ""}`} onClick={() => toggleScreen("logo")} title="Church logo">
-            <Sun size={14} /> Logo
-          </button>
+        <div className="studio-bar__group sx-bar__right">
           <button
             type="button"
             className="studio-btn"
             onClick={() => void toggleImmersive()}
-            title={immersive ? "Exit full screen (F11)" : "Full screen: hide the sidebars (F11)"}
+            title={immersive ? "Exit full screen (F11)" : "Full screen (F11)"}
           >
             {immersive ? <Minimize2 size={14} /> : <Maximize2 size={14} />} {immersive ? "Exit full screen" : "Full screen"}
           </button>
@@ -431,42 +701,159 @@ export default function StudioPage() {
         </div>
       )}
 
-      <div className="studio-body">
-        <aside className="studio-dock" aria-label="Dock">
-          <DockPage presentationOutputTarget="link" hideShellHeader />
-        </aside>
-
-        <main className="studio-main">
-          <section className="studio-monitors">
-            <div className="studio-monitor studio-monitor--preview" onContextMenu={(e) => openMonitorMenu("preview", e)}>
-              <div className="studio-monitor__label">
-                Preview <span>{previewItem ? previewItem.label : previewFirst ? "the Dock sends here first" : "right-click for a projector"}</span>
+      <div className="sx-body">
+        <div className="sx-top">
+          <section className="sx-left" aria-label={SOURCES.find((s) => s.id === source)?.label}>
+            {source === "bible" && (
+              <BibleNav
+                translations={bible.translations}
+                translation={bible.translation}
+                onTranslation={bible.setTranslation}
+                book={bible.book}
+                chapter={bible.chapter}
+                chapterCount={bible.chapterCount}
+                onGoTo={goToReference}
+              />
+            )}
+            {source === "worship" && (
+              <SongList songs={songs} selectedId={songId} onSelect={(id) => { setSongId(id); setPreviewIdx(0); }} />
+            )}
+            {source === "notes" && (
+              <NoteList notes={notes} selectedId={noteId} onSelect={(id) => { setNoteId(id); setPreviewIdx(0); }} />
+            )}
+            {source === "media" && (
+              <MediaList
+                media={media}
+                selectedId={mediaId}
+                base={base}
+                onSelect={(id) => {
+                  setMediaId(id);
+                  const index = media.findIndex((m) => m.id === id);
+                  if (index >= 0) select(index);
+                }}
+              />
+            )}
+            {source === "lower" && (
+              <div className="sx-empty sx-empty--big">
+                Lower thirds, banners, a logo, a camera or a looping video sit on top of the words. Add them in the panel below, then show or hide each one.
               </div>
-              <ScaledFrame title="Preview" src={previewUrl} />
-            </div>
-            <div className="studio-transition">
-              <button
-                type="button"
-                className="studio-golive"
-                disabled={!previewItem || previewIsLive}
-                onClick={() => sendLive(previewItem)}
-                title="Send Preview to the screen"
-              >
-                <Play size={16} /> Go live
-              </button>
-              <span className="studio-transition__hint">{transition === "cut" ? "Cut" : "Fade"}</span>
-            </div>
-            <div className="studio-monitor studio-monitor--program" onContextMenu={(e) => openMonitorMenu("program", e)}>
-              <div className="studio-monitor__label">
-                Program <span>{screen === "black" ? "black screen" : screen === "logo" ? "logo" : liveItem ? liveItem.label : "right-click to open a projector"}</span>
-              </div>
-              <ScaledFrame title="Program" src={programUrl} />
-            </div>
+            )}
           </section>
-          <p className="studio-tip">
-            Use the Dock on the left exactly as in OBS. {previewFirst ? "Items land in Preview; press Go live to show them." : "Items go straight to the screen."} Right-click Program or Preview for projectors.
-          </p>
-        </main>
+
+          <section className="sx-center">
+            <div className="sx-monitors">
+              <div className="studio-monitor studio-monitor--preview" onContextMenu={(e) => openMonitorMenu("preview", e)}>
+                <div className="studio-monitor__label">
+                  <span className="sx-badge sx-badge--next">NEXT</span> Preview
+                  <span>{slideName(previewSlide) || "pick something below"}</span>
+                </div>
+                <ScaledFrame title="Preview" src={previewUrl} />
+              </div>
+
+              <div className="sx-ctrls" role="group" aria-label="Show controls">
+                <button
+                  type="button"
+                  className="sx-golive"
+                  disabled={!previewSlide || previewIsLive}
+                  onClick={() => sendLive(safeIdx)}
+                  title="Show Preview on the screen (Space)"
+                >
+                  <Play size={16} /> Go live
+                </button>
+                <div className={`sx-livestatus${screen === "black" || screen === "logo" || liveName ? " is-on" : ""}`} title="What the projector is showing now">
+                  <span className="sx-badge sx-badge--live">LIVE</span>
+                  <span className="sx-livestatus__text">{screen === "black" ? "Black screen" : screen === "logo" ? "Logo" : liveName || "Nothing yet"}</span>
+                </div>
+                <div className="sx-stepper">
+                  <button type="button" className="studio-btn" disabled={safeIdx <= 0} onClick={() => select(safeIdx - 1)} title="Previous (PageUp)">◀ Prev</button>
+                  <button type="button" className="studio-btn" disabled={safeIdx >= deck.length - 1} onClick={() => select(safeIdx + 1)} title="Next">Next ▶</button>
+                </div>
+
+                <div className="sx-ctrls__label">Transition</div>
+                <div className="sx-stack" role="group" aria-label="Transition">
+                  <button type="button" className={`studio-btn${transition === "fade" ? " studio-btn--sel" : ""}`} onClick={() => setTransition("fade")} title="Use the theme's animation">Fade</button>
+                  <button type="button" className={`studio-btn${transition === "cut" ? " studio-btn--sel" : ""}`} onClick={() => setTransition("cut")} title="Change instantly">Cut</button>
+                </div>
+
+              </div>
+
+            </div>
+            <p className="studio-tip">
+              Click = Preview · Double-click = Live · Space = go live and move on · PageUp = back · B = black screen. Right-click Program or Preview for projectors.
+            </p>
+          </section>
+
+          <SchedulePanel onOpen={openScheduleItem} liveLabel={liveScheduleLabel} />
+        </div>
+
+        <section className="sx-bottom">
+          <div className="sx-bottom__head">
+            <div className="sx-tabs" role="tablist" aria-label="Bottom panel">
+              {([
+                ["slides", source === "bible" ? "Verses" : source === "lower" ? "Overlays" : "Slides"],
+                ["verseai", "Verse AI"],
+              ] as Array<[BottomTab, string]>).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  aria-selected={bottomTab === id}
+                  className={`sx-tab${bottomTab === id ? " is-on" : ""}${id === "verseai" && ai.listening ? " is-listening" : ""}`}
+                  onClick={() => { setBottomTab(id); if (id === "verseai") setAiOpened(true); }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {bottomTab === "slides" && (
+              <>
+                <strong>{bottomTitle}</strong>
+                <span>{bottomHint}</span>
+              </>
+            )}
+          </div>
+          <div className={`sx-bottom__body${bottomTab === "slides" && source === "bible" ? " sx-bottom__body--flush" : ""}`}>
+            {bottomTab === "slides" && source === "bible" && (
+              <BibleVerses
+                book={bible.book}
+                chapter={bible.chapter}
+                translation={bible.translation}
+                verses={bible.verses}
+                loading={bible.loading}
+                previewVerse={previewVerse}
+                liveVerse={liveVerse}
+                onStep={(delta) => { setPendingVerse(1); void bible.step(delta); }}
+                onPickVerse={(verse) => { const i = verseIdx(verse); if (i >= 0) select(i); }}
+                onLiveVerse={(verse) => { const i = verseIdx(verse); if (i >= 0) sendLive(i); }}
+              />
+            )}
+            {bottomTab === "slides" && (source === "worship" || source === "notes" || source === "media") && (
+              <SlideCards
+                slides={deck}
+                previewIdx={safeIdx}
+                liveIdx={liveIdx}
+                base={base}
+                empty={source === "worship" ? "Pick a song on the left to see its slides." : source === "notes" ? "Pick a note on the left to see its slides." : "Pick a picture or video."}
+                onSelect={select}
+                onLive={sendLive}
+              />
+            )}
+            {bottomTab === "slides" && source === "lower" && (
+              <MixPanel
+                layers={mix}
+                media={media}
+                logoUrl={logoUrlFromPath(getMvSettings().brandLogoPath)}
+                onChange={setMix}
+                onToggle={toggleMixLayer}
+                lowerThird={look === "lower-third"}
+                onLowerThird={(on) => setLook(on ? "lower-third" : "fullscreen")}
+              />
+            )}
+            {bottomTab === "verseai" && (
+              <VerseAiPanel ai={ai} notes={notes} onOpenVerse={openVerse} onConvert={convertNote} />
+            )}
+          </div>
+        </section>
       </div>
 
       {menu && (() => {
@@ -509,7 +896,7 @@ export default function StudioPage() {
               )}
               <div className="studio-menu__divider" />
               {menu.feed === "preview" ? (
-                <button type="button" role="menuitem" disabled={!previewItem || previewIsLive} onClick={() => { setMenu(null); sendLive(previewItem); }}>
+                <button type="button" role="menuitem" disabled={!previewSlide || previewIsLive} onClick={() => { setMenu(null); sendLive(safeIdx); }}>
                   <Play size={14} /> <span>Go live</span>
                 </button>
               ) : (

@@ -374,6 +374,10 @@ export interface BibleThemeSettings {
   /** Dock tweaks for layout themes (see themes/layout/adjust.ts): percent sizes and lower-third offset. */
   layoutTextScale?: number;
   layoutRefScale?: number;
+  /** Dock: verse line spacing for layout themes, percent of the theme's own (100 = as designed). */
+  layoutLineHeight?: number;
+  /** Dock: show / hide the theme's title (reference / label). Missing = the theme's own setting. */
+  layoutShowTitle?: boolean;
   layoutOffsetY?: number;
   /** Dock: how much to darken the background of a full-screen layout theme, percent (0 = as designed). */
   layoutBackdropDarkness?: number;

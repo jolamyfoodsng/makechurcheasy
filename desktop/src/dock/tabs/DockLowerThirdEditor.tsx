@@ -53,6 +53,7 @@ import { applyChurchDefaults, churchAwareDefaults, sameValues } from "../../lowe
 import { getSafeFileName, saveToDisk } from "../dockUploadService";
 import Icon from "../DockIcon";
 import DockMotionControls from "./DockMotionControls";
+import { PER_KEY, isCycleTheme } from "../../lowerthirds/cycleSet";
 import DockGraphicPreviewModal from "../components/DockGraphicPreviewModal";
 
 // ---------------------------------------------------------------------------
@@ -201,6 +202,13 @@ const dockFieldResetStyle: React.CSSProperties = {
 };
 
 /** Fill variables that older saved slots don't have yet with the theme defaults. */
+/** A "text" field that only ever holds a number (seconds, a count): it gets no case / size / weight chips. */
+function isNumericField(v: { key: string; label?: string; defaultValue?: string }, fallback?: string): boolean {
+  const def = String(v.defaultValue ?? fallback ?? "").trim();
+  if (def !== "" && /^\d+(\.\d+)?$/.test(def)) return true;
+  return /\b(seconds?|secs?|minutes?|duration|delay)\b/i.test(v.label ?? "");
+}
+
 function withThemeDefaults(theme: LowerThirdTheme, values: Record<string, string>): Record<string, string> {
   const merged = { ...values };
   for (const v of theme.variables) {
@@ -1049,6 +1057,8 @@ export default function DockLowerThirdEditor({
                     const key = v.key.toLowerCase();
                     const label = (v.label ?? "").toLowerCase();
                     if (key.includes("logo") || key.includes("image") || label.includes("logo") || label.includes("image")) return false;
+                    // "Seconds per platform" is timing, not text: it sits with Cycles and Speed in the motion controls.
+                    if (v.key === PER_KEY && isCycleTheme(theme)) return false;
                     return true;
                   })
                   .map((v, idx) => {
@@ -1132,12 +1142,15 @@ export default function DockLowerThirdEditor({
                             placeholder={guide.heading}
                           />
                         )}
-                        <TextStyleControls
-                          compact
-                          value={variableValues[textStyleKey(v.key)]}
-                          capability={textStyleCapabilityFor(theme)}
-                          onChange={(next) => setVariableValues((prev) => ({ ...prev, [textStyleKey(v.key)]: next }))}
-                        />
+                        {/* Case / size / weight make no sense on a number such as "Seconds per platform". */}
+                        {isNumericField(v, themeDefaultValues[v.key]) ? null : (
+                          <TextStyleControls
+                            compact
+                            value={variableValues[textStyleKey(v.key)]}
+                            capability={textStyleCapabilityFor(theme)}
+                            onChange={(next) => setVariableValues((prev) => ({ ...prev, [textStyleKey(v.key)]: next }))}
+                          />
+                        )}
                         {guide.hint ? <div style={dockFieldHintStyle}>{guide.hint}</div> : null}
                       </div>
                     );

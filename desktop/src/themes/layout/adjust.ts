@@ -12,6 +12,10 @@ export interface LayoutAdjustSettings {
   layoutTextScale?: number;
   /** Reference / label size, percent. */
   layoutRefScale?: number;
+  /** Verse / lyric / note line spacing, percent of the theme's own (100 = as designed). */
+  layoutLineHeight?: number;
+  /** Show or hide the theme's title (reference / label line). Missing = as the theme is set. */
+  layoutShowTitle?: boolean;
   /** Lower thirds: move the whole graphic up (negative) or down, in 1080p pixels. */
   layoutOffsetY?: number;
   /** Full screen: darken the background, percent (0 = as designed). */
@@ -20,6 +24,8 @@ export interface LayoutAdjustSettings {
 
 export const LAYOUT_SCALE_MIN = 50;
 export const LAYOUT_SCALE_MAX = 200;
+export const LAYOUT_LINE_MIN = 70;
+export const LAYOUT_LINE_MAX = 160;
 export const LAYOUT_OFFSET_MIN = -400;
 export const LAYOUT_OFFSET_MAX = 120;
 
@@ -31,13 +37,20 @@ function num(value: unknown): number | undefined {
 }
 
 /** Reads the adjust fields from theme settings / quick settings (missing = as designed). */
-export function readLayoutAdjust(source: unknown): Required<Omit<LayoutAdjustSettings, "layoutBackdropDarkness">> {
+export function readLayoutAdjust(source: unknown): Required<Omit<LayoutAdjustSettings, "layoutBackdropDarkness" | "layoutShowTitle">> {
   const s = (source && typeof source === "object" ? source : {}) as Record<string, unknown>;
   return {
     layoutTextScale: clamp(num(s.layoutTextScale) ?? 100, LAYOUT_SCALE_MIN, LAYOUT_SCALE_MAX),
     layoutRefScale: clamp(num(s.layoutRefScale) ?? 100, LAYOUT_SCALE_MIN, LAYOUT_SCALE_MAX),
+    layoutLineHeight: clamp(num(s.layoutLineHeight) ?? 100, LAYOUT_LINE_MIN, LAYOUT_LINE_MAX),
     layoutOffsetY: clamp(num(s.layoutOffsetY) ?? 0, LAYOUT_OFFSET_MIN, LAYOUT_OFFSET_MAX),
   };
+}
+
+/** The Dock's Show title switch: true / false when the operator set it, undefined = leave the theme's own setting. */
+export function readLayoutShowTitle(source: unknown): boolean | undefined {
+  const s = (source && typeof source === "object" ? source : {}) as Record<string, unknown>;
+  return typeof s.layoutShowTitle === "boolean" ? s.layoutShowTitle : undefined;
 }
 
 /** Only the adjust fields that are set, for merging quick settings into a live theme. */
@@ -46,6 +59,8 @@ export function pickLayoutAdjust(source: unknown): LayoutAdjustSettings {
   const out: LayoutAdjustSettings = {};
   if (num(s.layoutTextScale) !== undefined) out.layoutTextScale = num(s.layoutTextScale);
   if (num(s.layoutRefScale) !== undefined) out.layoutRefScale = num(s.layoutRefScale);
+  if (num(s.layoutLineHeight) !== undefined) out.layoutLineHeight = num(s.layoutLineHeight);
+  if (typeof s.layoutShowTitle === "boolean") out.layoutShowTitle = s.layoutShowTitle;
   if (num(s.layoutOffsetY) !== undefined) out.layoutOffsetY = num(s.layoutOffsetY);
   if (num(s.layoutBackdropDarkness) !== undefined) out.layoutBackdropDarkness = num(s.layoutBackdropDarkness);
   return out;
@@ -53,7 +68,11 @@ export function pickLayoutAdjust(source: unknown): LayoutAdjustSettings {
 
 export function isLayoutAdjustDefault(adjust: LayoutAdjustSettings): boolean {
   const a = readLayoutAdjust(adjust);
-  return a.layoutTextScale === 100 && a.layoutRefScale === 100 && a.layoutOffsetY === 0;
+  return a.layoutTextScale === 100
+    && a.layoutRefScale === 100
+    && a.layoutLineHeight === 100
+    && a.layoutOffsetY === 0
+    && readLayoutShowTitle(adjust) === undefined;
 }
 
 // ───────────────────────────── background ─────────────────────────────
@@ -190,22 +209,38 @@ export function applyLayoutAdjust(layout: ThemeLayout, source: unknown): ThemeLa
   const offset = layout.format === "lower-third" ? a.layoutOffsetY : 0;
   const backdrop = layout.format === "fullscreen" ? readLayoutBackdrop(source) : null;
   const backdropChanged = backdrop !== null && !isLayoutBackdropDefault(backdrop);
-  if (a.layoutTextScale === 100 && a.layoutRefScale === 100 && offset === 0 && !backdropChanged) return layout;
+  const showTitle = readLayoutShowTitle(source);
+  // Switch on = the theme's default (heading shown); switch off = hidden.
+  const nextShowHeading = showTitle === undefined ? layout.showHeading : showTitle ? undefined : false;
+  const titleChanged = nextShowHeading !== layout.showHeading;
+  if (a.layoutTextScale === 100 && a.layoutRefScale === 100 && a.layoutLineHeight === 100 && offset === 0 && !backdropChanged && !titleChanged) return layout;
   const textK = a.layoutTextScale / 100;
   const refK = a.layoutRefScale / 100;
+  const lineK = a.layoutLineHeight / 100;
   const layers = layout.layers.map((layer) => {
     let next = layer;
     if (layer.type === "text" && hasTokens(layer.content)) {
-      const k = isVerseTextPattern(layer.content) ? textK : refK;
-      if (k !== 1) {
+      const isVerse = isVerseTextPattern(layer.content);
+      const k = isVerse ? textK : refK;
+      // Line spacing only matters for the verse / lyric / note body (the renderer's default is 1.3).
+      const lk = isVerse ? lineK : 1;
+      if (k !== 1 || lk !== 1) {
         const style = { ...layer.style };
-        if (typeof style.fontSize === "number") style.fontSize = Math.round(style.fontSize * k);
-        if (typeof style.minFontSize === "number") style.minFontSize = Math.round(style.minFontSize * k);
+        if (k !== 1) {
+          if (typeof style.fontSize === "number") style.fontSize = Math.round(style.fontSize * k);
+          if (typeof style.minFontSize === "number") style.minFontSize = Math.round(style.minFontSize * k);
+        }
+        if (lk !== 1) style.lineHeight = Math.round((style.lineHeight || 1.3) * lk * 100) / 100;
         next = { ...next, style };
       }
     }
     if (offset && !layer.parentId) next = { ...next, y: layer.y + offset };
     return next;
   });
-  return { ...layout, layers: backdropChanged && backdrop ? applyBackdrop(layers, backdrop) : layers };
+  const out: ThemeLayout = { ...layout, layers: backdropChanged && backdrop ? applyBackdrop(layers, backdrop) : layers };
+  if (titleChanged) {
+    if (nextShowHeading === undefined) delete out.showHeading;
+    else out.showHeading = nextShowHeading;
+  }
+  return out;
 }

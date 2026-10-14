@@ -1201,6 +1201,9 @@ function App() {
       console.warn("[App] Template seeding failed (non-critical):", err);
     });
 
+    // First launch with the Theme Library: new accounts get the short list, existing ones keep everything.
+    import("./services/themeLibrary").then(({ ensureThemeLibrary }) => ensureThemeLibrary()).catch(() => { });
+
     // Sync dock-first production data to dock JSON files on startup.
     syncSongsToDock().catch(() => { });
     syncDockNotesToDock().catch(() => { });

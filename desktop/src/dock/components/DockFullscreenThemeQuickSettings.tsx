@@ -75,6 +75,8 @@ export type DockFullscreenQuickThemeSettings = Pick<
     | "safeArea"
     | "layoutTextScale"
     | "layoutRefScale"
+    | "layoutLineHeight"
+    | "layoutShowTitle"
     | "layoutOffsetY"
     | "layoutBackdropDarkness"
   >

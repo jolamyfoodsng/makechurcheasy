@@ -97,6 +97,8 @@ export interface DockThemeFilterOptions {
   optOuts: DockThemeOptOuts;
   /** Ready-made themes listed on the Themes page: offered like the user's own, whatever their category. */
   alwaysShownIds?: ReadonlySet<string>;
+  /** Ready-made themes the person has not added from the Theme Library: never offered. */
+  excludedIds?: ReadonlySet<string>;
 }
 
 /**
@@ -110,6 +112,7 @@ export interface DockThemeFilterOptions {
  *   follows the picker's categories.
  */
 export function isThemeAvailableInDockArea(theme: BibleTheme, options: DockThemeFilterOptions): boolean {
+  if (options.excludedIds?.has(theme.id)) return false;
   if (theme.source === "custom" || options.alwaysShownIds?.has(theme.id)) {
     return !(options.area && isThemeOptedOut(options.optOuts, theme.id, options.area));
   }

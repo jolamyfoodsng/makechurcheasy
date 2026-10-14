@@ -12,8 +12,8 @@ vi.mock("./tauriSafe", () => ({
   safeTauriInvoke: (...args: unknown[]) => invokeMock(...args),
   safeTauriListen: (...args: unknown[]) => listenMock(...args),
 }));
-vi.mock("./assemblyAiKey", () => ({
-  getAssemblyAiKey: () => "test-api-key",
+vi.mock("./speechCredential", () => ({
+  getSpeechCredential: async () => "test-api-key",
 }));
 vi.mock("../bible/bibleEmbeddings", () => ({
   hasEmbeddings: () => false,

@@ -979,7 +979,7 @@ interface TranscriptDetailProps {
 
 export default function TranscriptDetailPage({ transcriptId, onBack }: TranscriptDetailProps) {
   const { user, isAdmin } = useAuth();
-  const isAdminUser = Boolean(isAdmin || user?.role === 'admin');
+  const isAdminUser = Boolean(isAdmin);
   const { t } = useTranslation();
   const upgradePromoText = t("common.upgradePlansStartToday", {
     amount: UPGRADE_ENTRY_PRICE_NGN.toLocaleString("en-US"),

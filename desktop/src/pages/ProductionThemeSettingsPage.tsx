@@ -10,6 +10,14 @@ import ThemeLayoutPreview from "../themes/layout/ThemeLayoutPreview";
 import { getThemeLayout } from "../themes/layout/presetThemes";
 import { dockBridge } from "../services/dockBridge";
 import {
+  type ThemeLibrary,
+  addThemeToLibrary,
+  isThemeInLibrary,
+  loadThemeLibrary,
+  removeThemeFromLibrary,
+} from "../services/themeLibrary";
+import { NEW_USER_THEME_IDS } from "../themes/layout/presetThemes";
+import {
   type DockThemeOptOuts,
   isThemeHiddenFromDock,
   loadDockThemeOptOuts,
@@ -217,6 +225,36 @@ export default function ProductionThemeSettingsPage() {
     };
   }, []);
 
+  // New accounts start with three ready-made themes; the rest wait in the Theme Library until added.
+  // `null` = nothing stored yet (everything is shown, as before the library existed).
+  const [library, setLibrary] = useState<ThemeLibrary | null>(null);
+  const [showLibrary, setShowLibrary] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void loadThemeLibrary().then((stored) => {
+      if (!cancelled) setLibrary(stored);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const changeLibrary = useCallback(
+    async (themeId: string, add: boolean) => {
+      try {
+        setLibrary(await (add ? addThemeToLibrary(themeId) : removeThemeFromLibrary(themeId)));
+      } catch (err) {
+        console.error("[ProductionThemeSettingsPage] Failed to change the theme library:", err);
+        setLibrary(await loadThemeLibrary());
+        setStatus({
+          tone: "error",
+          text: t("themes.libraryChangeFailed", "Could not change your themes"),
+        });
+      }
+    },
+    [t],
+  );
+
   const setHiddenFromDock = useCallback(
     async (themeId: string, hidden: boolean) => {
       // Show the change at once; the saved list replaces it when the write finishes.
@@ -259,8 +297,15 @@ export default function ProductionThemeSettingsPage() {
     return sorted;
   };
 
+  // A theme that is selected for Bible, Worship or Notes always stays in My Themes.
+  const isThemeUsedAnywhere = (theme: BibleTheme): boolean => THEME_TARGETS.some((target) => isThemeInUse(theme, target));
+  const isInMyThemes = (theme: BibleTheme): boolean => isThemeInLibrary(library, theme.id) || isThemeUsedAnywhere(theme);
+  const libraryActive = library?.mode === "curated";
   const visibleBuiltinThemes = sortThemes(
-    builtinThemes.filter((theme) => themeHasLook(theme, previewLook) && matchesThemeSearch(theme, searchQuery)),
+    builtinThemes.filter((theme) => isInMyThemes(theme) && themeHasLook(theme, previewLook) && matchesThemeSearch(theme, searchQuery)),
+  );
+  const libraryThemes = sortThemes(
+    builtinThemes.filter((theme) => !isInMyThemes(theme) && themeHasLook(theme, previewLook) && matchesThemeSearch(theme, searchQuery)),
   );
   const visibleCustomThemes = sortThemes(
     customThemes.filter((theme) => matchesThemeSearch(theme, searchQuery)),
@@ -362,7 +407,7 @@ export default function ProductionThemeSettingsPage() {
     setShowCreator(true);
   };
 
-  const renderThemeCard = (theme: BibleTheme) => {
+  const renderThemeCard = (theme: BibleTheme, fromLibrary = false) => {
     const look: ThemeLook = themeHasLook(theme, previewLook) ? previewLook : themeFormat(theme);
     const layout = themeLayoutFor(theme, look);
     const inUse = THEME_TARGETS.filter((target) => isThemeInUse(theme, target));
@@ -462,6 +507,18 @@ export default function ProductionThemeSettingsPage() {
             </span>
           </div>
 
+          {fromLibrary ? (
+          <div className="production-theme-card__actions production-theme-card__actions--wrap">
+            <button
+              className="production-btn production-btn--primary"
+              onClick={() => void changeLibrary(theme.id, true)}
+              title={t("themes.addToMyThemesHint", "Add this theme to your themes and the Dock")}
+            >
+              <Icon name="add" size={16} />
+              {t("themes.addToMyThemes", "Add to my themes")}
+            </button>
+          </div>
+          ) : (
           <div className="production-theme-card__actions production-theme-card__actions--wrap">
             <button
               className="production-btn production-btn--ghost"
@@ -511,7 +568,18 @@ export default function ProductionThemeSettingsPage() {
                 {planLocked ? t("themes.unlock", "Unlock") : t("themes.customize", "Customize")}
               </button>
             )}
+            {libraryActive && theme.source !== "custom" && library?.added.includes(theme.id) && !NEW_USER_THEME_IDS.includes(theme.id) && (
+              <button
+                className="production-btn production-btn--ghost"
+                onClick={() => void changeLibrary(theme.id, false)}
+                title={t("themes.removeFromMyThemesHint", "Move this theme back to the Theme Library")}
+              >
+                <Icon name="remove_circle_outline" size={16} />
+                {t("themes.removeFromMyThemes", "Remove")}
+              </button>
+            )}
           </div>
+          )}
         </div>
       </article>
     );
@@ -602,7 +670,9 @@ export default function ProductionThemeSettingsPage() {
               <p>
                 {t(
                   "themes.readyMadeDescription",
-                  "Every theme here shows in the Dock (Bible, Worship, Notes). Click Hide from Dock on any you don't want there, or Customize to make your own copy.",
+                  libraryActive
+                    ? "These themes show in the Dock (Bible, Worship, Notes). Open the Theme Library below to add more, Hide from Dock on any you don't want there, or Customize to make your own copy."
+                    : "Every theme here shows in the Dock (Bible, Worship, Notes). Click Hide from Dock on any you don't want there, or Customize to make your own copy.",
                 )}
               </p>
             </div>
@@ -643,6 +713,47 @@ export default function ProductionThemeSettingsPage() {
             </div>
           )}
         </section>
+
+        {libraryActive && (
+          <section className="production-panel">
+            <div className="production-card-head">
+              <div>
+                <h2>{t("themes.libraryTitle", "Theme Library")}</h2>
+                <p>
+                  {t(
+                    "themes.libraryDescription",
+                    "More ready-made themes. Add one and it shows here and in the Dock (Bible, Worship, Notes).",
+                  )}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="production-btn production-btn--ghost"
+                aria-expanded={showLibrary}
+                onClick={() => setShowLibrary((open) => !open)}
+              >
+                <Icon name={showLibrary ? "expand_less" : "expand_more"} size={16} />
+                {showLibrary
+                  ? t("themes.hideLibrary", "Hide library")
+                  : t("themes.browseLibrary", { count: libraryThemes.length, defaultValue: `Browse ${libraryThemes.length} more themes` })}
+              </button>
+            </div>
+
+            {showLibrary &&
+              (libraryThemes.length === 0 ? (
+                <div className="production-empty">
+                  <Icon name="search_off" size={18} />
+                  <div>
+                    <strong>{t("themes.libraryEmpty", "No more themes to add")}</strong>
+                  </div>
+                </div>
+              ) : (
+                <div className="production-theme-card-grid">
+                  {libraryThemes.map((theme) => renderThemeCard(theme, true))}
+                </div>
+              ))}
+          </section>
+        )}
 
         <section className="production-panel">
           <div className="production-card-head">

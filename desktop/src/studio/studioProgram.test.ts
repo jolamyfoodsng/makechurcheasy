@@ -12,7 +12,8 @@ vi.mock("../dock/dockObsClient", () => ({
   },
 }));
 
-import { clearProgram, getProgramState, goLive, setProgramScreen, type StudioSlide } from "./studioEngine";
+import { clearProgram, getProgramState, goLive, setProgramMix, setProgramScreen, type StudioSlide } from "./studioEngine";
+import { isBackdrop, type StudioMixLayer } from "./studioMix";
 
 const verse: StudioSlide = { key: "bible:John:3:16:KJV", module: "bible", label: "16", verse: 16, text: "For God so loved", reference: "John 3:16 (KJV)", itemTitle: "John 3" };
 const chorus: StudioSlide = { key: "song:1:0", module: "worship", label: "Chorus", text: "Amazing grace", reference: "", itemTitle: "Song" };
@@ -56,5 +57,17 @@ describe("studio program", () => {
     clearProgram("fullscreen");
     expect(getProgramState().active).toBeNull();
     expect((getProgramState().packets.worship as { blanked: boolean }).blanked).toBe(true);
+  });
+
+  it("Screen Mix layers are kept in the state and survive Go live and Clear", () => {
+    const banner: StudioMixLayer = { id: "b1", kind: "banner", name: "Subscribe", shown: true, text: "Subscribe", corner: "bottom-left" };
+    const video: StudioMixLayer = { id: "v1", kind: "video", name: "Loop", shown: true, url: "/uploads/loop.mp4" };
+    setProgramMix([video, banner]);
+    expect(getProgramState().mix).toHaveLength(2);
+    goLive(verse, null, "fullscreen", "fade");
+    clearProgram("fullscreen");
+    expect(getProgramState().mix?.map((l) => l.id)).toEqual(["v1", "b1"]);
+    expect(isBackdrop(video)).toBe(true);
+    expect(isBackdrop(banner)).toBe(false);
   });
 });

@@ -56,6 +56,7 @@ import {
 } from "../services/planConfig";
 import { useAuth } from "../contexts/AuthContext";
 import { getCachedSubscription } from "../services/subscriptionCache";
+import { resolveIsAdmin } from "../services/verifiedLicense";
 import {
   getEffectivePlan,
   getTrialDaysRemaining,
@@ -227,7 +228,7 @@ export default function CreditsPage() {
   const totalConsumed = creditDetails?.totalConsumed ?? 0;
   const currentBalance = creditDetails?.credits ?? 0;
   const isUnlimited = currentBalance === -1 || creditDetails?.unlimited === true;
-  const isAdmin = creditDetails?.isAdmin ?? (authUser?.role === "admin");
+  const isAdmin = creditDetails?.isAdmin ?? resolveIsAdmin(authUser?.role);
 
   // Total available pool = planAllocation + adminGranted (or backend totalAvailable)
   const totalAvailable = useMemo(() => {

@@ -32,6 +32,7 @@ import LiveStatusBar from "./components/LiveStatusBar";
 import VoiceBibleResumeBanner from "./components/VoiceBibleResumeBanner";
 import EasyWorshipAnnouncementBanner from "./components/EasyWorshipAnnouncementBanner";
 import TrialUnavailableBanner from "./components/TrialUnavailableBanner";
+import CloudBackupPrompts from "./components/CloudBackupPrompts";
 import { getOverlayBaseUrlSync } from "./services/overlayUrl";
 import { confirmStopVoiceBibleForPresentation } from "./services/voiceBiblePresentationGuard";
 import { safeTauriListen } from "./services/tauriSafe";
@@ -183,7 +184,7 @@ export function AppShell() {
     [navigate],
   );
 
-  // Full-screen routes (no sidebar): editor, new layout, standalone bible, multiview shell
+  // Full-screen routes (no sidebar): editor, new layout, standalone bible, multiview shell, Studio (it has its own Back button)
   const isEditorRoute =
     location.pathname.startsWith("/edit/") ||
     location.pathname.startsWith("/multiview") ||
@@ -192,6 +193,7 @@ export function AppShell() {
     location.pathname.startsWith("/service-hub") ||
     location.pathname.startsWith("/presentation/link") ||
     location.pathname.startsWith("/presentation/remote-obs") ||
+    location.pathname === "/studio" ||
     location.pathname === "/new";
 
   // ── Cancel confirmation modal ──
@@ -245,6 +247,7 @@ export function AppShell() {
         <LiveStatusBar />
         <EasyWorshipAnnouncementBanner />
         <TrialUnavailableBanner />
+        <CloudBackupPrompts />
         <div className="app-glow" />
         <div className={`app-content${isTranscriptDetailRoute ? " app-content--transcript-detail" : ""}${isFixedViewportRoute ? " app-content--fixed-viewport" : ""}`}>
           <VoiceBibleResumeBanner />

@@ -25,6 +25,7 @@ import {
   Percent,
   Repeat2,
   AlertTriangle,
+  ShieldAlert,
   Newspaper,
   Radio,
   MonitorPlay,
@@ -73,6 +74,7 @@ const growthSystemItems: NavItem[] = [
   { path: "/admin/support", labelKey: "admin.sidebar.support", icon: Headset },
   { path: "/admin/audit-logs", labelKey: "admin.sidebar.auditLogs", icon: FileText },
   { path: "/admin/error-logs", label: "Error Logs", icon: AlertTriangle },
+  { path: "/admin/security-events", label: "Security Events", icon: ShieldAlert },
   { path: "/admin/settings", labelKey: "admin.sidebar.settings", icon: Settings },
 ];
 

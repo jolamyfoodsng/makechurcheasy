@@ -41,7 +41,7 @@ import {
 } from "./authService";
 import { checkEntitlementSync, type FeatureKey } from "./entitlementClient";
 import { normalizePlanId } from "../lib/subscriptionSourceOfTruth";
-import { refreshSubscriptionState } from "./subscriptionCache";
+import { refreshSubscriptionState, restoreSubscriptionCache } from "./subscriptionCache";
 import {
   capPlanForOffline,
   evaluateOfflineEntitlement,
@@ -51,6 +51,21 @@ import {
   trustedNowMs,
   type OfflineEntitlementState,
 } from "./offlineEntitlement";
+import {
+  noteNativeClock,
+  readNativeClock,
+  readSealed,
+  reportLicenseTamper,
+  verifySealed,
+  type SealedLicense,
+} from "./licenseSeal";
+import {
+  clearVerifiedLicense,
+  isSealEnforced,
+  markVerificationInitDone,
+  raiseClockFloor,
+  setVerifiedLicense,
+} from "./verifiedLicense";
 import {
   cacheDesktopBootstrap,
   clearDesktopBootstrapCache,
@@ -99,6 +114,8 @@ export interface LicensePayload {
    * admin / ambassador expiry). null = no end date. Older servers don't send it.
    */
   entitledUntil?: string | null;
+  /** Signed with the licence: true only for admin accounts. */
+  isAdmin?: boolean;
   paymentStatus: PaymentStatus;
   internetVerificationDays: number;
   verificationIntervalHours: number;
@@ -127,10 +144,16 @@ export interface LicensePayload {
 export interface LicenseCache {
   payload: LicensePayload;
   cachedAt: number;
+  /**
+   * The server's signed copy of `payload`. On production builds the cache is
+   * only trusted after this has been verified again at startup, so editing the
+   * stored payload in localStorage achieves nothing.
+   */
+  sealed?: SealedLicense;
 }
 
 type LicenseFetchResult =
-  | { ok: true; payload: LicensePayload }
+  | { ok: true; payload: LicensePayload; sealed?: SealedLicense | null }
   | { ok: false; lockReason: LockReason; transient: boolean };
 
 export interface LicenseGuardState {
@@ -253,7 +276,7 @@ async function fetchLicenseFromBackend(): Promise<LicenseFetchResult> {
 
   const cachedBootstrap = readDesktopBootstrap(30_000, deviceId);
   if (cachedBootstrap?.license) {
-    return { ok: true, payload: cachedBootstrap.license as LicensePayload };
+    return { ok: true, payload: cachedBootstrap.license as LicensePayload, sealed: readSealed(cachedBootstrap) };
   }
 
   const candidates = getDeviceApiBaseCandidates();
@@ -315,7 +338,7 @@ async function fetchLicenseFromBackend(): Promise<LicenseFetchResult> {
       if (sawDeviceMissing || candidates[0] !== apiBase) {
         await rememberSessionApiBase(apiBase);
       }
-      return { ok: true, payload: data.license };
+      return { ok: true, payload: data.license, sealed: readSealed(data) };
     } catch (err) {
       console.warn("[licenseGuard] Backend fetch failed:", err);
       if (apiBase !== candidates[candidates.length - 1]) {
@@ -677,6 +700,73 @@ export function subscribe(listener: (state: LicenseGuardState) => void): Unsubsc
   };
 }
 
+// ── Signed licence ───────────────────────────────────────────────────────────
+
+/**
+ * Checks the server's signature on a freshly fetched licence. On production
+ * builds a licence that is unsigned, badly signed or issued for another device
+ * is refused (the app keeps what it already verified, or runs as Free).
+ */
+async function sealCheckFetched(
+  result: Extract<LicenseFetchResult, { ok: true }>,
+): Promise<Extract<LicenseFetchResult, { ok: true }> | Extract<LicenseFetchResult, { ok: false }>> {
+  const refused = { ok: false as const, lockReason: "internet_required" as LockReason, transient: true };
+  const deviceId = getDeviceId() || "";
+
+  if (!result.sealed) {
+    if (!isSealEnforced()) return result;
+    console.warn("[licenseGuard] License response is not signed; ignoring it.");
+    return refused;
+  }
+
+  const verdict = await verifySealed(result.sealed, deviceId);
+  if (verdict.valid) {
+    setVerifiedLicense(verdict.license, verdict.signedAtMs);
+    if (verdict.signedAtMs) void noteNativeClock(verdict.signedAtMs);
+    return { ok: true, payload: verdict.license as unknown as LicensePayload, sealed: result.sealed };
+  }
+
+  console.warn("[licenseGuard] License signature rejected:", verdict.reason);
+  const apiBase = getDeviceApiBaseCandidates()[0];
+  if (apiBase && deviceId) {
+    void reportLicenseTamper(apiBase, deviceId, getDeviceSecret(), verdict.reason, APP_VERSION);
+  }
+  return isSealEnforced() ? refused : result;
+}
+
+/**
+ * Startup: the cached licence is only trusted if its saved signature still
+ * verifies. Anything else is discarded so a hand-edited cache can't unlock
+ * paid features.
+ */
+async function restoreSealedCache(cache: LicenseCache | null): Promise<LicenseCache | null> {
+  // Raise the clock floor from the native file first (survives clearing localStorage).
+  const nativeClock = await readNativeClock();
+  if (nativeClock) raiseClockFloor(nativeClock);
+
+  if (!cache) return null;
+  const deviceId = getDeviceId() || "";
+
+  if (cache.sealed && deviceId) {
+    const verdict = await verifySealed(cache.sealed, deviceId);
+    if (verdict.valid) {
+      setVerifiedLicense(verdict.license, verdict.signedAtMs);
+      return {
+        ...cache,
+        payload: normalizeLicensePayload(verdict.license as unknown as LicensePayload),
+      };
+    }
+    console.warn("[licenseGuard] Stored license failed verification:", verdict.reason);
+  }
+
+  if (isSealEnforced()) {
+    clearCache();
+    clearVerifiedLicense();
+    return null;
+  }
+  return cache;
+}
+
 // ── Verification Flow ────────────────────────────────────────────────────────
 
 /**
@@ -706,7 +796,8 @@ export async function verify(): Promise<boolean> {
   emit();
 
   try {
-    const licenseResult = await fetchLicenseFromBackend();
+    let licenseResult = await fetchLicenseFromBackend();
+    if (licenseResult.ok) licenseResult = await sealCheckFetched(licenseResult);
     if (!licenseResult.ok) {
       if (!licenseResult.transient) {
         _lockReason = licenseResult.lockReason;
@@ -733,6 +824,7 @@ export async function verify(): Promise<boolean> {
     _cache = {
       payload: normalizedPayload,
       cachedAt: Date.now(),
+      ...(licenseResult.sealed ? { sealed: licenseResult.sealed } : {}),
     };
     writeCache(_cache);
     recordOnlineSuccess();
@@ -842,8 +934,15 @@ export async function initLicenseGuard(): Promise<void> {
   if (_initialized) return;
   _initialized = true;
 
-  // Load cached license
-  _cache = readCache();
+  // Load cached license, keeping it only if its signature still verifies
+  _cache = await restoreSealedCache(readCache());
+  // The subscription snapshot (plan / credits for offline use) is re-verified too.
+  try {
+    await restoreSubscriptionCache(getSession()?.user?.id);
+  } catch {
+    /* the snapshot is optional; the licence above is what gates features */
+  }
+  markVerificationInitDone();
 
   // Evaluate initial state
   computeState();
@@ -924,6 +1023,7 @@ export function stopPeriodicVerification(): void {
 export function resetLicenseGuard(): void {
   stopPeriodicVerification();
   _cache = null;
+  clearVerifiedLicense();
   _lockReason = null;
   _verifying = false;
   _initialized = false;

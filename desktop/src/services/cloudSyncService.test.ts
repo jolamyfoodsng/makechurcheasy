@@ -10,6 +10,13 @@ import {
   setIncludeMediaEnabled,
   getSyncDeviceName,
   setSyncDeviceName,
+  getBackupFrequency,
+  setBackupFrequency,
+  isIncludeImagesEnabled,
+  isIncludeVideosEnabled,
+  isBackupDue,
+  getNextBackupAt,
+  getCloudStorageLimitBytes,
   type CloudSyncSnapshot,
 } from "./cloudSyncService";
 
@@ -40,6 +47,8 @@ vi.mock("./authService", () => ({
     plan: "basic",
   })),
   getDeviceId: vi.fn(() => "device-pc-1"),
+  getDeviceSecret: vi.fn(() => "secret-1"),
+  getDeviceApiBaseCandidates: vi.fn(() => ["https://api.example.test"]),
 }));
 
 vi.mock("./licenseService", () => ({
@@ -247,5 +256,55 @@ describe("cloudSyncService", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  it("backs up weekly by default, pictures on, videos off", () => {
+    expect(getBackupFrequency()).toBe("weekly");
+    expect(isIncludeImagesEnabled()).toBe(true);
+    expect(isIncludeVideosEnabled()).toBe(false);
+  });
+
+  it("keeps automatic backup off for people who had turned it off", () => {
+    setAutoSyncEnabled(false);
+    expect(getBackupFrequency()).toBe("off");
+    expect(getNextBackupAt()).toBeNull();
+    expect(isBackupDue()).toBe(false);
+  });
+
+  it("is due when never backed up, and not due right after a backup", async () => {
+    setBackupFrequency("daily");
+    expect(isBackupDue()).toBe(true);
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation(async () => ({ ok: true, json: async () => ({ success: true }) })) as unknown as typeof fetch;
+    try {
+      await uploadSnapshotToCloud();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    expect(isBackupDue()).toBe(false);
+    expect(isBackupDue(Date.now() + 25 * 60 * 60 * 1000)).toBe(true);
+    setBackupFrequency("monthly");
+    expect(isBackupDue(Date.now() + 25 * 60 * 60 * 1000)).toBe(false);
+  });
+
+  it("reports a failed cloud backup instead of hiding it", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockImplementation(async () => ({
+      ok: false,
+      status: 413,
+      json: async () => ({ code: "storage_full" }),
+    })) as unknown as typeof fetch;
+    try {
+      await expect(uploadSnapshotToCloud()).rejects.toThrow(/storage is full/i);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("uses 500 MB for Free, 5 GB for Basic and 20 GB for Growth", () => {
+    const GB = 1024 ** 3;
+    expect(getCloudStorageLimitBytes("free")).toBe(500 * 1024 * 1024);
+    expect(getCloudStorageLimitBytes("basic")).toBe(5 * GB);
+    expect(getCloudStorageLimitBytes("growth")).toBe(20 * GB);
   });
 });

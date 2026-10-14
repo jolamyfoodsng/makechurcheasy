@@ -39,10 +39,11 @@ describe("second reference set", () => {
 });
 
 describe("theme list", () => {
-  it("starts with six starters, Caption Rule first, all with both looks", () => {
+  it("has six starters, all with both looks, and Royal Blue Glow is the default", () => {
     expect(STARTER_THEMES.length).toBe(6);
-    expect(STARTER_DEFAULT_THEME_ID).toBe("preset-caption-rule");
+    expect(STARTER_DEFAULT_THEME_ID).toBe("preset-royal-blue-glow");
     expect(STARTER_THEMES.slice(0, 3).map((t) => t.name)).toEqual(["Caption Rule", "Broadcast Caption", "Chapter Number"]);
+    expect(LAYOUT_PRESET_THEMES.slice(0, 3).map((t) => t.name)).toEqual(["Royal Blue Glow", "Serif Tab Band", "Royal Frame"]);
     expect(LAYOUT_PRESET_THEMES[0].id).toBe(STARTER_DEFAULT_THEME_ID);
     for (const t of STARTER_THEMES) {
       expect(Boolean(t.variants?.fullscreen?.settings.layout && t.variants?.lowerThird?.settings.layout)).toBe(true);
@@ -54,6 +55,6 @@ describe("theme list", () => {
   it("has unique ids", () => {
     const ids = LAYOUT_PRESET_THEMES.map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids.length).toBe(6 + 6 + 15);
+    expect(ids.length).toBe(6 + 1 + 6 + 15);
   });
 });

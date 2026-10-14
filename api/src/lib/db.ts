@@ -749,7 +749,7 @@ const DEFAULT_PLAN_CONFIG: PlanConfig = {
       entitlements: {
         songs: 3, images: 2, videos: 1, themes: 2, lowerThirds: 3, devices: 1,
         bibleVersions: 4, multiviewTemplates: 0, tickerThemes: 3, themePresets: 0,
-        cloudStorageGB: 0,
+        cloudStorageGB: 0.5,
         multiview: false, tickers: true, massImport: false, easyWorshipImport: false,
         proPresenterImport: false, translation: false, speechToScripture: true,
         sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
@@ -765,10 +765,10 @@ const DEFAULT_PLAN_CONFIG: PlanConfig = {
       entitlements: {
         songs: 100, images: 100, videos: 100, themes: 10, lowerThirds: 15, devices: 3,
         bibleVersions: -1, multiviewTemplates: 5, tickerThemes: -1, themePresets: 3,
-        cloudStorageGB: 1,
+        cloudStorageGB: 5,
         multiview: true, tickers: true, massImport: false, easyWorshipImport: false,
         proPresenterImport: false, translation: false, speechToScripture: true,
-        sermonExport: false, aiFeatures: false, cloudSync: false, advancedAnalytics: false,
+        sermonExport: false, aiFeatures: false, cloudSync: true, advancedAnalytics: false,
         customReports: false, mobileControl: false, apiAccess: false, slideshow: true,
         teamManagement: false, campusManagement: false, countdowns: false,
       },
@@ -956,7 +956,14 @@ export async function getPlanConfig(): Promise<PlanConfig> {
                 ...(plan.id === "basic" ? { features: defaultPlan?.features || plan.features } : {}),
                 ...(defaultPlan ? {
                   pricing: { ...plan.pricing, NGN: defaultPlan.pricing.NGN },
-                  paystackAmount: { ...plan.paystackAmount, NGN: defaultPlan.paystackAmount?.NGN },
+                  ...(defaultPlan.paystackAmount
+                    ? {
+                        paystackAmount: {
+                          NGN: defaultPlan.paystackAmount.NGN,
+                          USD: plan.paystackAmount?.USD ?? defaultPlan.paystackAmount.USD,
+                        },
+                      }
+                    : {}),
                 } : {}),
               };
             })()

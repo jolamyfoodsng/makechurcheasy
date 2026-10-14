@@ -268,7 +268,7 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "name": "Moment + Timer",
     "category": "announcements",
     "accentColor": "#f6bba5",
-    "description": "Live local time, title bar and a serif tagline for honour, testimony or prayer moments.",
+    "description": "Live clock, countdown or count-up timer with a title bar and a serif tagline for honour, testimony or prayer moments.",
     "sortOrder": 31
   },
   {
@@ -638,5 +638,37 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "accentColor": "#6e1116",
     "description": "Fullscreen board for bank transfer giving: a gold title plaque, up to six banks in two columns with logo, bank name and account number, and the account name on a white panel at the bottom. The plaque opens from the centre, accounts drop in one by one and the bottom panel rises",
     "sortOrder": 77
+  },
+  {
+    "graphicId": "lt-pkg-sermon-portrait-card",
+    "name": "Sermon Quote · Portrait Card",
+    "category": "quotes",
+    "accentColor": "#3b2a24",
+    "description": "Full-screen sermon quote: a warm card with the speaker's round photo on top, the quote with *emphasised* words in the highlight colour, and the name below.",
+    "sortOrder": 78
+  },
+  {
+    "graphicId": "lt-pkg-sermon-clean-panel",
+    "name": "Sermon Quote · Clean Panel",
+    "category": "quotes",
+    "accentColor": "#0f2470",
+    "description": "Full-screen sermon quote on a white panel over a colour field, with an optional round photo and social handle. *Asterisk* words use the highlight colour.",
+    "sortOrder": 79
+  },
+  {
+    "graphicId": "lt-pkg-sermon-scripture-highlight",
+    "name": "Sermon Quote · Scripture Highlight",
+    "category": "quotes",
+    "accentColor": "#b3221d",
+    "description": "Full-screen sermon quote in a black box with a white frame, a name plate underneath and an optional round photo. *Asterisk* words use the highlight colour.",
+    "sortOrder": 80
+  },
+  {
+    "graphicId": "lt-pkg-sermon-split-portrait",
+    "name": "Sermon Quote · Split Portrait",
+    "category": "quotes",
+    "accentColor": "#14161b",
+    "description": "Full-screen sermon quote with a large photo on the left and bold type on the right. *Asterisk* words get a highlighted block in the highlight colour.",
+    "sortOrder": 81
   }
 ];

@@ -2847,7 +2847,7 @@ const KINETIC_THEME_DATA: Omit<LowerThirdTheme, "css">[] = [
   {
     "id": "lt-ch-moment-timer",
     "name": "Moment + Timer",
-    "description": "Live local time, title bar and a serif tagline for honour, testimony or prayer moments.",
+    "description": "Live clock, countdown or count-up timer with a title bar and a serif tagline for honour, testimony or prayer moments.",
     "category": "general",
     "icon": "campaign",
     "accentColor": "#f6bba5",
@@ -2865,8 +2865,37 @@ const KINETIC_THEME_DATA: Omit<LowerThirdTheme, "css">[] = [
     ],
     "variables": [
       {
+        "key": "timerMode",
+        "label": "Show",
+        "type": "select",
+        "defaultValue": "clock",
+        "group": "Content",
+        "options": [
+          {
+            "label": "Live clock",
+            "value": "clock"
+          },
+          {
+            "label": "Countdown timer",
+            "value": "down"
+          },
+          {
+            "label": "Count-up timer",
+            "value": "up"
+          }
+        ]
+      },
+      {
+        "key": "timerLength",
+        "label": "Timer length (min:sec)",
+        "type": "text",
+        "defaultValue": "05:00",
+        "group": "Content",
+        "placeholder": "05:00"
+      },
+      {
         "key": "clockPeriod",
-        "label": "AM/PM display",
+        "label": "AM/PM display (clock only)",
         "type": "select",
         "defaultValue": "ampm",
         "group": "Content",
@@ -2941,7 +2970,7 @@ const KINETIC_THEME_DATA: Omit<LowerThirdTheme, "css">[] = [
         "group": "Style"
       }
     ],
-    "html": "<div class=\"kx-root\" data-kx=\"ch-moment-timer\" data-state=\"{{state}}\" data-v-clock-period=\"{{clockPeriod}}\" data-v-heading=\"{{heading}}\" data-v-tagline=\"{{tagline}}\" data-v-handles=\"{{handles}}\" data-v-col-tagline=\"{{colTagline}}\" data-v-kx-color=\"{{kxColor}}\" data-v-kx-speed=\"{{kxSpeed}}\" data-v-kx-scale=\"{{kxScale}}\" data-v-kx-auto-out=\"{{kxAutoOut}}\" data-v-kx-loop=\"{{kxLoop}}\"><div class=\"kx-fallback\"><div class=\"kx-fb-name\">{{heading}}</div></div></div>"
+    "html": "<div class=\"kx-root\" data-kx=\"ch-moment-timer\" data-state=\"{{state}}\" data-v-timer-mode=\"{{timerMode}}\" data-v-timer-length=\"{{timerLength}}\" data-v-clock-period=\"{{clockPeriod}}\" data-v-heading=\"{{heading}}\" data-v-tagline=\"{{tagline}}\" data-v-handles=\"{{handles}}\" data-v-col-tagline=\"{{colTagline}}\" data-v-kx-color=\"{{kxColor}}\" data-v-kx-speed=\"{{kxSpeed}}\" data-v-kx-scale=\"{{kxScale}}\" data-v-kx-auto-out=\"{{kxAutoOut}}\" data-v-kx-loop=\"{{kxLoop}}\"><div class=\"kx-fallback\"><div class=\"kx-fb-name\">{{timerLength}}</div></div></div>"
   },
   {
     "id": "lt-ch-give-blue",

@@ -734,14 +734,17 @@ async fn run_realtime_transcriber(
     audio_ready: Arc<AtomicBool>,
     audio_drop_count: Arc<AtomicU32>,
 ) -> Result<(), String> {
-    let endpoint = build_realtime_endpoint(&initial_profile);
+    let (endpoint, header_key) =
+        apply_realtime_credential(&build_realtime_endpoint(&initial_profile), &api_key);
     let mut request = endpoint
         .as_str()
         .into_client_request()
         .map_err(|e| format!("Failed to create realtime request: {e}"))?;
-    let auth = HeaderValue::from_str(&api_key)
-        .map_err(|e| format!("Invalid AssemblyAI API key header: {e}"))?;
-    request.headers_mut().insert("Authorization", auth);
+    if let Some(header_key) = header_key {
+        let auth = HeaderValue::from_str(&header_key)
+            .map_err(|e| format!("Invalid AssemblyAI API key header: {e}"))?;
+        request.headers_mut().insert("Authorization", auth);
+    }
 
     let (ws_stream, _) = timeout(WS_CONNECT_TIMEOUT, connect_async(request))
         .await
@@ -857,6 +860,27 @@ async fn run_realtime_transcriber(
     }
 
     Ok(())
+}
+
+/// Prefix the desktop puts on a short-lived token minted by our API
+/// (see `api/src/lib/assemblyAiToken.ts`).
+const REALTIME_TOKEN_PREFIX: &str = "token:";
+
+/// Release builds never hold the AssemblyAI API key: the app receives a one-minute
+/// token and AssemblyAI takes it as a `token` query parameter. A credential
+/// without the prefix is a raw API key (local development only) and is sent as the
+/// Authorization header as before. Returns the URL to open and the header value, if any.
+fn apply_realtime_credential(endpoint: &str, credential: &str) -> (String, Option<String>) {
+    match credential.strip_prefix(REALTIME_TOKEN_PREFIX) {
+        Some(token) => {
+            let sep = if endpoint.contains('?') { '&' } else { '?' };
+            (
+                format!("{endpoint}{sep}token={}", urlencoding::encode(token)),
+                None,
+            )
+        }
+        None => (endpoint.to_string(), Some(credential.to_string())),
+    }
 }
 
 fn build_realtime_endpoint(profile: &RealtimeProfile) -> String {
@@ -1294,6 +1318,22 @@ fn blackman_window(n: i32, half_len: i32) -> f32 {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn token_credentials_go_in_the_url_not_a_header() {
+        let (url, header) = apply_realtime_credential("wss://x/v3/ws?a=1", "token:abc/def+1");
+        assert_eq!(url, "wss://x/v3/ws?a=1&token=abc%2Fdef%2B1");
+        assert_eq!(header, None);
+        let (url, _) = apply_realtime_credential("wss://x/v3/ws", "token:t");
+        assert_eq!(url, "wss://x/v3/ws?token=t");
+    }
+
+    #[test]
+    fn raw_keys_still_use_the_authorization_header() {
+        let (url, header) = apply_realtime_credential("wss://x/v3/ws?a=1", "rawkey");
+        assert_eq!(url, "wss://x/v3/ws?a=1");
+        assert_eq!(header.as_deref(), Some("rawkey"));
+    }
     use super::*;
 
     #[test]

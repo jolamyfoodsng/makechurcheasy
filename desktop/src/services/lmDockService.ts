@@ -19,6 +19,7 @@ import { getSettings as getMvSettings } from "../multiview/mvStore";
 import type { VoiceBibleCandidate, TranscriptEntry, DetectionSpeed, LmDockTelemetry } from "./voiceBibleTypes";
 import { DETECTION_SPEED_CONFIG } from "./voiceBibleTypes";
 import { hasTauriInvoke, safeTauriInvoke, safeTauriListen, type TauriUnlisten } from "./tauriSafe";
+import { getSpeechCredential } from "./speechCredential";
 
 /**
  * Bible abbreviations and common honorifics/contractions that should not trigger sentence splits.
@@ -191,28 +192,6 @@ export function isHallucinated(text: string): boolean {
   }
 
   return false;
-}
-
-const ASSEMBLYAI_API_KEYS = (
-  (import.meta as any).env?.VITE_ASSEMBLYAI_API_KEYS ?? ""
-)
-  .split(",")
-  .map((k: string) => k.trim())
-  .filter(Boolean);
-
-const CLOUDFLARE_STT_URL = (
-  (import.meta as any).env?.VITE_CLOUDFLARE_STT_URL ?? ""
-).trim();
-
-function getAssemblyAiKey(): string {
-  if (ASSEMBLYAI_API_KEYS.length > 0) {
-    return ASSEMBLYAI_API_KEYS[Math.floor(Math.random() * ASSEMBLYAI_API_KEYS.length)];
-  }
-  if (CLOUDFLARE_STT_URL) {
-    return CLOUDFLARE_STT_URL;
-  }
-  console.warn("[VoiceService] No API keys configured. Set speech service API keys in your .env file.");
-  return "";
 }
 
 export type LmServiceStatus = "idle" | "requesting-mic" | "connecting" | "listening" | "error";
@@ -1500,10 +1479,11 @@ export class LmDockService {
       // native AssemblyAI stream, nothing reads the browser Whisper model, and
       // loading it cost 150–300 MB of RAM on low-memory laptops while offline.
 
-      const apiKey = getAssemblyAiKey();
-      if (!apiKey) {
-        throw new Error("No speech service API key configured");
-      }
+      // A one-minute token from the API (never a key shipped in the app). The API
+      // re-checks plan, credits and daily limits, so this also stops a session
+      // that is no longer allowed when the stream is recycled or reconnected.
+      const apiKey = await getSpeechCredential();
+      if (token !== this.sessionToken) return;
 
       // Listen for transcript events from Rust backend
       this.transcriptUnlisten = await withTimeout(

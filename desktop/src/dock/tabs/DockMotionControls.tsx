@@ -8,6 +8,8 @@
  *   Speaker  — pick from the church's speaker list to fill the name fields
  *   Size     — scales the strap, 20%–160% (kxScale)
  *   Duration — seconds on screen before it animates out by itself; 0 keeps it on (kxAutoOut)
+ *   Cycles   — for graphics that run through a set (Social Handles): how many times the whole set
+ *              plays before it animates out; 0 keeps looping (kxCycles). Replaces Duration.
  *   Speed    — animation speed (kxSpeed)
  *   Position — where the strap sits on the 1920×1080 canvas
  *   Text     — text colour (kxColor)
@@ -17,10 +19,12 @@
  * the Speaker picker appears on speaker straps, the Text colour only when the strap has kxColor.
  */
 
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { LowerThirdTheme, LTPosition } from "../../lowerthirds/types";
 import { LT_POSITION_LABELS, LT_POSITIONS } from "../../lowerthirds/types";
 import { isSpeakerTheme } from "../../lowerthirds/speakerThemeUtils";
+import { CYCLES_KEY, CYCLE_PRESETS, DEFAULT_CYCLES, PER_KEY, formatSeconds, getCycleInfo, parseCycles } from "../../lowerthirds/cycleSet";
 
 export interface DockMotionSpeaker {
   name: string;
@@ -79,6 +83,7 @@ export default function DockMotionControls({
   onPositionChange,
 }: DockMotionControlsProps) {
   const { t } = useTranslation();
+  const [customCycles, setCustomCycles] = useState(false);
   const defaultOf = (key: string, fallback: string) => theme.variables.find((v) => v.key === key)?.defaultValue ?? fallback;
   const value = (key: string, fallback: string) => {
     const v = values[key];
@@ -93,6 +98,9 @@ export default function DockMotionControls({
   const hasKxColor = theme.variables.some((v) => v.key === "kxColor");
   const colourVars = theme.variables.filter((v) => v.type === "color" && v.key !== "kxColor");
   const showSpeaker = isSpeakerTheme(theme);
+  const cycleInfo = getCycleInfo(theme, values);
+  const cycles = parseCycles(values[CYCLES_KEY] ?? DEFAULT_CYCLES);
+  const cyclesSelectValue = customCycles || (cycles !== 0 && !CYCLE_PRESETS.includes(String(cycles))) ? "custom" : String(cycles);
   const speed = value("kxSpeed", "1");
   const speedOptions = SPEED_OPTIONS.includes(speed) ? SPEED_OPTIONS : [...SPEED_OPTIONS, speed].sort((a, b) => Number(a) - Number(b));
 
@@ -150,30 +158,110 @@ export default function DockMotionControls({
           style={{ width: "100%", accentColor: "var(--dock-accent, #4ade80)" }}
         />
       </div>
-      <div>
-        <label style={labelStyle} htmlFor="dock-motion-hold" title={t("lowerThird.durationHint", "How many seconds the lower third stays on screen before it animates out by itself. 0 keeps it on until you press Animate out.")}>
-          {t("lowerThird.durationSeconds", "Duration on screen (sec)")}
-        </label>
-        <input
-          id="dock-motion-hold"
-          type="number"
-          min={0}
-          max={600}
-          step={1}
-          value={value("kxAutoOut", "5")}
-          onChange={(e) => onValueChange("kxAutoOut", e.target.value)}
-          style={{ ...inputStyle, height: 24 }}
-        />
-      </div>
-      <div>
-        <label style={labelStyle} htmlFor="dock-motion-speed">{t("lowerThird.motionSpeed", "Speed")}</label>
-        <select id="dock-motion-speed" value={speed} onChange={(e) => onValueChange("kxSpeed", e.target.value)} style={{ ...inputStyle, height: 24 }}>
-          {speedOptions.map((s) => <option key={s} value={s}>{s}×</option>)}
-        </select>
-      </div>
-      <div style={{ gridColumn: "1 / -1", fontSize: 9, color: "var(--dock-text)", opacity: 0.85, marginTop: -4 }}>
-        {t("lowerThird.durationZero", "Duration 0 = stays on until Animate out")}
-      </div>
+      {cycleInfo ? (
+        <>
+          <div>
+            <label style={labelStyle} htmlFor="dock-motion-cycles" title={t("lowerThird.cyclesHint", "How many times the whole set plays before it animates out by itself. Keep looping stays on until you press Animate out.")}>
+              {t("lowerThird.cycles", "Cycles")}
+            </label>
+            <select
+              id="dock-motion-cycles"
+              value={cyclesSelectValue}
+              onChange={(e) => {
+                const next = e.target.value;
+                if (next === "custom") {
+                  // Keep the number input open while typing, even when the value matches a preset.
+                  setCustomCycles(true);
+                  if (cycles === 0) onValueChange(CYCLES_KEY, DEFAULT_CYCLES);
+                  return;
+                }
+                setCustomCycles(false);
+                onValueChange(CYCLES_KEY, next);
+              }}
+              style={{ ...inputStyle, height: 24 }}
+            >
+              <option value="0">{t("lowerThird.cyclesLoop", "Keep looping")}</option>
+              {CYCLE_PRESETS.map((n) => <option key={n} value={n}>{n}</option>)}
+              <option value="custom">{t("lowerThird.cyclesCustom", "Custom…")}</option>
+            </select>
+            {cyclesSelectValue === "custom" && (
+              <input
+                aria-label={t("lowerThird.cyclesCustomValue", "Number of cycles")}
+                type="number"
+                min={1}
+                max={99}
+                step={1}
+                value={String(cycles)}
+                onChange={(e) => {
+                  const n = Math.round(Number(e.target.value));
+                  onValueChange(CYCLES_KEY, Number.isFinite(n) && n >= 1 ? String(Math.min(n, 99)) : "1");
+                }}
+                style={{ ...inputStyle, height: 24, marginTop: 4 }}
+              />
+            )}
+          </div>
+          <div>
+            <label style={labelStyle} htmlFor="dock-motion-per">
+              {t("lowerThird.secondsPer", { defaultValue: "Seconds per {{noun}}", noun: cycleInfo.noun })}
+            </label>
+            <input
+              id="dock-motion-per"
+              type="number"
+              min={2.5}
+              max={60}
+              step={0.5}
+              value={value(PER_KEY, "4")}
+              onChange={(e) => onValueChange(PER_KEY, e.target.value)}
+              style={{ ...inputStyle, height: 24 }}
+            />
+          </div>
+          <div>
+            <label style={labelStyle} htmlFor="dock-motion-speed">{t("lowerThird.motionSpeed", "Speed")}</label>
+            <select id="dock-motion-speed" value={speed} onChange={(e) => onValueChange("kxSpeed", e.target.value)} style={{ ...inputStyle, height: 24 }}>
+              {speedOptions.map((s) => <option key={s} value={s}>{s}×</option>)}
+            </select>
+          </div>
+          <div style={{ gridColumn: "1 / -1", fontSize: 9, color: "var(--dock-text)", opacity: 0.85, marginTop: -4 }}>
+            {cycles === 0
+              ? t("lowerThird.cyclesLoopHint", "Keeps looping until Animate out")
+              : t("lowerThird.cyclesSummary", {
+                  defaultValue: "{{items}} {{noun}} × {{per}}s = {{cycle}} a cycle · about {{total}} in total",
+                  items: cycleInfo.items,
+                  noun: cycleInfo.items === 1 ? cycleInfo.noun : `${cycleInfo.noun}s`,
+                  per: cycleInfo.secondsPerItem,
+                  cycle: formatSeconds(cycleInfo.cycleSeconds),
+                  total: formatSeconds(cycleInfo.cycleSeconds * cycles),
+                })}
+          </div>
+        </>
+      ) : (
+        <>
+          <div>
+            <label style={labelStyle} htmlFor="dock-motion-hold" title={t("lowerThird.durationHint", "How many seconds the lower third stays on screen before it animates out by itself. 0 keeps it on until you press Animate out.")}>
+              {t("lowerThird.durationSeconds", "Duration on screen (sec)")}
+            </label>
+            <input
+              id="dock-motion-hold"
+              type="number"
+              min={0}
+              max={600}
+              step={1}
+              value={value("kxAutoOut", "5")}
+              onChange={(e) => onValueChange("kxAutoOut", e.target.value)}
+              style={{ ...inputStyle, height: 24 }}
+            />
+          </div>
+          <div>
+            <label style={labelStyle} htmlFor="dock-motion-speed">{t("lowerThird.motionSpeed", "Speed")}</label>
+            <select id="dock-motion-speed" value={speed} onChange={(e) => onValueChange("kxSpeed", e.target.value)} style={{ ...inputStyle, height: 24 }}>
+              {speedOptions.map((s) => <option key={s} value={s}>{s}×</option>)}
+            </select>
+          </div>
+          <div style={{ gridColumn: "1 / -1", fontSize: 9, color: "var(--dock-text)", opacity: 0.85, marginTop: -4 }}>
+            {t("lowerThird.durationZero", "Duration 0 = stays on until Animate out")}
+          </div>
+        </>
+      )}
       <div>
         <label style={labelStyle} htmlFor="dock-motion-position">{t("lowerThird.position", "Position")}</label>
         <select

@@ -45,6 +45,7 @@
    * }
    *
    * Template tags: {{key}} text · {{key|br}} text with "|" as a line break ·
+   * {{key|rich}} like |br, and *words* in asterisks become <span class="hl"> (important words) ·
    * {{key|words}} / {{key|chars}} text split into <span class="w"> words / <span class="ch"> letters ·
    * {{icon:key}} / {{icon=mail}} glyph icon · {{brands:key}} / {{brand=youtube}} brand icons ·
    * {{image:key|fallbackKey}} picture or fallback text · {{#key}}…{{/key}} only when key has a value.
@@ -131,6 +132,14 @@
     return css ? '<span class="lt-ts" style="' + esc(css) + '">' + html + "</span>" : html;
   }
 
+  /* ---------- {{key|rich}}: text where *words* between asterisks become <span class="hl"> (the
+   * graphic's own "important words" style); Enter or "|" is a line break. ---------- */
+  function richText(raw) {
+    return String(raw == null ? "" : raw).split(/\r?\n|\|/).map(function (line) {
+      return esc(line).replace(/\*([^*]+)\*/g, '<span class="hl">$1</span>');
+    }).join("<br>");
+  }
+
   /* ---------- letter / word splitting for {{key|chars}} and {{key|words}} ----------
    * Each word becomes <span class="w"> (kept on one line) and, with |chars, each
    * letter inside it a <span class="ch">, so animations can target .w or .ch.
@@ -162,6 +171,7 @@
         return m[2] ? '<span class="pkg-fallback">' + String(v[m[2]] || "").split("|").map(esc).join("<br>") + "</span>" : "";
       }
       if ((m = /^([\w-]+)\|(chars|words)$/.exec(expr))) return styled(v, m[1], splitText(v[m[1]], m[2] === "chars"));
+      if ((m = /^([\w-]+)\|rich$/.exec(expr))) return styled(v, m[1], richText(v[m[1]]));
       if ((m = /^([\w-]+)\|br$/.exec(expr))) return styled(v, m[1], String(v[m[1]] == null ? "" : v[m[1]]).split(/\r?\n|\|/).map(esc).join("<br>"));
       if ((m = /^([\w-]+)$/.exec(expr))) return styled(v, m[1], esc(v[m[1]]));
       return "";

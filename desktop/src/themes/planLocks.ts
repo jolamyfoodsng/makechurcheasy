@@ -3,7 +3,7 @@
  *
  * A plan's `themes` limit (Free 2, Basic 10, Growth unlimited) is the number of
  * ready-made themes that are open: the FIRST N of the curated list (BUILTIN_THEMES
- * order, so Caption Rule always comes first). The rest show a lock and open the
+ * order, so the new-account themes always come first). The rest show a lock and open the
  * upgrade modal. Themes a church made itself are never locked (the create limit
  * covers those), and a theme that is already selected stays usable, so a church
  * that moves down a plan never loses the look it is live with.

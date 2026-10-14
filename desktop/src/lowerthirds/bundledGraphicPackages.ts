@@ -3894,5 +3894,504 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
         }
       ]
     }
+  },
+  {
+    "format": "mce-graphic@1",
+    "id": "sermon-portrait-card",
+    "version": 1,
+    "name": "Sermon Quote · Portrait Card",
+    "category": "quotes",
+    "description": "Full-screen sermon quote: a warm card with the speaker's round photo on top, the quote with *emphasised* words in the highlight colour, and the name below.",
+    "color": "#3b2a24",
+    "hold": 0,
+    "placement": {
+      "x": 0,
+      "y": 0,
+      "scale": 1
+    },
+    "fields": [
+      {
+        "key": "quote",
+        "label": "Quote (wrap words in *asterisks* to make them stand out; Enter = new line)",
+        "type": "text",
+        "default": "Your *tomorrow* is not cancelled. The God who started this good work will *finish what He began* in you.",
+        "multiline": true
+      },
+      {
+        "key": "ref",
+        "label": "Scripture reference (optional)",
+        "type": "text",
+        "default": "(Phil. 1:6)"
+      },
+      {
+        "key": "name",
+        "label": "Speaker",
+        "type": "text",
+        "default": "Pastor Firstname Lastname"
+      },
+      {
+        "key": "photo",
+        "label": "Speaker photo (optional)",
+        "type": "image",
+        "default": ""
+      },
+      {
+        "key": "size",
+        "label": "Text size",
+        "type": "select",
+        "default": "m",
+        "options": [
+          {
+            "value": "s",
+            "label": "Small"
+          },
+          {
+            "value": "m",
+            "label": "Medium"
+          },
+          {
+            "value": "l",
+            "label": "Large"
+          },
+          {
+            "value": "xl",
+            "label": "Extra large"
+          }
+        ]
+      },
+      {
+        "key": "bg",
+        "label": "Card colour",
+        "type": "color",
+        "default": "#3b2a24"
+      },
+      {
+        "key": "hl",
+        "label": "Highlight colour (*words*)",
+        "type": "color",
+        "default": "#f4a52a"
+      }
+    ],
+    "animation": {
+      "in": [
+        [
+          ".sq-card",
+          "fade",
+          0,
+          {
+            "d": 0.5
+          }
+        ],
+        [
+          ".sq-photo",
+          "pop",
+          0.2,
+          {
+            "d": 0.5
+          }
+        ],
+        [
+          ".sq-mark",
+          "up",
+          0.3,
+          {
+            "d": 0.5
+          }
+        ],
+        [
+          ".sq-quote",
+          "up",
+          0.4,
+          {
+            "d": 0.7
+          }
+        ],
+        [
+          ".sq-name",
+          "up",
+          0.6,
+          {
+            "d": 0.6
+          }
+        ]
+      ]
+    },
+    "css": ".sq{position:relative;width:1920px;height:1080px;overflow:hidden;font-family:Montserrat,'Segoe UI',Arial,sans-serif}\n.sq .hl{color:var(--hl);font-weight:800}\n.sq .sq-ref{color:var(--hl);font-weight:800}\n.sq p{margin:0}\n.sq .pkg-img{display:block;width:100%;height:100%;object-fit:cover}\n\n.sq-a{background:#f6f4f1}\n.sq-a::before{content:\"\";position:absolute;inset:0;opacity:.55;background-image:radial-gradient(circle at 30% 30%,transparent 38px,#e7e2dc 39px,#e7e2dc 46px,transparent 47px);background-size:150px 150px}\n.sq-a .sq-card{position:absolute;left:220px;right:220px;top:140px;bottom:70px;background:var(--bg);border-radius:56px;box-shadow:0 30px 70px rgba(30,20,10,.28);padding:60px 130px;display:flex;flex-direction:column;justify-content:center;gap:22px}\n.sq-a.has-photo .sq-card{top:230px;padding-top:160px}\n.sq-a .sq-mark{font:900 180px/.55 Montserrat,Arial,sans-serif;color:#fff;height:80px}\n.sq-a .sq-photo{position:absolute;left:50%;top:70px;width:330px;height:330px;margin-left:-165px;border-radius:50%;border:16px solid #fff;overflow:hidden;background:var(--hl);box-shadow:0 18px 40px rgba(0,0,0,.25);z-index:2}\n.sq-a .sq-quote{color:#fff;font-weight:600;line-height:1.35;text-align:left;text-wrap:pretty;font-size:54px}\n.sq-sz-s.sq-a .sq-quote{font-size:44px}.sq-sz-l.sq-a .sq-quote{font-size:62px}.sq-sz-xl.sq-a .sq-quote{font-size:72px}\n.sq-a .sq-ref{display:block;font-size:.8em;margin-top:18px}\n.sq-a .sq-name{color:#fff;font:800 50px Montserrat,Arial,sans-serif;text-align:center;letter-spacing:.01em}\n",
+    "html": "<div class=\"sq sq-a sq-sz-{{size}} pkg-fullscreen {{#photo}}has-photo{{/photo}}\">\n  <div class=\"sq-card\"><div class=\"sq-mark\">&ldquo;</div>\n    <p class=\"sq-quote\">{{quote|rich}}{{#ref}}<span class=\"sq-ref\">{{ref}}</span>{{/ref}}</p>\n    {{#name}}<div class=\"sq-name\">~{{name}}~</div>{{/name}}</div>\n  {{#photo}}<div class=\"sq-photo\">{{image:photo}}</div>{{/photo}}\n</div>"
+  },
+  {
+    "format": "mce-graphic@1",
+    "id": "sermon-clean-panel",
+    "version": 1,
+    "name": "Sermon Quote · Clean Panel",
+    "category": "quotes",
+    "description": "Full-screen sermon quote on a white panel over a colour field, with an optional round photo and social handle. *Asterisk* words use the highlight colour.",
+    "color": "#0f2470",
+    "hold": 0,
+    "placement": {
+      "x": 0,
+      "y": 0,
+      "scale": 1
+    },
+    "fields": [
+      {
+        "key": "quote",
+        "label": "Quote (wrap words in *asterisks* to make them stand out; Enter = new line)",
+        "type": "text",
+        "default": "Your *tomorrow* is not cancelled. The God who started this good work will *finish what He began* in you.",
+        "multiline": true
+      },
+      {
+        "key": "ref",
+        "label": "Scripture reference (optional)",
+        "type": "text",
+        "default": "(Phil. 1:6)"
+      },
+      {
+        "key": "name",
+        "label": "Speaker",
+        "type": "text",
+        "default": "Pastor Firstname Lastname"
+      },
+      {
+        "key": "handle",
+        "label": "Social handle (optional)",
+        "type": "text",
+        "default": "@yourchurchmedia"
+      },
+      {
+        "key": "photo",
+        "label": "Speaker photo (optional)",
+        "type": "image",
+        "default": ""
+      },
+      {
+        "key": "size",
+        "label": "Text size",
+        "type": "select",
+        "default": "m",
+        "options": [
+          {
+            "value": "s",
+            "label": "Small"
+          },
+          {
+            "value": "m",
+            "label": "Medium"
+          },
+          {
+            "value": "l",
+            "label": "Large"
+          },
+          {
+            "value": "xl",
+            "label": "Extra large"
+          }
+        ]
+      },
+      {
+        "key": "bg",
+        "label": "Background colour",
+        "type": "color",
+        "default": "#0f2470",
+        "shades": true
+      },
+      {
+        "key": "hl",
+        "label": "Highlight colour (*words*)",
+        "type": "color",
+        "default": "#e0362c"
+      }
+    ],
+    "animation": {
+      "in": [
+        [
+          ".sq-panel",
+          "fade",
+          0,
+          {
+            "d": 0.5
+          }
+        ],
+        [
+          ".sq-photo",
+          "pop",
+          0.2,
+          {
+            "d": 0.5
+          }
+        ],
+        [
+          ".sq-quote",
+          "up",
+          0.3,
+          {
+            "d": 0.7
+          }
+        ],
+        [
+          ".sq-name",
+          "up",
+          0.5,
+          {
+            "d": 0.6
+          }
+        ],
+        [
+          ".sq-foot",
+          "up",
+          0.7,
+          {
+            "d": 0.6
+          }
+        ]
+      ]
+    },
+    "css": ".sq{position:relative;width:1920px;height:1080px;overflow:hidden;font-family:Montserrat,'Segoe UI',Arial,sans-serif}\n.sq .hl{color:var(--hl);font-weight:800}\n.sq .sq-ref{color:var(--hl);font-weight:800}\n.sq p{margin:0}\n.sq .pkg-img{display:block;width:100%;height:100%;object-fit:cover}\n\n.sq-b{background:radial-gradient(120% 90% at 50% 0%,var(--bg-l) 0%,var(--bg) 70%)}\n.sq-b .sq-panel{position:absolute;left:330px;right:330px;top:150px;bottom:240px;background:#fff;border-radius:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:70px 110px;gap:46px;box-shadow:0 30px 80px rgba(0,0,30,.35)}\n.sq-b .sq-quote{color:var(--bg);font:700 70px/1.22 Montserrat,Arial,sans-serif;text-align:center;text-wrap:balance}\n.sq-sz-s.sq-b .sq-quote{font-size:56px}.sq-sz-m.sq-b .sq-quote{font-size:64px}.sq-sz-xl.sq-b .sq-quote{font-size:82px}\n.sq-b .sq-ref{display:block;font-size:.72em;margin-top:16px}\n.sq-b .sq-name{display:flex;align-items:center;gap:30px;color:#1b1b1f;font:700 48px Montserrat,Arial,sans-serif}\n.sq-b .sq-name::before,.sq-b .sq-name::after{content:\"\";border:18px solid transparent}\n.sq-b .sq-name::before{border-right:26px solid #1b1b1f;border-left:0}\n.sq-b .sq-name::after{border-left:26px solid #1b1b1f;border-right:0}\n.sq-b .sq-photo{position:absolute;left:180px;top:120px;width:200px;height:200px;border-radius:50%;border:10px solid #fff;overflow:hidden;background:var(--hl);z-index:2}\n.sq-b .sq-foot{position:absolute;left:0;right:0;bottom:120px;text-align:center;color:var(--hl);font:700 40px Montserrat,Arial,sans-serif;letter-spacing:.02em}\n",
+    "html": "<div class=\"sq sq-b sq-sz-{{size}} pkg-fullscreen\">\n  {{#photo}}<div class=\"sq-photo\">{{image:photo}}</div>{{/photo}}\n  <div class=\"sq-panel\"><p class=\"sq-quote\">{{quote|rich}}{{#ref}}<span class=\"sq-ref\">{{ref}}</span>{{/ref}}</p>\n    {{#name}}<div class=\"sq-name\">{{name}}</div>{{/name}}</div>\n  {{#handle}}<div class=\"sq-foot\">{{handle}}</div>{{/handle}}\n</div>"
+  },
+  {
+    "format": "mce-graphic@1",
+    "id": "sermon-scripture-highlight",
+    "version": 1,
+    "name": "Sermon Quote · Scripture Highlight",
+    "category": "quotes",
+    "description": "Full-screen sermon quote in a black box with a white frame, a name plate underneath and an optional round photo. *Asterisk* words use the highlight colour.",
+    "color": "#b3221d",
+    "hold": 0,
+    "placement": {
+      "x": 0,
+      "y": 0,
+      "scale": 1
+    },
+    "fields": [
+      {
+        "key": "quote",
+        "label": "Quote (wrap words in *asterisks* to make them stand out; Enter = new line)",
+        "type": "text",
+        "default": "Your *tomorrow* is not cancelled. The God who started this good work will *finish what He began* in you.",
+        "multiline": true
+      },
+      {
+        "key": "ref",
+        "label": "Scripture reference (optional)",
+        "type": "text",
+        "default": "(Phil. 1:6)"
+      },
+      {
+        "key": "name",
+        "label": "Speaker (name plate)",
+        "type": "text",
+        "default": "Pastor Firstname Lastname"
+      },
+      {
+        "key": "photo",
+        "label": "Speaker photo (optional)",
+        "type": "image",
+        "default": ""
+      },
+      {
+        "key": "size",
+        "label": "Text size",
+        "type": "select",
+        "default": "m",
+        "options": [
+          {
+            "value": "s",
+            "label": "Small"
+          },
+          {
+            "value": "m",
+            "label": "Medium"
+          },
+          {
+            "value": "l",
+            "label": "Large"
+          },
+          {
+            "value": "xl",
+            "label": "Extra large"
+          }
+        ]
+      },
+      {
+        "key": "bg",
+        "label": "Background colour",
+        "type": "color",
+        "default": "#b3221d"
+      },
+      {
+        "key": "hl",
+        "label": "Highlight colour (*words*)",
+        "type": "color",
+        "default": "#3ee0e6"
+      }
+    ],
+    "animation": {
+      "in": [
+        [
+          ".sq-box",
+          "fade",
+          0,
+          {
+            "d": 0.5
+          }
+        ],
+        [
+          ".sq-quote",
+          "up",
+          0.3,
+          {
+            "d": 0.7
+          }
+        ],
+        [
+          ".sq-plate",
+          "up",
+          0.5,
+          {
+            "d": 0.6
+          }
+        ],
+        [
+          ".sq-photo",
+          "pop",
+          0.6,
+          {
+            "d": 0.5
+          }
+        ]
+      ]
+    },
+    "css": ".sq{position:relative;width:1920px;height:1080px;overflow:hidden;font-family:Montserrat,'Segoe UI',Arial,sans-serif}\n.sq .hl{color:var(--hl);font-weight:800}\n.sq .sq-ref{color:var(--hl);font-weight:800}\n.sq p{margin:0}\n.sq .pkg-img{display:block;width:100%;height:100%;object-fit:cover}\n\n.sq-c{background:var(--bg)}\n.sq-c::before{content:\"\";position:absolute;inset:0;background:radial-gradient(60% 70% at 85% 20%,rgba(255,255,255,.12),transparent 60%),repeating-linear-gradient(115deg,rgba(0,0,0,.08) 0 3px,transparent 3px 14px)}\n.sq-c .sq-box{position:absolute;left:240px;right:240px;top:110px;bottom:230px;background:rgba(10,10,12,.92);border:10px solid #f3f3f3;border-radius:60px;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:60px 120px;box-shadow:0 30px 60px rgba(0,0,0,.4)}\n.sq-c .sq-quote{color:#fff;font:600 66px/1.32 Montserrat,Arial,sans-serif;text-align:center;text-wrap:balance}\n.sq-sz-s.sq-c .sq-quote{font-size:52px}.sq-sz-m.sq-c .sq-quote{font-size:60px}.sq-sz-xl.sq-c .sq-quote{font-size:78px}\n.sq-c .sq-ref{display:block;margin-top:18px}\n.sq-c .sq-plate{position:absolute;left:50%;bottom:120px;transform:translateX(-50%);background:#fff;color:var(--bg);font:800 44px 'Saira Semi Condensed',Montserrat,Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase;padding:18px 54px;border-radius:6px;box-shadow:0 12px 30px rgba(0,0,0,.35);white-space:nowrap}\n.sq-c .sq-photo{position:absolute;right:120px;bottom:40px;width:290px;height:290px;border-radius:50%;border:10px solid #fff;overflow:hidden;background:var(--hl);box-shadow:0 14px 30px rgba(0,0,0,.4)}\n",
+    "html": "<div class=\"sq sq-c sq-sz-{{size}} pkg-fullscreen\">\n  <div class=\"sq-box\"><p class=\"sq-quote\">{{quote|rich}}{{#ref}}<span class=\"sq-ref\">{{ref}}</span>{{/ref}}</p></div>\n  {{#name}}<div class=\"sq-plate\">{{name}}</div>{{/name}}\n  {{#photo}}<div class=\"sq-photo\">{{image:photo}}</div>{{/photo}}\n</div>"
+  },
+  {
+    "format": "mce-graphic@1",
+    "id": "sermon-split-portrait",
+    "version": 1,
+    "name": "Sermon Quote · Split Portrait",
+    "category": "quotes",
+    "description": "Full-screen sermon quote with a large photo on the left and bold type on the right. *Asterisk* words get a highlighted block in the highlight colour.",
+    "color": "#14161b",
+    "hold": 0,
+    "placement": {
+      "x": 0,
+      "y": 0,
+      "scale": 1
+    },
+    "fields": [
+      {
+        "key": "quote",
+        "label": "Quote (wrap words in *asterisks* to make them stand out; Enter = new line)",
+        "type": "text",
+        "default": "Your *tomorrow* is not cancelled. The God who started this good work will *finish what He began* in you.",
+        "multiline": true
+      },
+      {
+        "key": "ref",
+        "label": "Scripture reference (optional)",
+        "type": "text",
+        "default": "(Phil. 1:6)"
+      },
+      {
+        "key": "name",
+        "label": "Speaker",
+        "type": "text",
+        "default": "Pastor Firstname Lastname"
+      },
+      {
+        "key": "title",
+        "label": "Title / church (optional)",
+        "type": "text",
+        "default": "Lead Pastor, Your Church Name"
+      },
+      {
+        "key": "series",
+        "label": "Series label (optional)",
+        "type": "text",
+        "default": "Sunday Service · Week 3"
+      },
+      {
+        "key": "photo",
+        "label": "Speaker photo (optional)",
+        "type": "image",
+        "default": ""
+      },
+      {
+        "key": "size",
+        "label": "Text size",
+        "type": "select",
+        "default": "m",
+        "options": [
+          {
+            "value": "s",
+            "label": "Small"
+          },
+          {
+            "value": "m",
+            "label": "Medium"
+          },
+          {
+            "value": "l",
+            "label": "Large"
+          },
+          {
+            "value": "xl",
+            "label": "Extra large"
+          }
+        ]
+      },
+      {
+        "key": "bg",
+        "label": "Background colour",
+        "type": "color",
+        "default": "#14161b"
+      },
+      {
+        "key": "hl",
+        "label": "Highlight colour (*words*)",
+        "type": "color",
+        "default": "#ffcf3f"
+      }
+    ],
+    "animation": {
+      "in": [
+        [
+          ".sq-ph",
+          "fade",
+          0,
+          {
+            "d": 0.6
+          }
+        ],
+        [
+          ".sq-series",
+          "up",
+          0.2,
+          {
+            "d": 0.5
+          }
+        ],
+        [
+          ".sq-quote",
+          "up",
+          0.35,
+          {
+            "d": 0.7
+          }
+        ],
+        [
+          ".sq-name",
+          "up",
+          0.55,
+          {
+            "d": 0.6
+          }
+        ]
+      ]
+    },
+    "css": ".sq{position:relative;width:1920px;height:1080px;overflow:hidden;font-family:Montserrat,'Segoe UI',Arial,sans-serif}\n.sq .hl{color:var(--hl);font-weight:800}\n.sq .sq-ref{color:var(--hl);font-weight:800}\n.sq p{margin:0}\n.sq .pkg-img{display:block;width:100%;height:100%;object-fit:cover}\n\n.sq-d{background:var(--bg);color:#fff}\n.sq-d .sq-ph{position:absolute;left:0;top:0;bottom:0;width:820px;background:#2a2d33}\n.sq-d .sq-ph .pkg-img{position:absolute;inset:0}\n.sq-d .sq-ph::after{content:\"\";position:absolute;inset:0;background:linear-gradient(90deg,transparent 45%,var(--bg) 100%)}\n.sq-d .sq-content{position:absolute;left:200px;right:200px;top:0;bottom:0;display:flex;flex-direction:column;justify-content:center;gap:48px}\n.sq-d.has-photo .sq-content{left:820px;right:140px}\n.sq-d .sq-series{display:flex;align-items:center;gap:18px;font:700 30px Montserrat,Arial,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:var(--hl)}\n.sq-d .sq-series::before{content:\"\";width:70px;height:6px;background:var(--hl)}\n.sq-d .sq-quote{font:700 84px/1.3 'Saira Semi Condensed',Montserrat,Arial,sans-serif;text-wrap:balance}\n.sq-sz-s.sq-d .sq-quote{font-size:64px}.sq-sz-m.sq-d .sq-quote{font-size:76px}.sq-sz-xl.sq-d .sq-quote{font-size:100px}\n.sq-d .sq-quote .hl{color:var(--bg);background:var(--hl);padding:0 .14em;box-decoration-break:clone;-webkit-box-decoration-break:clone;font-weight:700}\n.sq-d .sq-ref{display:block;font:700 40px Montserrat,Arial,sans-serif;color:var(--hl);margin-top:26px}\n.sq-d .sq-name{font:800 50px Montserrat,Arial,sans-serif}\n.sq-d .sq-name small{display:block;font:500 34px Montserrat,Arial,sans-serif;color:rgba(255,255,255,.7);margin-top:8px}\n",
+    "html": "<div class=\"sq sq-d sq-sz-{{size}} pkg-fullscreen {{#photo}}has-photo{{/photo}}\">\n  {{#photo}}<div class=\"sq-ph\">{{image:photo}}</div>{{/photo}}\n  <div class=\"sq-content\">\n    {{#series}}<div class=\"sq-series\">{{series}}</div>{{/series}}\n    <p class=\"sq-quote\">{{quote|rich}}{{#ref}}<span class=\"sq-ref\">{{ref}}</span>{{/ref}}</p>\n    {{#name}}<div class=\"sq-name\">{{name}}{{#title}}<small>{{title}}</small>{{/title}}</div>{{/name}}\n  </div>\n</div>"
   }
 ];

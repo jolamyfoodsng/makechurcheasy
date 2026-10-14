@@ -9,7 +9,6 @@ export interface EnvConfig {
   wsUrl: string;
   analyticsEndpoint: string;
   analyticsToken: string;
-  assemblyAiKeys: string[];
 }
 
 function requireEnv(name: string, value: string | undefined, env: AppEnv): string {
@@ -34,7 +33,6 @@ function parseEnv(): EnvConfig {
     wsUrl: requireEnv("VITE_WS_URL", import.meta.env.VITE_WS_URL as string | undefined, env) || "wss://relay.makechurcheazy.com",
     analyticsEndpoint: import.meta.env.VITE_ANALYTICS_ENDPOINT as string | undefined || "",
     analyticsToken: import.meta.env.VITE_ANALYTICS_TOKEN as string | undefined || "",
-    assemblyAiKeys: requireEnv("VITE_ASSEMBLYAI_API_KEYS", import.meta.env.VITE_ASSEMBLYAI_API_KEYS as string | undefined, env).split(",").filter(Boolean),
   };
 }
 

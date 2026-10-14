@@ -45,6 +45,7 @@ describe("layout adjust", () => {
     expect(readLayoutAdjust({ layoutTextScale: 999, layoutOffsetY: -9999 })).toEqual({
       layoutTextScale: 200,
       layoutRefScale: 100,
+      layoutLineHeight: 100,
       layoutOffsetY: -400,
     });
     expect(pickLayoutAdjust({ fontSize: 40, layoutRefScale: 120 })).toEqual({ layoutRefScale: 120 });
@@ -116,5 +117,35 @@ describe("layout backdrop (Dock background for full-screen layer themes)", () =>
     expect(resolveBackdropMediaUrl("file:///Users/me/Media/loop.mp4")).toBe("/uploads/loop.mp4");
     expect(resolveBackdropMediaUrl("uploads/a b.jpg")).toBe("/uploads/a b.jpg");
     expect(resolveBackdropMediaUrl("https://cdn.example.com/a.mp4")).toBe("https://cdn.example.com/a.mp4");
+  });
+});
+
+describe("layout adjust: line height and title", () => {
+  const TITLED: ThemeLayout = {
+    ...LT,
+    layers: LT.layers.map((l) => (l.id === "verse" ? { ...l, style: { ...l.style, lineHeight: 1.2 } } : l)),
+  };
+
+  it("scales only the verse line spacing (default 1.3 when the theme sets none)", () => {
+    const out = applyLayoutAdjust(TITLED, { layoutLineHeight: 150 });
+    const by = (id: string) => out.layers.find((l) => l.id === id)!;
+    expect(by("verse").style.lineHeight).toBe(1.8);
+    expect(by("ref").style.lineHeight).toBeUndefined();
+    expect(applyLayoutAdjust(LT, { layoutLineHeight: 100 })).toBe(LT);
+    expect(applyLayoutAdjust(LT, { layoutLineHeight: 80 }).layers.find((l) => l.id === "verse")!.style.lineHeight).toBe(1.04);
+  });
+
+  it("hides and restores the title with Show title", () => {
+    expect(applyLayoutAdjust(LT, { layoutShowTitle: false }).showHeading).toBe(false);
+    const hiddenInTheme: ThemeLayout = { ...LT, showHeading: false };
+    expect(applyLayoutAdjust(hiddenInTheme, { layoutShowTitle: true }).showHeading).toBeUndefined();
+    expect(applyLayoutAdjust(hiddenInTheme, {})).toBe(hiddenInTheme);
+    expect(applyLayoutAdjust(LT, { layoutShowTitle: true })).toBe(LT);
+  });
+
+  it("picks the new fields and treats them as changes", () => {
+    expect(pickLayoutAdjust({ layoutLineHeight: 120, layoutShowTitle: false })).toEqual({ layoutLineHeight: 120, layoutShowTitle: false });
+    expect(isLayoutAdjustDefault({ layoutLineHeight: 120 })).toBe(false);
+    expect(isLayoutAdjustDefault({ layoutShowTitle: false })).toBe(false);
   });
 });

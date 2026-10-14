@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from "react";
 import {
   getStoredUser,
   isAuthenticated,
@@ -12,7 +12,8 @@ import {
 import { getLocalDevPlanOverride } from "@/services/localDevPlanOverride";
 import { resetFavoriteThemeCaches } from "@/services/favoriteThemes";
 import { clearAllUserScopedStorage } from "@/services/userScopedStorage";
-import { resetLicenseGuard } from "@/services/licenseGuard";
+import { resetLicenseGuard, useLicenseGuardState } from "@/services/licenseGuard";
+import { resolveIsAdmin } from "@/services/verifiedLicense";
 import { refreshAppAppearance } from "@/services/appAppearance";
 
 interface AuthContextType {
@@ -37,7 +38,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUserState] = useState<AuthUser | null>(() => getStoredUser());
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(() => isAuthenticated());
-  const [isAdmin, setIsAdmin] = useState(() => getStoredUser()?.role === "admin");
+  // Admin comes from the server-signed licence on release builds. The stored user
+  // object lives in localStorage, so its `role` can't be trusted to grant admin.
+  const licenseState = useLicenseGuardState();
+  const isAdmin = useMemo(
+    () => resolveIsAdmin(user?.role),
+    // licenseState.payload changes whenever a new signed licence is verified
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [user?.role, licenseState.payload],
+  );
   const consecutiveFailuresRef = useRef(0);
   const visibilityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -45,7 +54,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const stored = getStoredUser();
     setUserState(stored);
     setAuthenticated(isAuthenticated());
-    setIsAdmin(stored?.role === "admin");
     setLoading(false);
     refreshAppAppearance();
     // Re-sync session to overlay server so the OBS dock can see it
@@ -68,7 +76,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // the React auth state directly so a slow overlay handoff cannot leave the
     // user stranded on LoginPage after successful pairing.
     setAuthenticated(true);
-    setIsAdmin(u.role === "admin");
     refreshAppAppearance();
     // Keep the local browser/Dock session aligned with the app whenever the
     // effective plan changes. This is intentionally local-only; it does not

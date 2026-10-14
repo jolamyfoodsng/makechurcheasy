@@ -267,9 +267,11 @@
   /* ---------------- v1 · 5 · Moment + timer ---------------- */
   D.honour = {
     fit: [[".title [data-f]", 1300], [".serif", 1660], [".tags", 1660]],
-    id: "ch-moment-timer", name: "Moment + Timer", tech: "Live local time, title bar and a serif tagline for honour, testimony or prayer moments",
+    id: "ch-moment-timer", name: "Moment + Timer", tech: "Live clock, countdown or count-up timer with a title bar and a serif tagline for honour, testimony or prayer moments",
     category: "general", tags: ["Church", "Graphics", "Announcement", "Clock", "Motion", "Animated"], color: "#f6bba5", H: 300, hold: 0,
-    fields: [select("clockPeriod", "AM/PM display", "ampm", [{ label: "Show AM/PM", value: "ampm" }, { label: "Hide AM/PM", value: "hidden" }]),
+    fields: [select("timerMode", "Show", "clock", [{ label: "Live clock", value: "clock" }, { label: "Countdown timer", value: "down" }, { label: "Count-up timer", value: "up" }]),
+      text("timerLength", "Timer length (min:sec)", "05:00"),
+      select("clockPeriod", "AM/PM display (clock only)", "ampm", [{ label: "Show AM/PM", value: "ampm" }, { label: "Hide AM/PM", value: "hidden" }]),
       text("heading", "Heading", "Your heading here"), text("tagline", "Tagline", "Share Your Memories On Social Media"),
       text("handles", "Hashtags / handles", "#YourHashtag @YourChurch"), color("colTagline", "Tagline bar colour", "#f6bba5", "c1")],
     bind: { heading: "title", tagline: "line", handles: "tags" },
@@ -277,13 +279,31 @@
       var box = $(".time", sec), el = $(".tm", sec), showPeriod = P.clockPeriod !== "hidden";
       box.style.minWidth = "250px";
       box.style.whiteSpace = "nowrap";
+      var mode = P.timerMode === "down" || P.timerMode === "up" ? P.timerMode : "clock";
+      function parseLen(v) {
+        var parts = String(v == null ? "" : v).trim().split(":").map(function (n) { return parseInt(n, 10); });
+        if (!parts.length || parts.some(function (n) { return isNaN(n) || n < 0; })) return 300;
+        var total = parts.length === 1 ? parts[0] * 60 : parts.length === 2 ? parts[0] * 60 + parts[1] : parts[0] * 3600 + parts[1] * 60 + parts[2];
+        return total > 0 ? total : 300;
+      }
+      function fmt(total) {
+        var h = Math.floor(total / 3600), m = Math.floor((total % 3600) / 60), s = total % 60;
+        var ss = String(s).padStart(2, "0");
+        return h > 0 ? h + ":" + String(m).padStart(2, "0") + ":" + ss : m + ":" + ss;
+      }
+      var length = parseLen(P.timerLength), started = Date.now();
       function tick() {
-        var now = new Date(), hour24 = now.getHours(), hour12 = hour24 % 12 || 12;
-        var time = String(hour12) + ":" + String(now.getMinutes()).padStart(2, "0");
-        el.textContent = showPeriod ? time + (hour24 < 12 ? " AM" : " PM") : time;
+        if (mode === "clock") {
+          var now = new Date(), hour24 = now.getHours(), hour12 = hour24 % 12 || 12;
+          var time = String(hour12) + ":" + String(now.getMinutes()).padStart(2, "0");
+          el.textContent = showPeriod ? time + (hour24 < 12 ? " AM" : " PM") : time;
+          return;
+        }
+        var elapsed = Math.floor((Date.now() - started) / 1000);
+        el.textContent = fmt(mode === "down" ? Math.max(0, length - elapsed) : elapsed);
       }
       tick();
-      ctx.interval = setInterval(tick, 1000);
+      ctx.interval = setInterval(tick, 250);
     },
     in: function (tl, q, qa, ctx) {
       var tm = q(".time"), ti = q(".title"), r2 = q(".r2"), tmt = q(".tm"), tc = chs(q(".title [data-f]")), sf = q(".serif"), tg = q(".tags");

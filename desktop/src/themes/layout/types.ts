@@ -131,6 +131,13 @@ export interface LayerStyle {
   /** Show verse numbers inside {text}. Default true. */
   verseNumbers?: boolean;
   verseNumberColor?: string;
+  /**
+   * Colour of *important words* (words typed between asterisks). Unset: worked out from the theme
+   * (see emphasis.ts), so each theme has its own highlight.
+   */
+  emphasisColor?: string;
+  /** Font weight of important words. Unset: a step bolder than the text (at least Bold). */
+  emphasisWeight?: number;
   /** Underline the text (e.g. a centred reference). */
   underline?: boolean;
   /**

@@ -35,6 +35,22 @@ import { getCurrentUser, getDeviceId } from "./authService";
 import { canUseCloudSync, getUserPlan } from "./licenseService";
 import { getUserScopedKey, readUserScopedStorage } from "./userScopedStorage";
 import { getAllMedia, saveMedia } from "../library/libraryDb";
+import {
+  loadSavedBroadcastGraphics,
+  restoreSavedBroadcastGraphics,
+  type SavedBroadcastGraphic,
+} from "./broadcastGraphicsStorage";
+import {
+  cloudFetch,
+  collectBackupFiles,
+  downloadBackupFiles,
+  fetchCloudStorageUsage,
+  rebaseUploadUrl,
+  uploadBackupFiles,
+  type FileBackupResult,
+  type CloudStorageUsage,
+} from "./cloudBackupFiles";
+import { getOverlayBaseUrl } from "./overlayUrl";
 import type { MediaItem } from "../library/libraryTypes";
 
 // ── Events & Keys ───────────────────────────────────────────────────────────
@@ -44,6 +60,10 @@ export const CLOUD_SYNC_AUTO_KEY = "mce_cloud_sync_auto";
 export const CLOUD_SYNC_INCLUDE_MEDIA_KEY = "mce_cloud_sync_include_media";
 export const CLOUD_SYNC_DEVICE_NAME_KEY = "mce_cloud_sync_device_name";
 export const CLOUD_SYNC_LAST_INFO_KEY = "mce_cloud_sync_last_info";
+export const CLOUD_SYNC_FREQUENCY_KEY = "mce_cloud_sync_frequency";
+export const CLOUD_SYNC_INCLUDE_IMAGES_KEY = "mce_cloud_sync_include_images";
+export const CLOUD_SYNC_INCLUDE_VIDEOS_KEY = "mce_cloud_sync_include_videos";
+export const CLOUD_SYNC_DEVICE_HANDLED_KEY = "mce_cloud_sync_device_handled";
 const LOCAL_MOCK_CLOUD_STORAGE_KEY = "mce_cloud_sync_snapshot_cache";
 
 // Proactively clear any oversized legacy keys from localStorage to prevent "Quota exceeded" DOMExceptions
@@ -162,6 +182,7 @@ export interface CloudSyncManifest {
     broadcastChannels: number;
     notesCount: number;
     mediaCount: number;
+    graphicsCount?: number;
     hasBranding: boolean;
     hasSettings: boolean;
   };
@@ -187,8 +208,13 @@ export interface CloudSyncSnapshot {
     media?: {
       items: MediaItem[];
     };
+    graphics?: {
+      items: SavedBroadcastGraphic[];
+    };
   };
 }
+
+export type BackupFrequency = "off" | "daily" | "weekly" | "monthly";
 
 export type SyncState = "idle" | "syncing" | "success" | "error";
 
@@ -202,6 +228,14 @@ export interface CloudSyncStatusInfo {
   storageLimitGB: number;
   autoSyncEnabled: boolean;
   includeMediaEnabled: boolean;
+  backupFrequency: BackupFrequency;
+  includeImages: boolean;
+  includeVideos: boolean;
+  /** Real usage from the server (null when offline or not on a paid plan). */
+  usage: CloudStorageUsage | null;
+  nextBackupAt: string | null;
+  /** Nothing has changed since the last complete backup. */
+  upToDate: boolean;
   deviceName: string;
   error?: string | null;
 }
@@ -213,6 +247,10 @@ export interface RestoreOptions {
   includeNotes?: boolean;
   includeSettings?: boolean;
   includeMedia?: boolean;
+  includeGraphics?: boolean;
+  /** Also download the backed-up pictures/videos into the app folder. */
+  includeFiles?: boolean;
+  onProgress?: (done: number, total: number) => void;
 }
 
 export interface RestoreResult {
@@ -222,18 +260,13 @@ export interface RestoreResult {
     broadcastProfiles: number;
     notesCount: number;
     mediaCount: number;
+    graphicsCount?: number;
+    filesCount?: number;
   };
   restoredAt: string;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-
-function getApiBase(): string {
-  return (
-    import.meta.env.VITE_AUTH_API_URL ||
-    "https://api.makechurcheazy.com"
-  ).replace(/\/+$/, "");
-}
 
 function notifyStatusChanged(): void {
   if (typeof window === "undefined") return;
@@ -275,6 +308,61 @@ export function setIncludeMediaEnabled(enabled: boolean): void {
   notifyStatusChanged();
 }
 
+const FREQUENCIES: BackupFrequency[] = ["off", "daily", "weekly", "monthly"];
+
+/** How often the app backs up by itself (like WhatsApp). Default: weekly. */
+export function getBackupFrequency(): BackupFrequency {
+  if (typeof localStorage === "undefined") return "weekly";
+  const raw = localStorage.getItem(getUserScopedKey(CLOUD_SYNC_FREQUENCY_KEY));
+  if (raw && (FREQUENCIES as string[]).includes(raw)) return raw as BackupFrequency;
+  // People who had turned automatic sync off keep it off.
+  if (localStorage.getItem(getUserScopedKey(CLOUD_SYNC_AUTO_KEY)) === "false") return "off";
+  return "weekly";
+}
+
+export function setBackupFrequency(frequency: BackupFrequency): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(getUserScopedKey(CLOUD_SYNC_FREQUENCY_KEY), frequency);
+    localStorage.setItem(getUserScopedKey(CLOUD_SYNC_AUTO_KEY), String(frequency !== "off"));
+  } catch {
+    // ignore quota error
+  }
+  notifyStatusChanged();
+}
+
+/** Pictures are part of the backup unless the user turns them off. */
+export function isIncludeImagesEnabled(): boolean {
+  if (typeof localStorage === "undefined") return true;
+  return localStorage.getItem(getUserScopedKey(CLOUD_SYNC_INCLUDE_IMAGES_KEY)) !== "false";
+}
+
+export function setIncludeImagesEnabled(enabled: boolean): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(getUserScopedKey(CLOUD_SYNC_INCLUDE_IMAGES_KEY), String(enabled));
+  } catch {
+    // ignore quota error
+  }
+  notifyStatusChanged();
+}
+
+/** Videos are big, so they are only backed up when the user asks. */
+export function isIncludeVideosEnabled(): boolean {
+  if (typeof localStorage === "undefined") return false;
+  return localStorage.getItem(getUserScopedKey(CLOUD_SYNC_INCLUDE_VIDEOS_KEY)) === "true";
+}
+
+export function setIncludeVideosEnabled(enabled: boolean): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(getUserScopedKey(CLOUD_SYNC_INCLUDE_VIDEOS_KEY), String(enabled));
+  } catch {
+    // ignore quota error
+  }
+  notifyStatusChanged();
+}
+
 export function getSyncDeviceName(): string {
   if (typeof localStorage === "undefined") return "Primary Media PC";
   const stored = localStorage.getItem(getUserScopedKey(CLOUD_SYNC_DEVICE_NAME_KEY));
@@ -298,7 +386,9 @@ export function setSyncDeviceName(name: string): void {
   notifyStatusChanged();
 }
 
-function getLastSavedSyncInfo(): Partial<CloudSyncStatusInfo> {
+type StoredSyncInfo = Partial<CloudSyncStatusInfo> & { lastFingerprint?: string };
+
+function getLastSavedSyncInfo(): StoredSyncInfo {
   if (typeof localStorage === "undefined") return {};
   try {
     const raw = localStorage.getItem(getUserScopedKey(CLOUD_SYNC_LAST_INFO_KEY));
@@ -309,7 +399,7 @@ function getLastSavedSyncInfo(): Partial<CloudSyncStatusInfo> {
   }
 }
 
-function persistLastSyncInfo(info: Partial<CloudSyncStatusInfo>): void {
+function persistLastSyncInfo(info: StoredSyncInfo): void {
   if (typeof localStorage === "undefined") return;
   try {
     const prev = getLastSavedSyncInfo();
@@ -325,6 +415,51 @@ function persistLastSyncInfo(info: Partial<CloudSyncStatusInfo>): void {
 let currentSyncState: SyncState = "idle";
 let lastSyncError: string | null = null;
 let syncDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+let lastFileResult: FileBackupResult | null = null;
+
+/** What happened to the pictures/videos in the last backup (for the settings screen). */
+export function getLastFileBackupResult(): FileBackupResult | null {
+  return lastFileResult;
+}
+
+// ── "Is everything already backed up?" ──────────────────────────────────────
+
+function hashString(text: string): string {
+  let h1 = 0x811c9dc5;
+  let h2 = 0x01000193;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193);
+    h2 = Math.imul(h2 + c, 0x85ebca6b) ^ (h2 >>> 13);
+  }
+  return `${(h1 >>> 0).toString(36)}${(h2 >>> 0).toString(36)}-${text.length.toString(36)}`;
+}
+
+/** A short code for "what a backup would contain right now" (content and the list of files). */
+function fingerprintOf(data: CloudSyncSnapshot["data"], files: Array<{ fileKey: string; sizeBytes: number }>): string {
+  const fileList = files.map((f) => `${f.fileKey}:${f.sizeBytes}`).sort().join("|");
+  return hashString(JSON.stringify(data) + "#" + fileList);
+}
+
+async function currentFingerprint(): Promise<string> {
+  const snapshot = await createLocalSnapshot();
+  const files = await collectBackupFiles({
+    includeImages: isIncludeImagesEnabled(),
+    includeVideos: isIncludeVideosEnabled(),
+  }).catch(() => []);
+  return fingerprintOf(snapshot.data, files);
+}
+
+/** True when nothing changed since the last backup that finished completely. */
+export async function isBackedUpToDate(): Promise<boolean> {
+  const saved = getLastSavedSyncInfo().lastFingerprint;
+  if (!saved) return false;
+  try {
+    return (await currentFingerprint()) === saved;
+  } catch {
+    return false;
+  }
+}
 
 // ── Snapshot Creation ───────────────────────────────────────────────────────
 
@@ -334,11 +469,15 @@ let syncDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 export async function createLocalSnapshot(options: {
   deviceName?: string;
   includeMedia?: boolean;
+  includeImages?: boolean;
+  includeVideos?: boolean;
 } = {}): Promise<CloudSyncSnapshot> {
   const user = getCurrentUser();
   const deviceId = getDeviceId() || "device-local";
   const deviceName = options.deviceName || getSyncDeviceName();
-  const includeMedia = options.includeMedia ?? isIncludeMediaEnabled();
+  const includeImages = options.includeImages ?? isIncludeImagesEnabled();
+  const includeVideos = options.includeVideos ?? isIncludeVideosEnabled();
+  const includeMedia = options.includeMedia ?? (includeImages || includeVideos || isIncludeMediaEnabled());
 
   // 1. Worship songs
   const songs = await getAllSongs().catch(() => []);
@@ -372,8 +511,19 @@ export async function createLocalSnapshot(options: {
   // 5. Optional Media items metadata
   let mediaItems: MediaItem[] = [];
   if (includeMedia) {
-    mediaItems = await getAllMedia().catch(() => []);
+    const all = await getAllMedia().catch(() => [] as MediaItem[]);
+    // Only the kinds the user chose, without big inline previews (the files travel separately).
+    mediaItems = all
+      .filter((m) => (m.type === "image" ? includeImages : m.type === "video" ? includeVideos : false))
+      .map((m) => ({
+        ...m,
+        url: /^data:/i.test(m.url || "") ? "" : m.url,
+        thumbnailUrl: /^data:/i.test(m.thumbnailUrl || "") ? undefined : m.thumbnailUrl,
+      }));
   }
+
+  // 6. Saved broadcast graphics
+  const graphics = loadSavedBroadcastGraphics();
 
   const broadcastChannelCount = broadcastState.profiles.reduce(
     (acc, p) => acc + (p.channels ? p.channels.length : 0),
@@ -396,6 +546,7 @@ export async function createLocalSnapshot(options: {
       broadcastChannels: broadcastChannelCount,
       notesCount: notes.length,
       mediaCount: mediaItems.length,
+      graphicsCount: graphics.length,
       hasBranding: Boolean(mvSettings.churchName || mvSettings.brandColor),
       hasSettings: true,
     },
@@ -419,6 +570,7 @@ export async function createLocalSnapshot(options: {
         customThemes,
       },
       ...(includeMedia ? { media: { items: mediaItems } } : {}),
+      graphics: { items: graphics },
     },
   };
 }
@@ -438,7 +590,21 @@ export async function restoreSnapshot(
     broadcastProfiles: 0,
     notesCount: 0,
     mediaCount: 0,
+    graphicsCount: 0,
+    filesCount: 0,
   };
+
+  // 0. Pictures/videos first, so the items below can point at them.
+  let restoredFiles: Awaited<ReturnType<typeof downloadBackupFiles>> = [];
+  if (options.includeFiles) {
+    restoredFiles = await downloadBackupFiles(options.onProgress).catch((err) => {
+      console.warn("[CloudSync] Could not download backed-up files:", err);
+      return [];
+    });
+    restoredCounts.filesCount = restoredFiles.length;
+  }
+  const overlayBase = await getOverlayBaseUrl().catch(() => "");
+  const fileByName = new Map(restoredFiles.map((f) => [f.name, f]));
 
   // 1. Restore Worship Songs
   if (options.includeWorship !== false && data.worship?.songs) {
@@ -490,14 +656,32 @@ export async function restoreSnapshot(
   }
 
   // 5. Restore Media Items
-  if (options.includeMedia && data.media?.items) {
+  if ((options.includeMedia || options.includeFiles) && data.media?.items) {
     for (const item of data.media.items) {
-      await saveMedia(item).catch(() => {});
+      const arrived = item.diskFileName ? fileByName.get(item.diskFileName) : undefined;
+      const fixed: MediaItem = arrived && overlayBase
+        ? { ...item, url: `${overlayBase}/uploads/${encodeURIComponent(arrived.name)}`, filePath: arrived.filePath }
+        : item;
+      await saveMedia(fixed).catch(() => {});
     }
     restoredCounts.mediaCount = data.media.items.length;
   }
 
+  // 6. Restore saved broadcast graphics (pictures re-pointed at this computer)
+  if (options.includeGraphics !== false && data.graphics?.items) {
+    const items = overlayBase
+      ? data.graphics.items.map((g) => ({
+          ...g,
+          variables: Object.fromEntries(
+            Object.entries(g.variables || {}).map(([k, v]) => [k, typeof v === "string" ? rebaseUploadUrl(v, overlayBase) : v]),
+          ),
+        }))
+      : data.graphics.items;
+    restoredCounts.graphicsCount = restoreSavedBroadcastGraphics(items, options.mode);
+  }
+
   const restoredAt = new Date().toISOString();
+  markDeviceHandled();
   persistLastSyncInfo({
     lastSyncedAt: restoredAt,
     lastSyncedDevice: manifest.deviceName,
@@ -520,10 +704,13 @@ export async function restoreSnapshot(
 /**
  * Uploads current local snapshot to the cloud storage engine.
  */
-export async function uploadSnapshotToCloud(): Promise<{
+export async function uploadSnapshotToCloud(
+  onProgress?: (done: number, total: number) => void,
+): Promise<{
   success: boolean;
   snapshotId: string;
   error?: string;
+  files?: FileBackupResult;
 }> {
   const user = getCurrentUser();
   if (!canUseCloudSync(user)) {
@@ -538,35 +725,44 @@ export async function uploadSnapshotToCloud(): Promise<{
 
   try {
     const snapshot = await createLocalSnapshot();
-    const apiBase = getApiBase();
-    const deviceId = getDeviceId() || "device-local";
-
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-      "X-Device-Id": deviceId,
-      ...(user?.id ? { "X-User-Id": user.id } : {}),
-    };
-
-    try {
-      const res = await fetch(`${apiBase}/api/cloud-sync/backup`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          data: snapshot,
-          categories: Object.keys(snapshot.data),
-        }),
-      });
-      if (!res.ok) {
-        await fetch(`${apiBase}/api/cloud-sync/snapshot`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify(snapshot),
-        }).catch(() => {});
+    // Send the text backup. Any failure is reported, never hidden.
+    const res = await cloudFetch("/api/cloud-sync/backup", {
+      method: "POST",
+      body: JSON.stringify({
+        data: snapshot,
+        categories: Object.keys(snapshot.data),
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 413 || body?.code === "storage_full") {
+        throw new Error("Your cloud storage is full. Remove something or upgrade your plan, then try again.");
       }
-    } catch {
-      // API endpoint might be offline or undergoing deployment.
-      // We safely fall through to durable local cloud cache.
+      if (res.status === 403) {
+        throw new Error("Cloud backup needs a Basic or Growth plan.");
+      }
+      if (res.status === 401) {
+        throw new Error("Please sign in again to back up to the cloud.");
+      }
+      throw new Error(body?.error || `Backup failed (${res.status}).`);
     }
+
+    // Pictures (and videos, if turned on) go as separate files.
+    let files: FileBackupResult = { uploaded: 0, alreadyThere: 0, failed: 0, storageFull: false };
+    let candidates: Awaited<ReturnType<typeof collectBackupFiles>> = [];
+    let filesOk = true;
+    try {
+      candidates = await collectBackupFiles({
+        includeImages: isIncludeImagesEnabled(),
+        includeVideos: isIncludeVideosEnabled(),
+      });
+      files = await uploadBackupFiles(candidates, onProgress);
+      filesOk = files.failed === 0 && !files.storageFull;
+    } catch (err) {
+      console.warn("[CloudSync] File backup skipped:", err);
+      filesOk = false;
+    }
+    lastFileResult = files;
 
     // Cache snapshot locally in IndexedDB (quota-safe, never in localStorage)
     await cacheSnapshotLocally(snapshot);
@@ -580,13 +776,17 @@ export async function uploadSnapshotToCloud(): Promise<{
       lastSyncedDevice: snapshot.manifest.deviceName,
       lastSnapshotId: snapshot.manifest.snapshotId,
       counts: snapshot.manifest.counts,
+      // Remember what was backed up only when everything went through, so a retry sends the rest.
+      lastFingerprint: filesOk ? fingerprintOf(snapshot.data, candidates) : "",
     });
 
     notifyStatusChanged();
 
+    markDeviceHandled();
     return {
       success: true,
       snapshotId: snapshot.manifest.snapshotId,
+      files,
     };
   } catch (err: unknown) {
     currentSyncState = "error";
@@ -606,20 +806,8 @@ export async function fetchLatestCloudSnapshot(): Promise<CloudSyncSnapshot | nu
     return null;
   }
 
-  const apiBase = getApiBase();
-  const deviceId = getDeviceId() || "device-local";
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "X-Device-Id": deviceId,
-    ...(user?.id ? { "X-User-Id": user.id } : {}),
-  };
-
   try {
-    const backupRes = await fetch(`${apiBase}/api/cloud-sync/backup`, {
-      method: "GET",
-      headers,
-    });
+    const backupRes = await cloudFetch("/api/cloud-sync/backup", { method: "GET" });
     if (backupRes.ok) {
       const json = await backupRes.json();
       if (json?.backup?.data?.manifest) {
@@ -628,25 +816,43 @@ export async function fetchLatestCloudSnapshot(): Promise<CloudSyncSnapshot | nu
       if (json?.data?.manifest) {
         return json.data as CloudSyncSnapshot;
       }
-    }
-
-    const response = await fetch(`${apiBase}/api/cloud-sync/latest`, {
-      method: "GET",
-      headers,
-    });
-
-    if (response.ok) {
-      const json = await response.json();
-      if (json?.snapshot?.manifest) {
-        return json.snapshot as CloudSyncSnapshot;
-      }
+      // The cloud answered and holds nothing: do not invent a backup from the local cache.
+      if (json?.backup === null) return null;
     }
   } catch {
-    // API endpoint unreachable, fallback to local cloud cache
+    // Cloud unreachable, fall back to the local cache below
   }
 
   // Fallback to quota-safe local snapshot cache (IndexedDB/memory)
   return await getCachedLocalSnapshot();
+}
+
+/** Storage per plan (Free 500 MB, Basic 5 GB, Growth 20 GB); the server enforces the same numbers. */
+export function getCloudStorageLimitBytes(plan: string): number {
+  const GB = 1024 * 1024 * 1024;
+  if (plan === "growth" || plan === "pro" || plan === "ambassador" || plan === "unlimited") return 20 * GB;
+  if (plan === "basic" || plan === "trial") return 5 * GB;
+  return 500 * 1024 * 1024;
+}
+
+const FREQUENCY_MS: Record<Exclude<BackupFrequency, "off">, number> = {
+  daily: 24 * 60 * 60 * 1000,
+  weekly: 7 * 24 * 60 * 60 * 1000,
+  monthly: 30 * 24 * 60 * 60 * 1000,
+};
+
+/** When the next automatic backup is due (null when automatic backup is off). */
+export function getNextBackupAt(): string | null {
+  const frequency = getBackupFrequency();
+  if (frequency === "off") return null;
+  const last = getLastSavedSyncInfo().lastSyncedAt;
+  const lastMs = last ? Date.parse(last) : 0;
+  return new Date((Number.isFinite(lastMs) ? lastMs : 0) + FREQUENCY_MS[frequency]).toISOString();
+}
+
+export function isBackupDue(now = Date.now()): boolean {
+  const next = getNextBackupAt();
+  return next !== null && Date.parse(next) <= now;
 }
 
 /**
@@ -657,19 +863,8 @@ export async function fetchCloudSyncStatus(): Promise<CloudSyncStatusInfo> {
   const plan = getUserPlan(user);
   const lastInfo = getLastSavedSyncInfo();
 
-  // Approximate storage calculation
-  let usedBytes = 250_000; // base JSON overhead
-  if (isIncludeMediaEnabled()) {
-    try {
-      const media = await getAllMedia();
-      usedBytes += media.reduce((acc, m) => acc + (m.fileSize || 0), 0);
-    } catch {
-      // ignore
-    }
-  }
-
-  // Basic tier receives 10 GB cloud storage; Growth ("Grids"), Pro, Ambassador, and Unlimited receive 100 GB.
-  const storageLimitGB = plan === "free" ? 1 : plan === "basic" ? 10 : 100;
+  const { usage } = canUseCloudSync(user) ? await fetchCloudStorageUsage() : { usage: null };
+  const storageLimitBytes = usage?.limitBytes ?? getCloudStorageLimitBytes(plan);
 
   return {
     state: currentSyncState,
@@ -677,34 +872,109 @@ export async function fetchCloudSyncStatus(): Promise<CloudSyncStatusInfo> {
     lastSyncedDevice: lastInfo.lastSyncedDevice || null,
     lastSnapshotId: lastInfo.lastSnapshotId || null,
     counts: lastInfo.counts || null,
-    storageUsedBytes: usedBytes,
-    storageLimitGB,
+    storageUsedBytes: usage?.usedBytes ?? 0,
+    storageLimitGB: storageLimitBytes / (1024 * 1024 * 1024),
     autoSyncEnabled: isAutoSyncEnabled(),
     includeMediaEnabled: isIncludeMediaEnabled(),
+    backupFrequency: getBackupFrequency(),
+    includeImages: isIncludeImagesEnabled(),
+    includeVideos: isIncludeVideosEnabled(),
+    usage,
+    nextBackupAt: getNextBackupAt(),
+    upToDate: await isBackedUpToDate(),
     deviceName: getSyncDeviceName(),
     error: lastSyncError,
   };
 }
 
-// ── Debounced Auto-Sync Trigger ─────────────────────────────────────────────
+// ── Scheduled backup (Daily / Weekly / Monthly) ─────────────────────────────
+
+let schedulerTimer: ReturnType<typeof setInterval> | null = null;
+let backupRunning = false;
+
+async function runBackupIfDue(): Promise<void> {
+  const user = getCurrentUser();
+  if (backupRunning || !canUseCloudSync(user) || !isBackupDue()) return;
+  backupRunning = true;
+  try {
+    if (await isBackedUpToDate()) {
+      // Nothing changed: no upload needed, just count this as checked.
+      persistLastSyncInfo({ lastSyncedAt: new Date().toISOString() });
+      notifyStatusChanged();
+      return;
+    }
+    await uploadSnapshotToCloud();
+  } catch (err) {
+    console.warn("[CloudSync] Scheduled backup failed:", err);
+  } finally {
+    backupRunning = false;
+  }
+}
+
+/** Start the scheduler: checks shortly after start and then every 30 minutes. Safe to call twice. */
+export function startCloudBackupScheduler(): void {
+  if (schedulerTimer || typeof window === "undefined") return;
+  setTimeout(() => void runBackupIfDue(), 60_000);
+  schedulerTimer = setInterval(() => void runBackupIfDue(), 30 * 60_000);
+}
+
+export function stopCloudBackupScheduler(): void {
+  if (schedulerTimer) clearInterval(schedulerTimer);
+  schedulerTimer = null;
+}
 
 /**
- * Call after meaningful data changes (adding a song, saving a broadcast profile).
- * If auto-sync is enabled and user is entitled, schedules a debounced cloud sync.
+ * Kept for existing callers. Backups now follow the schedule chosen in Settings
+ * (and "Back up now"), so a data change no longer starts one by itself.
  */
 export function triggerDebouncedAutoSync(): void {
-  const user = getCurrentUser();
-  if (!canUseCloudSync(user) || !isAutoSyncEnabled()) {
-    return;
-  }
-
   if (syncDebounceTimer) {
     clearTimeout(syncDebounceTimer);
+    syncDebounceTimer = null;
   }
+}
 
-  syncDebounceTimer = setTimeout(() => {
-    uploadSnapshotToCloud().catch((err) => {
-      console.warn("[CloudSync] Background auto-sync failed:", err);
-    });
-  }, 10_000); // 10 second debounce
+// ── New device ──────────────────────────────────────────────────────────────
+
+function handledKey(): string {
+  return getUserScopedKey(CLOUD_SYNC_DEVICE_HANDLED_KEY);
+}
+
+/** This computer has been backed up from, restored to, or told to skip the offer. */
+export function markDeviceHandled(): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(handledKey(), new Date().toISOString());
+  } catch {
+    // ignore
+  }
+}
+
+export interface NewDeviceOffer {
+  updatedAt: string | null;
+  fromDeviceName: string | null;
+  sizeBytes: number;
+}
+
+/**
+ * After sign-in on a computer that has never backed up or restored for this account:
+ * is there a cloud backup from another device to offer? Returns null when there is nothing to offer.
+ */
+export async function checkNewDeviceOffer(): Promise<NewDeviceOffer | null> {
+  if (typeof localStorage === "undefined") return null;
+  const user = getCurrentUser();
+  if (!user || !canUseCloudSync(user)) return null;
+  if (localStorage.getItem(handledKey())) return null;
+
+  const { backup } = await fetchCloudStorageUsage();
+  if (!backup?.exists) return null;
+  if (backup.deviceId && backup.deviceId === getDeviceId()) {
+    markDeviceHandled();
+    return null;
+  }
+  return {
+    updatedAt: backup.updatedAt || null,
+    fromDeviceName: backup.deviceName || null,
+    sizeBytes: backup.sizeBytes || 0,
+  };
 }

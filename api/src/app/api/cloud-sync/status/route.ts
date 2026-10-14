@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUserFromRequest } from "@/lib/auth";
-import { getPlanConfig, getSyncJobs } from "@/lib/db";
-import { resolveEffectivePlan } from "@/lib/trial";
+import { getSyncJobs } from "@/lib/db";
+import type { EffectivePlan } from "@/lib/trial";
+import { getCloudStorageLimitBytes, getCloudUsage, resolveCloudAccess } from "@/lib/cloudStorage";
 
-async function checkCloudEntitlement(userId: string, mongoUser: any): Promise<{ allowed: boolean; error?: string }> {
-  const planConfig = await getPlanConfig();
-  const effectivePlan = resolveEffectivePlan(mongoUser);
-  const planTier = planConfig.plans[effectivePlan];
-  if (!planTier?.entitlements?.cloudSync) {
-    return { allowed: false, error: "Cloud sync requires Growth plan or higher" };
+async function checkCloudEntitlement(_userId: string, mongoUser: any): Promise<{ allowed: boolean; error?: string; plan: EffectivePlan }> {
+  const access = await resolveCloudAccess(mongoUser);
+  if (!access.allowed) {
+    return { allowed: false, error: "Cloud backup needs a Basic or Growth plan", plan: access.plan };
   }
-  return { allowed: true };
+  return { allowed: true, plan: access.plan };
 }
 
 // GET /api/cloud-sync/status — Get sync job history and backup status
@@ -24,7 +23,7 @@ export async function GET(req: NextRequest) {
 
     const entCheck = await checkCloudEntitlement(userId, authUser.mongoUser);
     if (!entCheck.allowed) {
-      return NextResponse.json({ error: entCheck.error, requiredPlan: "growth" }, { status: 403 });
+      return NextResponse.json({ error: entCheck.error, requiredPlan: "basic" }, { status: 403 });
     }
 
     const { searchParams } = new URL(req.url);
@@ -37,11 +36,14 @@ export async function GET(req: NextRequest) {
       { userId },
       { projection: { data: 0 } }
     );
+    const usage = await getCloudUsage(userId);
 
     // Get recent sync jobs
     const jobs = await getSyncJobs(userId, { limit });
 
     return NextResponse.json({
+      plan: entCheck.plan,
+      storage: { ...usage, limitBytes: getCloudStorageLimitBytes(entCheck.plan) },
       backup: backup
         ? {
           exists: true,
@@ -49,6 +51,8 @@ export async function GET(req: NextRequest) {
           recordCount: backup.recordCount,
           categories: backup.categories,
           updatedAt: backup.updatedAt,
+          deviceId: backup.deviceId || null,
+          deviceName: backup.deviceName || null,
         }
         : { exists: false },
       jobs: jobs.map((j) => ({

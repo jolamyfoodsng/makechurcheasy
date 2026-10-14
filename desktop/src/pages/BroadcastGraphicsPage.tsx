@@ -78,6 +78,9 @@ import {
   loadSavedBroadcastGraphics,
   syncSavedGraphicsToDock,
   saveBroadcastGraphic,
+  offloadImageToDisk,
+  offloadSavedGraphicImages,
+  hydrateSavedBroadcastGraphics,
   updateBroadcastGraphic,
   deleteBroadcastGraphic,
   duplicateBroadcastGraphic,
@@ -250,7 +253,7 @@ function readImageForGraphic(file: File, maxSide = 600): Promise<string> {
     reader.onerror = () => reject(reader.error || new Error("Unable to read image."));
     reader.onload = () => {
       const src = String(reader.result || "");
-      if (file.type === "image/svg+xml") { resolve(src); return; }
+      if (file.type === "image/svg+xml") { void offloadImageToDisk(src).then(resolve); return; }
       const img = new Image();
       img.onerror = () => reject(new Error("Unable to load image."));
       img.onload = () => {
@@ -261,7 +264,7 @@ function readImageForGraphic(file: File, maxSide = 600): Promise<string> {
         const ctx = canvas.getContext("2d");
         if (!ctx) { resolve(src); return; }
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL("image/png"));
+        void offloadImageToDisk(canvas.toDataURL("image/png")).then(resolve);
       };
       img.src = src;
     };
@@ -949,6 +952,7 @@ export default function BroadcastGraphicsPage() {
         trackGraphicUsage("added_to_obs", editorState.template.id, editorState.template.name);
       }
 
+      try {
       if (editorState.savedId) {
         updateBroadcastGraphic(editorState.savedId, payload);
         showToast(
@@ -963,6 +967,11 @@ export default function BroadcastGraphicsPage() {
             ? `Created "${payload.name}" & synced to OBS Dock`
             : `Saved "${payload.name}" to My Graphics`,
         );
+      }
+
+      } catch (err) {
+        showToast((err as Error)?.message || "Could not save the graphic.", "error");
+        return;
       }
 
       setEditorState(null);
@@ -983,8 +992,12 @@ export default function BroadcastGraphicsPage() {
 
   // Graphics saved before the Dock sync existed are pushed to the Dock once on open.
   useEffect(() => {
+    // Pictures stored inside saved graphics fill browser storage; move them to files once.
+    void hydrateSavedBroadcastGraphics()
+      .then(() => offloadSavedGraphicImages())
+      .then(() => reloadData());
     void syncSavedGraphicsToDock();
-  }, []);
+  }, [reloadData]);
 
 
   return (

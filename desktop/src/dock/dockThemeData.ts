@@ -5,6 +5,7 @@ import type { TickerTheme } from "../data/tickerThemes";
 import { getBibleFavorites, getWorshipLTFavorites, getObsFavorites, getTickerFavorites, hydrateFavoriteThemes, refreshFavoriteThemesFromStore } from "../services/favoriteThemes";
 import { filterThemesForDockArea, loadDockThemeOptOuts, type DockThemeArea } from "../services/dockThemeAvailability";
 import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
+import { loadThemeLibrary, themeIdsOutsideLibrary } from "../services/themeLibrary";
 import { BIBLE_BUILTIN_THEMES } from "../bible/bibleThemes";
 
 function mergeIdSets(...sets: Array<Iterable<string>>): Set<string> {
@@ -107,7 +108,9 @@ export async function loadDockCustomBibleThemes(): Promise<BibleTheme[]> {
   return loadJsonArray<BibleTheme>("/uploads/dock-bible-themes.json");
 }
 
-export async function loadDockFavoriteBibleThemes(options: { fresh?: boolean } = {}): Promise<BibleTheme[]> {
+export async function loadDockFavoriteBibleThemes(options: { fresh?: boolean; libraryOnly?: boolean } = {}): Promise<BibleTheme[]> {
+  // `libraryOnly` is for pickers: leave out ready-made themes the person has not added from the
+  // Theme Library. Lookups of an already-selected theme leave it off so those still resolve.
   // A Dock left open in OBS only read the favourites when it started; "fresh" asks the app again.
   if (options.fresh) await refreshFavoriteThemesFromStore().catch(() => { });
   const remoteFavorites = await loadJsonArray<BibleTheme>("/uploads/dock-bible-favorite-themes.json");
@@ -136,7 +139,11 @@ export async function loadDockFavoriteBibleThemes(options: { fresh?: boolean } =
   const localById = new Map(localThemes.map((theme) => [theme.id, theme]));
   // Merge by ID — deduplicates so each theme appears once regardless of templateType
   const merged = new Map<string, BibleTheme>([...localById, ...remoteById]);
-  const values = [...merged.values()];
+  let values = [...merged.values()];
+  if (options.libraryOnly) {
+    const outside = themeIdsOutsideLibrary(await loadThemeLibrary(), BUILTIN_THEMES.map((theme) => theme.id));
+    if (outside.size > 0) values = values.filter((theme) => !outside.has(theme.id));
+  }
   console.log("[loadDockFavoriteBibleThemes]", {
     favoriteIdsCount: allFavoriteIds.size,
     customThemesCount: customThemes.length,
@@ -160,12 +167,15 @@ export async function loadDockThemesForArea(
   allowedCategories: ReadonlyArray<string> | undefined,
   options: { fresh?: boolean } = {},
 ): Promise<BibleTheme[]> {
-  const [themes, optOuts] = await Promise.all([
+  const [themes, optOuts, library] = await Promise.all([
     loadDockFavoriteBibleThemes(options),
     loadDockThemeOptOuts(),
+    loadThemeLibrary(),
   ]);
   const alwaysShownIds = new Set(BUILTIN_THEMES.map((theme) => theme.id));
-  return filterThemesForDockArea(themes, { area, allowedCategories, optOuts, alwaysShownIds });
+  // A new account only has its three starting themes until more are added from the Theme Library.
+  const excludedIds = themeIdsOutsideLibrary(library, alwaysShownIds);
+  return filterThemesForDockArea(themes, { area, allowedCategories, optOuts, alwaysShownIds, excludedIds });
 }
 
 /**

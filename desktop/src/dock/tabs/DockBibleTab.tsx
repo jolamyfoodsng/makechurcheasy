@@ -948,6 +948,9 @@ function extractFullscreenQuickThemeSettings(
     lowerThirdTextDirection: sanitizeLowerThirdTextDirection(settings.lowerThirdTextDirection),
     compareTranslationWidth: settings.compareTranslationWidth ?? DEFAULT_THEME_SETTINGS.compareTranslationWidth,
     ...compareSettings,
+    // Layer-theme sizes set in the Dock (text / reference size, line height, title, position)
+    // must survive being re-read from the live theme, or the panel resets to 100%.
+    ...pickLayoutAdjust(settings),
   };
 }
 

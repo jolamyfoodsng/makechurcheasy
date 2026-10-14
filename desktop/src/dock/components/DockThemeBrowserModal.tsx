@@ -52,7 +52,7 @@ export default function DockThemeBrowserModal({
     let cancelled = false;
 
     (async () => {
-      const favoriteThemes = await loadDockFavoriteBibleThemes();
+      const favoriteThemes = await loadDockFavoriteBibleThemes({ libraryOnly: true });
       if (cancelled) return;
       const allowed = new Set((allowedCategories ?? []).map((category) => category.toLowerCase()));
       const filtered = allowed.size === 0

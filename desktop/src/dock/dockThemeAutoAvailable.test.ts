@@ -23,7 +23,9 @@ describe("Your own themes appear in the Dock by themselves", () => {
     expect(pickerSource).toContain("area={dockAreaFromScope(storageScope)}");
     // Ready-made category filtering no longer lives in the picker; the loader does it.
     expect(section).not.toContain("allowed.has(");
-    expect(dockThemeDataSource).toContain("filterThemesForDockArea(themes, { area, allowedCategories, optOuts, alwaysShownIds })");
+    expect(dockThemeDataSource).toContain("filterThemesForDockArea(themes, { area, allowedCategories, optOuts, alwaysShownIds, excludedIds })");
+    // Themes the person has not added from the Theme Library are left out of the pickers.
+    expect(dockThemeDataSource).toContain("themeIdsOutsideLibrary(library, alwaysShownIds)");
   });
 
   it("refetches when Quick Edits opens and has a reload button", () => {
@@ -76,6 +78,8 @@ describe("Your own themes appear in the Dock by themselves", () => {
     expect(dockThemeDataSource).toContain("pageBuiltinIds.has(theme.id) || allFavoriteIds.has(theme.id)");
     // Your own themes come first in the grid.
     expect(dockThemeDataSource).toContain("[...uniqueCustom, ...favoritedBuiltins, ...otherBuiltins]");
-    expect(dockThemeDataSource).toContain("filterThemesForDockArea(themes, { area, allowedCategories, optOuts, alwaysShownIds })");
+    expect(dockThemeDataSource).toContain("filterThemesForDockArea(themes, { area, allowedCategories, optOuts, alwaysShownIds, excludedIds })");
+    // Themes the person has not added from the Theme Library are left out of the pickers.
+    expect(dockThemeDataSource).toContain("themeIdsOutsideLibrary(library, alwaysShownIds)");
   });
 });

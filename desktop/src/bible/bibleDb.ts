@@ -832,7 +832,7 @@ export interface BibleSettings {
 const DEFAULT_SETTINGS: BibleSettings = {
   defaultTranslation: "KJV",
   slideConfig: DEFAULT_SLIDE_CONFIG,
-  activeThemeId: "preset-caption-rule", // DEFAULT_BUILTIN_THEME_ID
+  activeThemeId: "preset-royal-blue-glow", // DEFAULT_BUILTIN_THEME_ID
   lastBook: "John",
   lastChapter: 3,
   lastVerse: 1,

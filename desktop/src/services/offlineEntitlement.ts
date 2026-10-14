@@ -16,10 +16,13 @@
  * "Now" is never earlier than the latest time this computer has seen (its own
  * clock or the server's), so turning the clock back does not extend a plan.
  *
- * This module only reads localStorage, so licenseService and licenseGuard can
- * both use it without importing each other.
+ * Once a signed licence has been verified, its values (end date, sync time and
+ * server time) are used instead of anything stored in localStorage, which a
+ * user can edit. This module reads only localStorage and verifiedLicense.ts, so
+ * licenseService and licenseGuard can both use it without importing each other.
  */
 import { getUserScopedKey } from "./userScopedStorage";
+import { getClockFloor, getVerifiedLicense } from "./verifiedLicense";
 
 export const SYNC_PROMPT_DAYS = 14;
 export const PAID_PAUSE_DAYS = 21;
@@ -140,7 +143,9 @@ export function trustedNowMs(): number {
   const now = Date.now();
   const highWater = readNumber(CLOCK_HIGH_WATER_KEY);
   if (now > highWater + 60_000) writeNumber(CLOCK_HIGH_WATER_KEY, now);
-  return Math.max(now, highWater);
+  // The floor comes from signed server times / the native clock file, so wiping
+  // localStorage does not let the clock be wound back.
+  return Math.max(now, highWater, getClockFloor());
 }
 
 /** After a successful sync: the server's time is the truth (also undoes a clock that ran ahead). */
@@ -150,6 +155,8 @@ export function noteServerTime(serverTime: string | null | undefined): void {
 }
 
 export function readLicenseSnapshot(): EntitlementSnapshot | null {
+  const verified = getVerifiedLicense();
+  if (verified) return verified.raw as EntitlementSnapshot;
   try {
     const raw = localStorage.getItem(getUserScopedKey(LICENSE_CACHE_KEY));
     if (!raw) return null;
@@ -161,6 +168,10 @@ export function readLicenseSnapshot(): EntitlementSnapshot | null {
 }
 
 export function readLastSyncMs(snapshot: EntitlementSnapshot | null = readLicenseSnapshot()): number {
+  // A verified licence says exactly when the server last confirmed this computer;
+  // the localStorage timestamps below can be edited to dodge the 21-day pause.
+  const verified = getVerifiedLicense();
+  if (verified && verified.signedAtMs > 0) return verified.signedAtMs;
   let scoped = 0;
   try {
     scoped = readNumber(getUserScopedKey(LAST_ONLINE_KEY));

@@ -19,6 +19,7 @@ import { buildDockProductionSettingsPayload } from "../services/productionSettin
 import { dockObsClient } from "../dock/dockObsClient";
 import { overlayBridge } from "../dock/dockOverlayBridge";
 import { getOverlayBaseUrl } from "../services/overlayUrl";
+import type { StudioMixLayer } from "./studioMix";
 
 export type StudioTextModule = "bible" | "worship" | "notes";
 export type StudioModule = StudioTextModule | "media";
@@ -154,6 +155,8 @@ export interface StudioProgramState {
   churchName?: string;
   packets: Partial<Record<StudioTextModule, Record<string, unknown>>>;
   media: StudioMedia | null;
+  /** Screen Mix: video / camera behind the words, banners and the logo on top. */
+  mix?: StudioMixLayer[];
   /** What Preview shows, for Preview projectors (always rendered as Cut, no curtain). */
   preview?: StudioPreviewState;
 }
@@ -249,6 +252,11 @@ export function goLiveItem(item: StudioItem, mode: StudioMode): void {
     if (previous === "media") media = null;
   }
   commit({ ...program, active: item.module, screen: "live", logoUrl: undefined, churchName: undefined, packets, media });
+}
+
+/** Set the Screen Mix layers (what is `shown` appears on Program and Preview screens). */
+export function setProgramMix(mix: StudioMixLayer[]): void {
+  commit({ ...program, mix });
 }
 
 /** Show an item on Preview projectors (null = empty Preview). */

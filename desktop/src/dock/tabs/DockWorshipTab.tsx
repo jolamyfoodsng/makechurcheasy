@@ -1228,6 +1228,8 @@ function extractQuickThemeSettings(settings: BibleThemeSettings): DockFullscreen
     lowerThirdTextDirection: sanitizeLowerThirdTextDirection(settings.lowerThirdTextDirection),
     compareTranslationWidth: compareSettings.compareLeftWidth,
     ...compareSettings,
+    // Layer-theme sizes set in the Dock must survive being re-read from the live theme.
+    ...pickLayoutAdjust(settings),
   };
 }
 

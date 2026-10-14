@@ -9,6 +9,7 @@
  */
 
 import { getUserScopedKey } from "./userScopedStorage";
+import { getCurrentUserId } from "./db";
 import type { LowerThirdTheme, LTPosition } from "../lowerthirds/types";
 
 export interface SavedBroadcastGraphic {
@@ -47,20 +48,25 @@ function notifyChange(): void {
   }
 }
 
-/**
- * Load all saved customized graphics for the current user.
- */
-export function loadSavedBroadcastGraphics(): SavedBroadcastGraphic[] {
-  if (typeof localStorage === "undefined") {
-    return [];
-  }
+const isTauri = (): boolean => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+/** In the desktop app the list lives in a file in the app folder; browser storage is only the web/legacy fallback. */
+function diskName(): string {
+  const uid = getCurrentUserId();
+  const safe = uid ? String(uid).replace(/[^a-zA-Z0-9_-]/g, "") : "";
+  return safe ? `saved-broadcast-graphics-${safe}` : "saved-broadcast-graphics";
+}
+
+let cache: SavedBroadcastGraphic[] | null = null;
+let cacheName = "";
+
+function readLocalStorageList(): SavedBroadcastGraphic[] {
+  if (typeof localStorage === "undefined") return [];
   try {
-    const key = getUserScopedKey(STORAGE_KEY);
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(getUserScopedKey(STORAGE_KEY));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed;
+    return Array.isArray(parsed) ? parsed : [];
   } catch (err) {
     console.error("[broadcastGraphicsStorage] Failed to load saved graphics:", err);
     return [];
@@ -68,18 +74,99 @@ export function loadSavedBroadcastGraphics(): SavedBroadcastGraphic[] {
 }
 
 /**
- * Persist the full array of saved graphics to localStorage.
+ * Load all saved customized graphics for the current user.
  */
-function persistAll(items: SavedBroadcastGraphic[]): void {
-  if (typeof localStorage === "undefined") return;
+export function loadSavedBroadcastGraphics(): SavedBroadcastGraphic[] {
+  if (cache && cacheName === diskName()) return cache;
+  return readLocalStorageList();
+}
+
+/**
+ * Read the saved graphics from the app folder (moving any left in browser storage there once).
+ * Call when a screen that lists them opens; the list is then served from memory.
+ */
+export async function hydrateSavedBroadcastGraphics(): Promise<boolean> {
+  if (!isTauri()) return false;
+  const name = diskName();
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const raw = await invoke<string>("load_dock_data", { name });
+    let list: SavedBroadcastGraphic[] | null = null;
+    if (raw && raw.trim()) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) list = parsed;
+    }
+    if (list === null) {
+      list = readLocalStorageList();
+      await invoke("save_dock_data", { name, data: JSON.stringify(list) });
+    }
+    cache = list;
+    cacheName = name;
+    // Everything is on disk now; free the browser storage.
+    try { localStorage.removeItem(getUserScopedKey(STORAGE_KEY)); } catch { /* ignore */ }
+    notifyChange();
+    return true;
+  } catch (err) {
+    console.warn("[broadcastGraphicsStorage] Could not read the app folder, using browser storage:", err);
+    return false;
+  }
+}
+
+function writeLocalStorageList(items: SavedBroadcastGraphic[]): boolean {
+  if (typeof localStorage === "undefined") return false;
   try {
     const key = getUserScopedKey(STORAGE_KEY);
     localStorage.setItem(key, JSON.stringify(items));
-    notifyChange();
-    void syncSavedGraphicsToDock(items);
+    const back = localStorage.getItem(key);
+    if (!back || (JSON.parse(back) as unknown[]).length !== items.length) {
+      lastSaveError = "The browser storage did not keep the change.";
+      return false;
+    }
+    return true;
   } catch (err) {
     console.error("[broadcastGraphicsStorage] Failed to save graphics:", err);
+    const msg = `${(err as { name?: string })?.name || ""} ${(err as Error)?.message || ""}`;
+    lastSaveError = /quota/i.test(msg)
+      ? "Storage is full. Remove a graphic or use smaller pictures, then try again."
+      : "Could not write to storage.";
+    return false;
   }
+}
+
+/**
+ * Persist the full array of saved graphics: to a file in the app folder in the desktop app
+ * (memory first, file written right behind it), otherwise to browser storage.
+ */
+function persistAll(items: SavedBroadcastGraphic[]): boolean {
+  if (isTauri()) {
+    const name = diskName();
+    cache = items;
+    cacheName = name;
+    lastSaveError = "";
+    void (async () => {
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("save_dock_data", { name, data: JSON.stringify(items) });
+      } catch (err) {
+        console.error("[broadcastGraphicsStorage] Failed to write the app folder file:", err);
+        writeLocalStorageList(items);
+      }
+    })();
+    notifyChange();
+    void syncSavedGraphicsToDock(items);
+    return true;
+  }
+  if (!writeLocalStorageList(items)) return false;
+  lastSaveError = "";
+  notifyChange();
+  void syncSavedGraphicsToDock(items);
+  return true;
+}
+
+let lastSaveError = "";
+/** Why the last save failed (empty when it worked). */
+export function getLastGraphicSaveError(): string {
+  return lastSaveError;
 }
 
 /**
@@ -100,7 +187,7 @@ export function saveBroadcastGraphic(
   };
 
   const next = [newGraphic, ...all.filter((g) => g.id !== id)];
-  persistAll(next);
+  if (!persistAll(next)) throw new Error(lastSaveError || "Could not save the graphic.");
 
   // If added to OBS, sync favorite state and dock memory slot
   if (newGraphic.isAddedToObs) {
@@ -129,7 +216,7 @@ export function updateBroadcastGraphic(
   };
 
   all[index] = updated;
-  persistAll(all);
+  if (!persistAll(all)) throw new Error(lastSaveError || "Could not save the graphic.");
 
   if (updated.isAddedToObs) {
     syncGraphicToObs(updated);
@@ -264,4 +351,76 @@ export function buildSavedGraphicTheme(
     }),
     defaultPosition: (graphic.animation?.position as LTPosition | undefined) || undefined,
   };
+}
+
+
+// ---------------------------------------------------------------------------
+// Picture offloading — keeps browser storage (about 5 MB) from filling up.
+// ---------------------------------------------------------------------------
+
+const OFFLOAD_MIN_CHARS = 4000;
+
+/** Save one data: image to the app's uploads folder and return its local URL (or the input if that is not possible). */
+export async function offloadImageToDisk(dataUrl: string): Promise<string> {
+  if (!/^data:image\//i.test(dataUrl) || dataUrl.length < OFFLOAD_MIN_CHARS) return dataUrl;
+  if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return dataUrl;
+  try {
+    const match = /^data:image\/([a-z0-9.+-]+)(;[^,]*)?;base64,(.*)$/is.exec(dataUrl);
+    if (!match) return dataUrl;
+    const ext = match[1].toLowerCase().startsWith("svg") ? "svg" : match[1].toLowerCase().replace(/[^a-z0-9]/g, "") || "png";
+    const binary = atob(match[3]);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const fileName = `graphic_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke<string>("save_upload_file", { fileName, fileData: Array.from(bytes) });
+    const { getOverlayBaseUrl } = await import("./overlayUrl");
+    const base = await getOverlayBaseUrl();
+    return `${base}/uploads/${encodeURIComponent(fileName)}`;
+  } catch (err) {
+    console.warn("[broadcastGraphicsStorage] Could not move a picture out of storage:", err);
+    return dataUrl;
+  }
+}
+
+/**
+ * Move pictures embedded in saved graphics to files, so graphics made earlier stop using up
+ * browser storage. Returns true when something was shrunk.
+ */
+export async function offloadSavedGraphicImages(): Promise<boolean> {
+  const all = loadSavedBroadcastGraphics();
+  let changed = false;
+  for (const graphic of all) {
+    const vars = graphic.variables || {};
+    for (const key of Object.keys(vars)) {
+      const value = vars[key];
+      if (typeof value === "string" && /^data:image\//i.test(value) && value.length >= OFFLOAD_MIN_CHARS) {
+        const url = await offloadImageToDisk(value);
+        if (url !== value) {
+          vars[key] = url;
+          changed = true;
+        }
+      }
+    }
+  }
+  if (changed) persistAll(all);
+  return changed;
+}
+
+
+/**
+ * Put graphics from a cloud backup into this computer's list.
+ * "merge" adds the ones that are not here yet; "replace" swaps the whole list.
+ */
+export function restoreSavedBroadcastGraphics(
+  incoming: SavedBroadcastGraphic[],
+  mode: "merge" | "replace" = "merge",
+): number {
+  if (!Array.isArray(incoming)) return 0;
+  const local = loadSavedBroadcastGraphics();
+  const next = mode === "replace"
+    ? incoming
+    : [...incoming.filter((g) => !local.some((l) => l.id === g.id)), ...local];
+  persistAll(next);
+  return incoming.length;
 }

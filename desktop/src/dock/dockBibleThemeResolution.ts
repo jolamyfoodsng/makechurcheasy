@@ -370,6 +370,9 @@ export function extractFullscreenQuickThemeSettings(
     lowerThirdTextDirection: sanitizeLowerThirdTextDirection(settings.lowerThirdTextDirection),
     compareTranslationWidth: settings.compareTranslationWidth ?? DEFAULT_THEME_SETTINGS.compareTranslationWidth,
     ...compareSettings,
+    // Layer-theme sizes set in the Dock (text / reference size, line height, title, position)
+    // must survive being re-read from the live theme, or the panel resets to 100%.
+    ...pickLayoutAdjust(settings),
   };
 }
 
@@ -533,6 +536,10 @@ function normalizeQuickThemeSettings(
     lowerThirdTextDirection: sanitizeLowerThirdTextDirection(source.lowerThirdTextDirection ?? base.lowerThirdTextDirection),
     compareTranslationWidth: numberValue(source, "compareTranslationWidth", base.compareTranslationWidth, 30, 50),
     backgroundType: bgType,
+    // Dock sizes for layer themes (text / reference size, line height, title, position).
+    // Without this the saved values were dropped here and the Dock went back to 100%.
+    ...pickLayoutAdjust(base),
+    ...pickLayoutAdjust(source),
     ...compareSettings,
   };
 }

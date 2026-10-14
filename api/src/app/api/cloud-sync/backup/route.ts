@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUserFromRequest } from "@/lib/auth";
-import { getPlanConfig, insertSyncJob, updateSyncJob, getSyncJobs } from "@/lib/db";
-import { resolveEffectivePlan } from "@/lib/trial";
+import { insertSyncJob, updateSyncJob } from "@/lib/db";
+import type { EffectivePlan } from "@/lib/trial";
+import { getCloudStorageLimitBytes, getCloudUsage, resolveCloudAccess } from "@/lib/cloudStorage";
 
-async function checkCloudEntitlement(userId: string, mongoUser: any): Promise<{ allowed: boolean; error?: string }> {
-  const planConfig = await getPlanConfig();
-  const effectivePlan = resolveEffectivePlan(mongoUser);
-  const planTier = planConfig.plans[effectivePlan];
-  if (!planTier?.entitlements?.cloudSync) {
-    return { allowed: false, error: "Cloud sync requires Growth plan or higher" };
+async function checkCloudEntitlement(_userId: string, mongoUser: any): Promise<{ allowed: boolean; error?: string; plan: EffectivePlan }> {
+  const access = await resolveCloudAccess(mongoUser);
+  if (!access.allowed) {
+    return { allowed: false, error: "Cloud backup needs a Basic or Growth plan", plan: access.plan };
   }
-  return { allowed: true };
+  return { allowed: true, plan: access.plan };
 }
 
 // POST /api/cloud-sync/backup — Upload a backup from desktop
@@ -24,18 +23,32 @@ export async function POST(req: NextRequest) {
 
     const entCheck = await checkCloudEntitlement(userId, authUser.mongoUser);
     if (!entCheck.allowed) {
-      return NextResponse.json({ error: entCheck.error, requiredPlan: "growth" }, { status: 403 });
+      return NextResponse.json({ error: entCheck.error, requiredPlan: "basic" }, { status: 403 });
     }
 
-    const body = await req.json();
+    const body = (await req.json()) as { data?: unknown; categories?: unknown };
     const { data, categories } = body;
-    if (!data || typeof data !== "object") {
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
       return NextResponse.json({ error: "data object is required" }, { status: 400 });
     }
+    const backupData = data as Record<string, unknown>;
+    const backupCategories = Array.isArray(categories)
+      ? categories.filter((category): category is string => typeof category === "string")
+      : Object.keys(backupData);
 
-    const payload = JSON.stringify(data);
+    const payload = JSON.stringify(backupData);
     const sizeBytes = Buffer.byteLength(payload, "utf-8");
-    const recordCount = Object.values(data).reduce(
+
+    // The new backup replaces the old one, so only the growth counts against the limit.
+    const usage = await getCloudUsage(userId);
+    const limitBytes = getCloudStorageLimitBytes(entCheck.plan);
+    if (usage.usedBytes - usage.backupBytes + sizeBytes > limitBytes) {
+      return NextResponse.json(
+        { error: "Your cloud storage is full.", code: "storage_full", usedBytes: usage.usedBytes, limitBytes },
+        { status: 413 },
+      );
+    }
+    const recordCount = Object.values(backupData).reduce(
       (sum: number, val: any) => sum + (Array.isArray(val) ? val.length : 0),
       0
     );
@@ -47,7 +60,7 @@ export async function POST(req: NextRequest) {
       status: "uploading",
       sizeBytes,
       recordCount,
-      categories: categories || Object.keys(data),
+      categories: backupCategories,
       createdAt: new Date().toISOString(),
     });
 
@@ -59,10 +72,12 @@ export async function POST(req: NextRequest) {
       {
         $set: {
           userId,
-          data,
+          data: backupData,
           sizeBytes,
           recordCount,
-          categories: categories || Object.keys(data),
+          categories: backupCategories,
+          deviceId: (backupData.manifest as Record<string, unknown> | undefined)?.deviceId || null,
+          deviceName: (backupData.manifest as Record<string, unknown> | undefined)?.deviceName || null,
           jobId: job._id?.toString(),
           updatedAt: new Date().toISOString(),
         },
@@ -103,7 +118,7 @@ export async function GET(req: NextRequest) {
 
     const entCheck = await checkCloudEntitlement(userId, authUser.mongoUser);
     if (!entCheck.allowed) {
-      return NextResponse.json({ error: entCheck.error, requiredPlan: "growth" }, { status: 403 });
+      return NextResponse.json({ error: entCheck.error, requiredPlan: "basic" }, { status: 403 });
     }
 
     const client = await (await import("@/lib/mongodb")).default;
@@ -117,6 +132,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       backup: {
         data: backup.data,
+        deviceId: backup.deviceId || null,
+        deviceName: backup.deviceName || null,
         sizeBytes: backup.sizeBytes,
         recordCount: backup.recordCount,
         categories: backup.categories,

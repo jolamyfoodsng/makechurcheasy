@@ -14,12 +14,16 @@ import ThemeLayoutPreview, { SAMPLE_THEME_CONTENT } from "../../themes/layout/Th
 import {
   applyLayoutAdjust,
   isLayoutAdjustDefault,
+  LAYOUT_LINE_MAX,
+  LAYOUT_LINE_MIN,
   LAYOUT_OFFSET_MAX,
   LAYOUT_OFFSET_MIN,
   LAYOUT_SCALE_MAX,
   LAYOUT_SCALE_MIN,
   readLayoutAdjust,
+  readLayoutShowTitle,
 } from "../../themes/layout/adjust";
+import { hasHeading, isHeadingShown } from "../../themes/layout/heading";
 import type { ThemeContent, ThemeLayout } from "../../themes/layout/types";
 import type { DockFullscreenQuickThemeSettings } from "./DockFullscreenThemeQuickSettings";
 
@@ -111,12 +115,16 @@ interface Props {
 export default function LayoutThemeAdjustPanel({ themeName, layout, quickSettings, onQuickSettingsChange, scope }: Props) {
   const { t } = useTranslation();
   const adjust = readLayoutAdjust(quickSettings);
+  const titleOverride = readLayoutShowTitle(quickSettings);
+  const canToggleTitle = hasHeading(layout);
+  // What the output will do: the Dock's choice, else the theme's own Heading setting.
+  const titleShown = titleOverride ?? isHeadingShown(layout);
   const isLowerThird = layout.format === "lower-third";
   const content = PREVIEW_CONTENT[scope === "global" ? "bible" : scope];
   const previewLayout = useMemo(
-    () => applyLayoutAdjust(layout, adjust),
+    () => applyLayoutAdjust(layout, { ...adjust, layoutShowTitle: titleOverride }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [layout, adjust.layoutTextScale, adjust.layoutRefScale, adjust.layoutOffsetY],
+    [layout, adjust.layoutTextScale, adjust.layoutRefScale, adjust.layoutLineHeight, adjust.layoutOffsetY, titleOverride],
   );
 
   const set = (patch: Partial<DockFullscreenQuickThemeSettings>) =>
@@ -125,6 +133,10 @@ export default function LayoutThemeAdjustPanel({ themeName, layout, quickSetting
   const referenceLabel = scope === "bible"
     ? t("bgPicker.layoutRefSize", "Reference size")
     : t("bgPicker.layoutLabelSize", "Label size");
+
+  const titleLabel = scope === "bible"
+    ? t("bgPicker.layoutShowReference", "Show reference")
+    : t("bgPicker.layoutShowTitle", "Show title");
 
   return (
     <div className="dtb-layout-adjust">
@@ -157,6 +169,34 @@ export default function LayoutThemeAdjustPanel({ themeName, layout, quickSetting
         onChange={(v) => set({ layoutRefScale: v })}
       />
 
+      <AdjustSlider
+        label={t("bgPicker.layoutLineHeight", "Line height")}
+        value={adjust.layoutLineHeight}
+        min={LAYOUT_LINE_MIN}
+        max={LAYOUT_LINE_MAX}
+        step={5}
+        format={(v) => `${v}%`}
+        onChange={(v) => set({ layoutLineHeight: v })}
+      />
+
+      {canToggleTitle && (
+        <div className="dtb-toggle-field dtb-toggle-field--inline dtb-layout-adjust__toggle">
+          <div className="dtb-toggle-field__copy">
+            <span className="dtb-toggle-field__label">{titleLabel}</span>
+          </div>
+          <button
+            type="button"
+            className={`dtb-toggle${titleShown ? " dtb-toggle--on" : ""}`}
+            onClick={() => set({ layoutShowTitle: !titleShown })}
+            role="switch"
+            aria-checked={titleShown}
+            aria-label={titleLabel}
+          >
+            <span className="dtb-toggle__knob" />
+          </button>
+        </div>
+      )}
+
       {isLowerThird && (
         <AdjustSlider
           label={t("bgPicker.layoutPosition", "Move up / down")}
@@ -172,8 +212,8 @@ export default function LayoutThemeAdjustPanel({ themeName, layout, quickSetting
       <button
         type="button"
         className="dtb-layout-adjust__reset"
-        disabled={isLayoutAdjustDefault(adjust)}
-        onClick={() => set({ layoutTextScale: 100, layoutRefScale: 100, layoutOffsetY: 0 })}
+        disabled={isLayoutAdjustDefault({ ...adjust, layoutShowTitle: titleOverride })}
+        onClick={() => set({ layoutTextScale: 100, layoutRefScale: 100, layoutLineHeight: 100, layoutOffsetY: 0, layoutShowTitle: undefined })}
       >
         <Icon name="restart_alt" size={14} />
         <span>{t("bgPicker.layoutReset", "Back to the theme's sizes")}</span>

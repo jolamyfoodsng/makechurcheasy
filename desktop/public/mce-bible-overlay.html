@@ -268,6 +268,11 @@
       box-sizing: border-box;
     }
 
+    #verse-text .verse-em,
+    #lt-verse-text .verse-em,
+    .compare-column__verse .verse-em,
+    .lt-compare-col .verse-em { font-weight: 800; color: var(--verse-number-color, inherit); }
+
     #verse-text .verse-text__number,
     #lt-verse-text .verse-text__number,
     .compare-column__verse .verse-text__number,
@@ -1198,6 +1203,10 @@
         if (typeof h !== 'string') return '';
         return h.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
       }
+      // *words* = important words: bold, in the number/accent colour when the theme sets one.
+      function safeEmText(h) {
+        return safeSupText(h).replace(/\*(?=\S)([^*\n]*?\S)\*/g, '<strong class="verse-em">$1</strong>');
+      }
       function renderVerseLines(text, lineCount) {
         if (typeof text !== 'string') return '';
         const hideVerseNumbers = Number(lineCount) === 1;
@@ -1207,9 +1216,9 @@
           .filter(Boolean)
           .map((line) => {
             const match = line.match(/^(?:\[(\d+)\]|(\d+)[.)])\s+([\s\S]+)$/);
-            if (!match || hideVerseNumbers) return `<span class="verse-text__line"><span class="verse-text__body">${safeSupText(match ? match[3] : line)}</span></span>`;
+            if (!match || hideVerseNumbers) return `<span class="verse-text__line"><span class="verse-text__body">${safeEmText(match ? match[3] : line)}</span></span>`;
             const number = match[1] || match[2];
-            return `<span class="verse-text__line"><span class="verse-text__number" aria-hidden="true">${safeSupText(number)}</span><span class="verse-text__body">${safeSupText(match[3])}</span></span>`;
+            return `<span class="verse-text__line"><span class="verse-text__number" aria-hidden="true">${safeSupText(number)}</span><span class="verse-text__body">${safeEmText(match[3])}</span></span>`;
           })
           .join('');
       }

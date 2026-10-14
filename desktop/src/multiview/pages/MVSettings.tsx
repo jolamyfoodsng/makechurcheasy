@@ -281,7 +281,7 @@ export function MVSettings() {
   // ── Bible settings state ──
   const { state: bibleState, dispatch: bibleDispatch, setTheme: bibleSetTheme } = useBible();
   const [bDefaultTranslation, setBDefaultTranslation] = useState<BibleTranslation>("KJV");
-  const [bDefaultThemeId, setBDefaultThemeId] = useState("preset-caption-rule");
+  const [bDefaultThemeId, setBDefaultThemeId] = useState("preset-royal-blue-glow");
   const [bShowVerseNumbers, setBShowVerseNumbers] = useState(true);
   const [bMaxLines, setBMaxLines] = useState(4);
   const [bAutoSend, setBAutoSend] = useState(true);
@@ -709,7 +709,7 @@ export function MVSettings() {
   useEffect(() => {
     getBibleSettings().then((s) => {
       setBDefaultTranslation((s.defaultTranslation as BibleTranslation) ?? "KJV");
-      setBDefaultThemeId(s.activeThemeId ?? "preset-caption-rule");
+      setBDefaultThemeId(s.activeThemeId ?? "preset-royal-blue-glow");
       setBColorMode(s.colorMode ?? "dark");
       setBAutoSend(s.autoSendOnDoubleClick ?? true);
       setBReduceMotion(s.reduceMotion ?? false);

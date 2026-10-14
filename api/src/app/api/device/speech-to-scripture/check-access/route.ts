@@ -12,6 +12,7 @@ import {
   getFreeSpeechToScriptureUsage,
 } from "@/lib/speechToScriptureUsage";
 import { checkTranscriptionAccess } from "@/lib/transcriptionCredits";
+import { mintStreamingToken } from "@/lib/assemblyAiToken";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -247,10 +248,24 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 10. All checks passed
+    // 10. All checks passed. When the desktop asks for it (?issueToken=1), hand it a
+    // one-minute AssemblyAI token so the real API key never has to ship in the app.
+    let streamingToken: string | null = null;
+    if (req.nextUrl.searchParams.get("issueToken") === "1") {
+      const minted = await mintStreamingToken();
+      if (!minted) {
+        return NextResponse.json(
+          { allowed: false, reason: "server_error", message: "The speech service is unavailable. Please try again." },
+          { status: 503, headers: CORS_HEADERS },
+        );
+      }
+      streamingToken = minted.token;
+    }
+
     return NextResponse.json(
       {
         allowed: true,
+        ...(streamingToken ? { streamingToken } : {}),
         credits: credits.credits,
         plan: effectivePlan,
         trialActive: exposeTrial && trialActive,

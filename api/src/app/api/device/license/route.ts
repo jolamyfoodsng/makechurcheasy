@@ -12,6 +12,9 @@ import { isDeviceLimitExceeded } from "@/lib/deviceLimitPolicy";
 import { getDesktopConfig } from "@/lib/configService";
 import { getAnnouncementsForUser } from "@/lib/announcements";
 import { computeEntitledUntil } from "@/lib/entitledUntil";
+import { signString } from "@/lib/subscriptionSigner";
+import { buildSignedLicense } from "@/lib/signedLicense";
+import { clientIpFromHeaders, recordSecurityEvent } from "@/lib/securityEvents";
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -332,6 +335,8 @@ export async function GET(req: NextRequest) {
       accountStatus,
       subscriptionStatus,
       plan: effectivePlan,
+      // Signed with the licence so the app can't be made an admin by editing local storage.
+      isAdmin: String(user.role || "").toLowerCase() === "admin",
       trialActive,
       trialEndsAt,
       subscriptionEndsAt,
@@ -367,10 +372,43 @@ export async function GET(req: NextRequest) {
       }),
     };
 
+    // Tamper-proof copy of the license. The desktop verifies this signature
+    // (in native code) and ignores the plain `license` object when it can.
+    // It is bound to this device and user and carries the server time, so a
+    // copied license file does not work on another computer and the app has an
+    // unforgeable "now" floor even if the user rewinds the clock.
+    const { licenseSigned, licenseSignature } = buildSignedLicense(
+      license,
+      { deviceId: String(deviceId), userId: user._id.toString() },
+      signString,
+    );
+
+    // Leave a trail for the admin security view (de-duplicated, never blocks the response).
+    if (!licenseSigned) {
+      void recordSecurityEvent(db, {
+        type: "license_unsigned",
+        userId: user._id.toString(),
+        deviceId: String(deviceId),
+        reason: "no_signing_key",
+        appVersion,
+      });
+    }
+    if (tooManyDevices) {
+      void recordSecurityEvent(db, {
+        type: "device_limit",
+        userId: user._id.toString(),
+        deviceId: String(deviceId),
+        reason: effectivePlan,
+        appVersion,
+        ip: clientIpFromHeaders(req.headers),
+        details: { deviceCount, maxDevices: maxDevices === Infinity ? -1 : maxDevices },
+      });
+    }
+
     // Preserve the legacy response for older desktop releases. New releases
     // explicitly opt into the combined heartbeat payload below.
     if (!includeDesktopBootstrap) {
-      return NextResponse.json({ license }, { headers: CORS_HEADERS });
+      return NextResponse.json({ license, licenseSigned, licenseSignature }, { headers: CORS_HEADERS });
     }
 
     // The authenticated desktop already calls this endpoint as its heartbeat.
@@ -405,6 +443,8 @@ export async function GET(req: NextRequest) {
       {
         health: { status: "ok" },
         license,
+        licenseSigned,
+        licenseSignature,
         config,
         announcement,
         announcements,

@@ -238,11 +238,10 @@ export default function SpeechToScripturePage() {
     paidDailyLimitMinutes?: number;
   } | null>(null);
 
-  const hasCustomApiKey = Boolean(
-    (import.meta as any).env?.VITE_ASSEMBLYAI_API_KEYS ||
-    (import.meta as any).env?.VITE_ASSEMBLYAI_API_KEY ||
-    (import.meta as any).env?.DEV
-  );
+  // Only local development skips the plan checks. A release build has the shared
+  // speech key compiled in, so treating "a key exists" as "bring your own key"
+  // would switch the plan gate off for everyone.
+  const hasCustomApiKey = Boolean((import.meta as any).env?.DEV);
 
   // ── Upfront plan gate — block immediately if plan doesn't include Verse AI ──
   useEffect(() => {

@@ -21,6 +21,7 @@ mod voice_guard;
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 mod audio_capture;
 mod device_fingerprint;
+mod license_verify;
 mod dock_settings;
 #[cfg(target_os = "macos")]
 mod local_llm;
@@ -9153,6 +9154,9 @@ pub fn run() {
             extract_text_from_pdf,
             extract_text_elements_from_pdf,
             device_fingerprint::get_device_fingerprint,
+            license_verify::verify_license,
+            license_verify::license_clock_note,
+            license_verify::license_clock_read,
             audio_capture::list_audio_devices,
             audio_capture::start_audio_capture,
             audio_capture::stop_audio_capture,

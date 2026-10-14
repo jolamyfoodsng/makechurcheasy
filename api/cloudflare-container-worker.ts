@@ -21,6 +21,7 @@ type CloudflareRequest = Request & {
 
 const CONTAINER_ENV_NAMES = [
   "APP_ENV",
+  "ASSEMBLYAI_API_KEY",
   "AUTH_GOOGLE_ID",
   "AUTH_GOOGLE_SECRET",
   "AUTH_SECRET",

@@ -13,10 +13,13 @@ import {
 import {
   fetchCloudSyncStatus,
   uploadSnapshotToCloud,
-  isAutoSyncEnabled,
-  setAutoSyncEnabled,
-  isIncludeMediaEnabled,
-  setIncludeMediaEnabled,
+  getBackupFrequency,
+  setBackupFrequency,
+  isIncludeImagesEnabled,
+  setIncludeImagesEnabled,
+  isIncludeVideosEnabled,
+  setIncludeVideosEnabled,
+  type BackupFrequency,
   getSyncDeviceName,
   setSyncDeviceName,
   CLOUD_SYNC_STATUS_CHANGED_EVENT,
@@ -42,8 +45,10 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
   const [showRestoreModal, setShowRestoreModal] = useState(false);
 
   // Form states
-  const [autoSync, setAutoSync] = useState(isAutoSyncEnabled());
-  const [includeMedia, setIncludeMedia] = useState(isIncludeMediaEnabled());
+  const [frequency, setFrequency] = useState<BackupFrequency>(getBackupFrequency());
+  const [includeImages, setIncludeImages] = useState(isIncludeImagesEnabled());
+  const [includeVideos, setIncludeVideos] = useState(isIncludeVideosEnabled());
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [deviceName, setDeviceName] = useState(getSyncDeviceName());
   const [editingDevice, setEditingDevice] = useState(false);
 
@@ -58,8 +63,9 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
 
     const handleUpdate = () => {
       refreshStatus();
-      setAutoSync(isAutoSyncEnabled());
-      setIncludeMedia(isIncludeMediaEnabled());
+      setFrequency(getBackupFrequency());
+      setIncludeImages(isIncludeImagesEnabled());
+      setIncludeVideos(isIncludeVideosEnabled());
       setDeviceName(getSyncDeviceName());
     };
 
@@ -75,27 +81,43 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
     setSuccessMsg(null);
 
     try {
-      await uploadSnapshotToCloud();
-      setSuccessMsg(t("cloudSync.backupSuccess", "Backup uploaded to cloud successfully!"));
-      setTimeout(() => setSuccessMsg(null), 4000);
+      const result = await uploadSnapshotToCloud((done, total) => setProgress({ done, total }));
+      const files = result.files;
+      if (files?.storageFull) {
+        setErrorMsg(t("cloudSync.storageFullMsg", "Your text backup is saved, but your cloud storage is full so some pictures or videos were not sent."));
+      } else if (files && files.failed > 0) {
+        setSuccessMsg(
+          t("cloudSync.backupPartial", "Backup saved. {{count}} file(s) could not be sent and will be retried next time.", { count: files.failed }) +
+            (files.firstError ? ` (${files.firstError})` : ""),
+        );
+      } else {
+        setSuccessMsg(t("cloudSync.backupSuccess", "Backup uploaded to cloud successfully!"));
+      }
+      setTimeout(() => setSuccessMsg(null), 15000);
       refreshStatus();
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "Backup failed");
     } finally {
       setSyncing(false);
+      setProgress(null);
     }
   };
 
-  const handleToggleAutoSync = () => {
-    const next = !autoSync;
-    setAutoSync(next);
-    setAutoSyncEnabled(next);
+  const handleFrequency = (next: BackupFrequency) => {
+    setFrequency(next);
+    setBackupFrequency(next);
   };
 
-  const handleToggleMedia = () => {
-    const next = !includeMedia;
-    setIncludeMedia(next);
-    setIncludeMediaEnabled(next);
+  const handleToggleImages = () => {
+    const next = !includeImages;
+    setIncludeImages(next);
+    setIncludeImagesEnabled(next);
+  };
+
+  const handleToggleVideos = () => {
+    const next = !includeVideos;
+    setIncludeVideos(next);
+    setIncludeVideosEnabled(next);
   };
 
   const handleSaveDeviceName = () => {
@@ -186,8 +208,16 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
   }
 
   // ── Render Entitled/Paid Tier Management Card ──────────────────────────────
-  const usedMB = status ? (status.storageUsedBytes / (1024 * 1024)).toFixed(1) : "0.5";
-  const limitGB = status?.storageLimitGB || 5;
+  const usedBytes = status?.storageUsedBytes ?? 0;
+  const limitBytes = (status?.storageLimitGB ?? 5) * 1024 * 1024 * 1024;
+  const percent = limitBytes > 0 ? Math.min(100, Math.round((usedBytes / limitBytes) * 100)) : 0;
+  const formatSize = (bytes: number) =>
+    bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(2)} GB` : `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  const nextText = status?.nextBackupAt && frequency !== "off"
+    ? new Date(status.nextBackupAt).getTime() <= Date.now()
+      ? t("cloudSync.nextDue", "Next backup: due now")
+      : t("cloudSync.nextAt", "Next backup: {{time}}", { time: new Date(status.nextBackupAt).toLocaleDateString() })
+    : null;
 
   return (
     <>
@@ -291,7 +321,7 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
               type="button"
               className="action-btn btn-primary"
               onClick={handleManualBackup}
-              disabled={syncing}
+              disabled={syncing || Boolean(status?.upToDate)}
               style={{
                 background: "#4f46e5",
                 border: "none",
@@ -303,7 +333,8 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
                 display: "inline-flex",
                 alignItems: "center",
                 gap: "6px",
-                cursor: syncing ? "not-allowed" : "pointer",
+                cursor: syncing || status?.upToDate ? "not-allowed" : "pointer",
+                opacity: status?.upToDate && !syncing ? 0.6 : 1,
               }}
             >
               {syncing ? (
@@ -312,10 +343,17 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
                   <span>{t("cloudSync.syncingBtn", "Backing Up...")}</span>
                 </>
               ) : (
-                <>
-                  <UploadCloud size={15} />
-                  <span>{t("cloudSync.backupNowBtn", "Backup to Cloud Now")}</span>
-                </>
+                status?.upToDate ? (
+                  <>
+                    <CheckCircle size={15} />
+                    <span>{t("cloudSync.upToDateBtn", "Everything is backed up")}</span>
+                  </>
+                ) : (
+                  <>
+                    <UploadCloud size={15} />
+                    <span>{t("cloudSync.backupNowBtn", "Backup to Cloud Now")}</span>
+                  </>
+                )
               )}
             </button>
           </div>
@@ -362,47 +400,91 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
 
         {/* Preferences Grid */}
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem", paddingTop: "0.5rem" }}>
-          {/* Row 1: Automatic Cloud Backup Toggle */}
+          {/* Row 1: How often to back up */}
           <div className="flex-between-center">
             <div className="switch-left">
               <span className="switch-title" style={{ fontSize: "0.9rem" }}>
-                {t("cloudSync.autoSyncTitle", "Automatic Background Backup")}
+                {t("cloudSync.frequencyTitle", "Automatic backup")}
               </span>
               <span className="switch-subtitle" style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
-                {t(
-                  "cloudSync.autoSyncDesc",
-                  "Silently syncs new worship songs, preacher notes, and broadcast profile updates to your cloud storage."
+                {t("cloudSync.frequencyDesc", "Back up your songs, notes, graphics and settings to the cloud on a schedule.")}
+                {nextText && (
+                  <span style={{ display: "block", marginTop: "3px", color: "#818cf8", fontSize: "0.75rem" }}>{nextText}</span>
                 )}
               </span>
             </div>
+            <select
+              value={frequency}
+              onChange={(e) => handleFrequency(e.target.value as BackupFrequency)}
+              style={{
+                background: "rgba(0,0,0,0.3)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                borderRadius: 6,
+                color: "#fff",
+                padding: "6px 10px",
+                fontSize: "0.85rem",
+              }}
+            >
+              <option value="off">{t("cloudSync.freqOff", "Off")}</option>
+              <option value="daily">{t("cloudSync.freqDaily", "Daily")}</option>
+              <option value="weekly">{t("cloudSync.freqWeekly", "Weekly")}</option>
+              <option value="monthly">{t("cloudSync.freqMonthly", "Monthly")}</option>
+            </select>
+          </div>
+
+          {/* Row 2: Pictures */}
+          <div className="flex-between-center">
+            <div className="switch-left">
+              <span className="switch-title" style={{ fontSize: "0.9rem" }}>
+                {t("cloudSync.includeImagesTitle", "Include pictures")}
+              </span>
+              <span className="switch-subtitle" style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
+                {t("cloudSync.includeImagesDesc", "Logos and images from your media library and saved graphics.")}
+              </span>
+            </div>
             <label className="theme-toggle-switch" style={{ cursor: "pointer" }}>
-              <input type="checkbox" checked={autoSync} onChange={handleToggleAutoSync} />
+              <input type="checkbox" checked={includeImages} onChange={handleToggleImages} />
               <span className="theme-toggle-slider" />
             </label>
           </div>
 
-          {/* Row 2: Include Media Library in Sync */}
+          {/* Row 2b: Videos */}
           <div className="flex-between-center">
             <div className="switch-left">
               <span className="switch-title" style={{ fontSize: "0.9rem" }}>
-                {t("cloudSync.includeMediaTitle", "Include Media Library in Cloud Sync")}
+                {t("cloudSync.includeVideosTitle", "Include videos")}
               </span>
               <span className="switch-subtitle" style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
-                {t(
-                  "cloudSync.includeMediaDesc",
-                  "Back up background video loops, image stills, and presentation graphics alongside song lyrics."
-                )}
-                {includeMedia && (
-                  <span style={{ display: "block", marginTop: "3px", color: "#818cf8", fontSize: "0.75rem" }}>
-                    Storage usage: {usedMB} MB used of {limitGB} GB quota
-                  </span>
-                )}
+                {t("cloudSync.includeVideosDesc", "Videos are large and use your cloud storage quickly, so they are off by default.")}
               </span>
             </div>
             <label className="theme-toggle-switch" style={{ cursor: "pointer" }}>
-              <input type="checkbox" checked={includeMedia} onChange={handleToggleMedia} />
+              <input type="checkbox" checked={includeVideos} onChange={handleToggleVideos} />
               <span className="theme-toggle-slider" />
             </label>
+          </div>
+
+          {/* Storage used */}
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", color: "#94a3b8", marginBottom: 6 }}>
+              <span>{t("cloudSync.storageTitle", "Cloud storage")}</span>
+              <span>{formatSize(usedBytes)} / {formatSize(limitBytes)}</span>
+            </div>
+            <div style={{ height: 8, borderRadius: 9999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+              <div
+                style={{
+                  width: `${percent}%`,
+                  height: "100%",
+                  background: percent >= 100 ? "#ef4444" : percent >= 80 ? "#f59e0b" : "#6366f1",
+                  transition: "width 0.3s",
+                }}
+              />
+            </div>
+            {progress && progress.total > 0 && (
+              <span style={{ display: "block", marginTop: 6, fontSize: "0.75rem", color: "#818cf8" }}>
+                {t("cloudSync.sendingFiles", "Sending files {{done}} of {{total}}", progress)}
+              </span>
+            )}
           </div>
 
           {/* Row 3: Device Name / Machine Identifier */}

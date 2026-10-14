@@ -73,6 +73,31 @@ export async function verifySubscriptionSignature(
   }
 }
 
+/**
+ * Verify a detached Ed25519 signature over an exact string (the signed licence).
+ * Used only where the native verifier is unavailable (plain browser contexts).
+ */
+export async function verifyDetachedSignature(message: string, signatureBase64: string): Promise<boolean> {
+  if (!PUBLIC_KEY_BASE64) return Boolean(import.meta.env.DEV);
+  try {
+    const publicKey = await crypto.subtle.importKey(
+      "spki",
+      base64ToArrayBuffer(PUBLIC_KEY_BASE64),
+      { name: "Ed25519", namedCurve: "Ed25519" },
+      false,
+      ["verify"],
+    );
+    return await crypto.subtle.verify(
+      "Ed25519",
+      publicKey,
+      base64ToArrayBuffer(signatureBase64),
+      new TextEncoder().encode(message),
+    );
+  } catch {
+    return false;
+  }
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function canonicalize(payload: Record<string, unknown>): string {
