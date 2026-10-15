@@ -17,6 +17,10 @@ import { overlayBridge } from "../dock/dockOverlayBridge";
 
 const OUTPUT_MONITOR_KEY = "mce-studio-output-monitor";
 const LABEL_PREFIX = "studio-projector-";
+// The main window has custom WebView2 browser arguments in tauri.conf.json.
+// Windows requires windows with different browser settings to use different
+// WebView data directories; Tauri scopes this relative path to each unique label.
+const PROJECTOR_WEBVIEW_DATA_DIRECTORY = "studio-projector";
 /** Phase 1 window label, closed too so an old window never gets stuck. */
 const LEGACY_LABEL = "studio-output";
 
@@ -216,6 +220,7 @@ export async function openProjector(feed: ProjectorFeed, target: ProjectorTarget
       resizable: true,
       decorations: true,
       focus: true,
+      dataDirectory: PROJECTOR_WEBVIEW_DATA_DIRECTORY,
     });
     entry = { label, feed, monitorKey: null, where: "Window" };
     await waitForCreation(win);
@@ -255,6 +260,7 @@ export async function openProjector(feed: ProjectorFeed, target: ProjectorTarget
       y: Math.round(monitor.position.y / scale),
       width: Math.max(640, Math.round(monitor.size.width / scale)),
       height: Math.max(360, Math.round(monitor.size.height / scale)),
+      dataDirectory: PROJECTOR_WEBVIEW_DATA_DIRECTORY,
     });
     entry = { label, feed, monitorKey: key, where: monitor.name?.trim() || "Display" };
     await waitForCreation(win);
