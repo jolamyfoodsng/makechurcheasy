@@ -231,6 +231,8 @@ export interface ThemeContent {
   reference: string;
   /** Lines per slide from the packet; 1 hides verse numbers like the legacy overlay. */
   lineCount?: number;
+  /** Put every line of the verse text on its own row (Line By Line compare: one translation under the other). */
+  stackLines?: boolean;
   /** Extra token values (countdown designs: time, mm, ss, title…). */
   extra?: Record<string, string>;
   /** Timer state for warning colours and progress bars. */

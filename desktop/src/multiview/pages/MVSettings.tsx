@@ -24,6 +24,7 @@ import {
 import { ltDurationStore } from "../../lowerthirds/ltDurationStore";
 import { useAppTheme } from "../../hooks/useAppTheme";
 import { APP_APPEARANCE_PALETTES } from "../../services/appAppearance";
+import { DOCK_FONT_FAMILY_GROUPS, DOCK_FONT_FAMILY_OPTIONS } from "../../dock/dockFontFamily";
 import { applyBrandingSettingsToDom } from "../../services/branding";
 import { fetchCreditDetails, fetchCreditTransactions, onCreditChange, type CreditDetails, type CreditTransaction } from "../../services/credits";
 import {
@@ -1005,7 +1006,7 @@ export function MVSettings() {
   /* ── Appearance helpers ── */
   const handleResetAppearance = useCallback(() => {
     setTheme("dark");
-    setAppearance({ palette: "classic-blue", customAccent: "#1D4ED8" });
+    setAppearance({ palette: "classic-blue", customAccent: "#1D4ED8", fontFamily: "" });
     setDensity("balanced");
     setFontSizeRange(2);
     setHighContrastUI(false);
@@ -2302,6 +2303,56 @@ export function MVSettings() {
                           aria-label="Custom accent"
                         />
                       </label>
+                    </div>
+
+                    <hr className="settings-divider" />
+
+                    {/* Interface font */}
+                    <div className="form-group">
+                      <label className="form-label">Interface font</label>
+                      <p className="form-hint" style={{ marginTop: 4, marginBottom: 10 }}>
+                        Pick the default font for the whole app. Every option is bundled, so it works offline.
+                      </p>
+                      <div className="app-font-group">
+                        <button
+                          type="button"
+                          className={`app-appearance-palette${!appearance.fontFamily ? " app-appearance-palette--active" : ""}`}
+                          onClick={() => setAppearance({ fontFamily: "" })}
+                          aria-pressed={!appearance.fontFamily}
+                        >
+                          <span className="app-appearance-palette__copy">
+                            <span className="app-appearance-palette__title">App default (Inter)</span>
+                            <span className="app-appearance-palette__desc">The font the app ships with</span>
+                          </span>
+                          {!appearance.fontFamily && <Check size={15} className="app-appearance-palette__check" />}
+                        </button>
+                      </div>
+                      {DOCK_FONT_FAMILY_GROUPS.map((group) => (
+                        <div key={group} className="app-font-group">
+                          <div className="app-font-group__title">{group}</div>
+                          <div className="app-appearance-palette-grid">
+                            {DOCK_FONT_FAMILY_OPTIONS.filter((option) => option.group === group).map((option) => {
+                              const selected = appearance.fontFamily === option.family;
+                              return (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  className={`app-appearance-palette${selected ? " app-appearance-palette--active" : ""}`}
+                                  style={{ fontFamily: option.family }}
+                                  onClick={() => setAppearance({ fontFamily: option.family })}
+                                  aria-pressed={selected}
+                                >
+                                  <span className="app-appearance-palette__copy">
+                                    <span className="app-appearance-palette__title" style={{ fontFamily: "inherit", fontSize: "0.95rem" }}>{option.label}</span>
+                                    <span className="app-appearance-palette__desc" style={{ fontFamily: "inherit" }}>Grace and peace to you 0123456789</span>
+                                  </span>
+                                  {selected && <Check size={15} className="app-appearance-palette__check" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
                     </div>
 
                     <hr className="settings-divider" />

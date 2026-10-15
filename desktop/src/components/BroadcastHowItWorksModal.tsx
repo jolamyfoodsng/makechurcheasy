@@ -55,14 +55,14 @@ export function BroadcastHowItWorksModal({
           background: "#18181b",
           border: "1px solid rgba(255, 255, 255, 0.12)",
           borderRadius: "14px",
-          padding: "26px 28px",
-          maxWidth: "580px",
+          padding: "18px 22px",
+          maxWidth: "600px",
           width: "100%",
           maxHeight: "92vh",
           overflowY: "auto",
           display: "flex",
           flexDirection: "column",
-          gap: "18px",
+          gap: "12px",
           boxShadow: "0 24px 48px rgba(0, 0, 0, 0.65)",
           fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
           color: "#f4f4f5",
@@ -77,14 +77,14 @@ export function BroadcastHowItWorksModal({
             justifyContent: "space-between",
             gap: "12px",
             borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-            paddingBottom: "14px",
+            paddingBottom: "10px",
           }}
         >
           <div>
             <h2
               style={{
                 margin: 0,
-                fontSize: "20px",
+                fontSize: "18px",
                 fontWeight: 700,
                 color: "#ffffff",
                 letterSpacing: "-0.01em",
@@ -137,11 +137,11 @@ export function BroadcastHowItWorksModal({
         {/* Key Takeaway Highlight */}
         <div
           style={{
-            padding: "10px 14px",
+            padding: "7px 12px",
             background: "rgba(99, 102, 241, 0.12)",
             border: "1px solid rgba(99, 102, 241, 0.28)",
             borderRadius: "8px",
-            fontSize: "13px",
+            fontSize: "12.5px",
             fontWeight: 600,
             color: "#c7d2fe",
             textAlign: "center",
@@ -151,23 +151,23 @@ export function BroadcastHowItWorksModal({
         </div>
 
         {/* 5 Steps List */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
           {/* Step 1: Create Profiles */}
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "14px",
+              gap: "12px",
               background: "rgba(255, 255, 255, 0.03)",
               border: "1px solid rgba(255, 255, 255, 0.08)",
               borderRadius: "10px",
-              padding: "14px 16px",
+              padding: "8px 12px",
             }}
           >
             <div
               style={{
-                width: "28px",
-                height: "28px",
+                width: "24px",
+                height: "24px",
                 borderRadius: "50%",
                 background: "#4f46e5",
                 color: "#ffffff",
@@ -182,17 +182,18 @@ export function BroadcastHowItWorksModal({
               1
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: "14.5px", fontWeight: 700, color: "#ffffff" }}>
+              <div style={{ fontSize: "13.5px", fontWeight: 700, color: "#ffffff" }}>
                 Create Profiles
               </div>
-              <div style={{ fontSize: "12.5px", color: "#a1a1aa", marginTop: "3px", lineHeight: 1.4 }}>
-                Create profiles for different church accounts, for example: Church Account, First Lady’s Account, or Youth Ministry Account.
+              <div style={{ fontSize: "12px", color: "#a1a1aa", marginTop: "1px", lineHeight: 1.35 }}>
+                One profile per account: Church Account, First Lady’s Account, Youth Ministry Account.
               </div>
             </div>
             {/* Visual illustration: mini profiles list */}
             <div
               style={{
                 width: "120px",
+                zoom: 0.82,
                 background: "#121215",
                 border: "1px solid rgba(255, 255, 255, 0.1)",
                 borderRadius: "6px",
@@ -285,17 +286,17 @@ export function BroadcastHowItWorksModal({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "14px",
+              gap: "12px",
               background: "rgba(255, 255, 255, 0.03)",
               border: "1px solid rgba(255, 255, 255, 0.08)",
               borderRadius: "10px",
-              padding: "14px 16px",
+              padding: "8px 12px",
             }}
           >
             <div
               style={{
-                width: "28px",
-                height: "28px",
+                width: "24px",
+                height: "24px",
                 borderRadius: "50%",
                 background: "#4f46e5",
                 color: "#ffffff",
@@ -310,10 +311,10 @@ export function BroadcastHowItWorksModal({
               2
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: "14.5px", fontWeight: 700, color: "#ffffff" }}>
+              <div style={{ fontSize: "13.5px", fontWeight: 700, color: "#ffffff" }}>
                 Add Channels
               </div>
-              <div style={{ fontSize: "12.5px", color: "#a1a1aa", marginTop: "3px", lineHeight: 1.4 }}>
+              <div style={{ fontSize: "12px", color: "#a1a1aa", marginTop: "1px", lineHeight: 1.35 }}>
                 Save YouTube and Facebook streaming details to each profile once.
               </div>
             </div>
@@ -321,6 +322,7 @@ export function BroadcastHowItWorksModal({
             <div
               style={{
                 width: "120px",
+                zoom: 0.82,
                 background: "#121215",
                 border: "1px solid rgba(255, 255, 255, 0.1)",
                 borderRadius: "6px",
@@ -372,17 +374,17 @@ export function BroadcastHowItWorksModal({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "14px",
+              gap: "12px",
               background: "rgba(255, 255, 255, 0.03)",
               border: "1px solid rgba(255, 255, 255, 0.08)",
               borderRadius: "10px",
-              padding: "14px 16px",
+              padding: "8px 12px",
             }}
           >
             <div
               style={{
-                width: "28px",
-                height: "28px",
+                width: "24px",
+                height: "24px",
                 borderRadius: "50%",
                 background: "#4f46e5",
                 color: "#ffffff",
@@ -397,10 +399,10 @@ export function BroadcastHowItWorksModal({
               3
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: "14.5px", fontWeight: 700, color: "#ffffff" }}>
+              <div style={{ fontSize: "13.5px", fontWeight: 700, color: "#ffffff" }}>
                 Select a Profile
               </div>
-              <div style={{ fontSize: "12.5px", color: "#a1a1aa", marginTop: "3px", lineHeight: 1.4 }}>
+              <div style={{ fontSize: "12px", color: "#a1a1aa", marginTop: "1px", lineHeight: 1.35 }}>
                 Choose which setup you want to use for the current service.
               </div>
             </div>
@@ -408,6 +410,7 @@ export function BroadcastHowItWorksModal({
             <div
               style={{
                 width: "120px",
+                zoom: 0.82,
                 background: "#121215",
                 border: "1px solid rgba(99, 102, 241, 0.4)",
                 borderRadius: "6px",
@@ -429,17 +432,17 @@ export function BroadcastHowItWorksModal({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "14px",
+              gap: "12px",
               background: "rgba(255, 255, 255, 0.03)",
               border: "1px solid rgba(255, 255, 255, 0.08)",
               borderRadius: "10px",
-              padding: "14px 16px",
+              padding: "8px 12px",
             }}
           >
             <div
               style={{
-                width: "28px",
-                height: "28px",
+                width: "24px",
+                height: "24px",
                 borderRadius: "50%",
                 background: "#4f46e5",
                 color: "#ffffff",
@@ -454,17 +457,18 @@ export function BroadcastHowItWorksModal({
               4
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: "14.5px", fontWeight: 700, color: "#ffffff" }}>
+              <div style={{ fontSize: "13.5px", fontWeight: 700, color: "#ffffff" }}>
                 Sync with OBS
               </div>
-              <div style={{ fontSize: "12.5px", color: "#a1a1aa", marginTop: "3px", lineHeight: 1.4 }}>
-                Make Church Eazy loads that profile&apos;s saved streaming setup into OBS automatically in one click.
+              <div style={{ fontSize: "12px", color: "#a1a1aa", marginTop: "1px", lineHeight: 1.35 }}>
+                Church Eazy loads that profile&apos;s streaming setup into OBS in one click.
               </div>
             </div>
             {/* Visual illustration: Sync button with cursor */}
             <div
               style={{
                 width: "120px",
+                zoom: 0.82,
                 background: "#121215",
                 border: "1px solid rgba(255, 255, 255, 0.1)",
                 borderRadius: "6px",
@@ -514,17 +518,17 @@ export function BroadcastHowItWorksModal({
             style={{
               display: "flex",
               alignItems: "center",
-              gap: "14px",
+              gap: "12px",
               background: "rgba(255, 255, 255, 0.03)",
               border: "1px solid rgba(255, 255, 255, 0.08)",
               borderRadius: "10px",
-              padding: "14px 16px",
+              padding: "8px 12px",
             }}
           >
             <div
               style={{
-                width: "28px",
-                height: "28px",
+                width: "24px",
+                height: "24px",
                 borderRadius: "50%",
                 background: "#10b981",
                 color: "#ffffff",
@@ -539,17 +543,18 @@ export function BroadcastHowItWorksModal({
               5
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: "14.5px", fontWeight: 700, color: "#ffffff" }}>
+              <div style={{ fontSize: "13.5px", fontWeight: 700, color: "#ffffff" }}>
                 Go Live
               </div>
-              <div style={{ fontSize: "12.5px", color: "#a1a1aa", marginTop: "3px", lineHeight: 1.4 }}>
-                Start streaming normally from OBS. Your broadcast goes live using the selected profile&apos;s configured destinations.
+              <div style={{ fontSize: "12px", color: "#a1a1aa", marginTop: "1px", lineHeight: 1.35 }}>
+                Start streaming from OBS. It goes live to the selected profile&apos;s channels.
               </div>
             </div>
             {/* Visual illustration: OBS controls */}
             <div
               style={{
                 width: "120px",
+                zoom: 0.82,
                 background: "#121215",
                 border: "1px solid rgba(255, 255, 255, 0.1)",
                 borderRadius: "6px",
@@ -595,7 +600,7 @@ export function BroadcastHowItWorksModal({
           style={{
             display: "flex",
             justifyContent: "center",
-            paddingTop: "10px",
+            paddingTop: "8px",
             borderTop: "1px solid rgba(255, 255, 255, 0.08)",
           }}
         >
@@ -603,7 +608,7 @@ export function BroadcastHowItWorksModal({
             type="button"
             onClick={onClose}
             style={{
-              padding: "9px 36px",
+              padding: "8px 32px",
               borderRadius: "8px",
               background: "#4f46e5",
               color: "#ffffff",

@@ -12,6 +12,7 @@
 import { availableMonitors, currentMonitor, PhysicalPosition, PhysicalSize, type Monitor } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getOverlayBaseUrl } from "../services/overlayUrl";
+import { toLoopbackBase } from "./studioEngine";
 import { overlayBridge } from "../dock/dockOverlayBridge";
 
 const OUTPUT_MONITOR_KEY = "mce-studio-output-monitor";
@@ -42,6 +43,8 @@ export interface OpenProjector {
   monitorKey: string | null;
   /** "Built-in Display" or "Window". */
   where: string;
+  /** Opening it again found it already open, so it was brought forward instead of being rebuilt. */
+  reused?: boolean;
 }
 
 function monitorKey(m: Monitor): string {
@@ -162,14 +165,38 @@ function waitForCreation(win: WebviewWindow): Promise<void> {
   });
 }
 
+/** The projector is already open: bring it forward (rebuilding a full-screen window right away leaves a blank one). */
+async function reuseProjector(existing: OpenProjector, focus: boolean): Promise<OpenProjector | null> {
+  const win = await WebviewWindow.getByLabel(existing.label);
+  if (!win) {
+    if (projectors.delete(existing.label)) notify();
+    return null;
+  }
+  try {
+    await win.show();
+    if (focus) await win.setFocus();
+  } catch {
+    /* ignore */
+  }
+  return { ...existing, reused: true };
+}
+
 /**
  * Open a Program or Preview projector on a screen (full screen) or in a window.
  * A screen holds one projector: opening a new one there replaces the old one.
  */
 export async function openProjector(feed: ProjectorFeed, target: ProjectorTarget): Promise<OpenProjector> {
   hookRelay();
+  if (target === "window") {
+    const open = listOpenProjectors().find((p) => p.feed === feed && p.monitorKey === null);
+    if (open) {
+      const back = await reuseProjector(open, true);
+      if (back) return back;
+    }
+  }
   await destroyWindow(LEGACY_LABEL);
-  const base = await getOverlayBaseUrl();
+  // This computer's own server (not the Wi-Fi address), so a network change can't blank the projector.
+  const base = toLoopbackBase(await getOverlayBaseUrl());
   const label = `${LABEL_PREFIX}${feed}-${Date.now()}-${++counter}`;
   const url = `${base}/studio-output.html?feed=${feed}&win=${encodeURIComponent(label)}`;
   const title = feed === "program" ? "Program Projector" : "Preview Projector";
@@ -203,6 +230,13 @@ export async function openProjector(feed: ProjectorFeed, target: ProjectorTarget
     const key = monitorKey(monitor);
     const isControl = sameMonitor(monitor, current);
 
+    // Already open on this screen: bring it forward. Closing it and opening a new full-screen window
+    // straight away is what left a blank screen.
+    const sameScreen = listOpenProjectors().find((p) => p.feed === feed && p.monitorKey === key);
+    if (sameScreen) {
+      const back = await reuseProjector(sameScreen, isControl);
+      if (back) return back;
+    }
     // One projector per screen.
     await Promise.all(listOpenProjectors().filter((p) => p.monitorKey === key).map((p) => closeProjector(p.label)));
 

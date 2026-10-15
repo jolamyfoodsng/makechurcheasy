@@ -84,7 +84,7 @@ export default function TrialModal({
               fontWeight: 700,
               color: "#E8E8F0",
               margin: 0,
-              fontFamily: "Inter, system-ui, sans-serif",
+              fontFamily: "var(--font-user, Inter, system-ui, sans-serif)",
             }}
           >
             {isExistingUser
@@ -101,7 +101,7 @@ export default function TrialModal({
             color: "#A0A0B8",
             textAlign: "center",
             marginBottom: "16px",
-            fontFamily: "Inter, system-ui, sans-serif",
+            fontFamily: "var(--font-user, Inter, system-ui, sans-serif)",
           }}
         >
           {isExistingUser
@@ -127,7 +127,7 @@ export default function TrialModal({
               letterSpacing: "0.05em",
               color: "#707090",
               marginBottom: "8px",
-              fontFamily: "Inter, system-ui, sans-serif",
+              fontFamily: "var(--font-user, Inter, system-ui, sans-serif)",
             }}
           >
             {isExistingUser ? "Your trial includes:" : "Included in your trial:"}
@@ -142,7 +142,7 @@ export default function TrialModal({
                   gap: "8px",
                   fontSize: "13px",
                   color: "#E8E8F0",
-                  fontFamily: "Inter, system-ui, sans-serif",
+                  fontFamily: "var(--font-user, Inter, system-ui, sans-serif)",
                 }}
               >
                 <span style={{ color: "#10B981" }}>✓</span>
@@ -154,7 +154,7 @@ export default function TrialModal({
 
         {/* Trial end date */}
         <div style={{ textAlign: "center", marginBottom: "20px" }}>
-          <p style={{ fontSize: "12px", color: "#707090", margin: 0, fontFamily: "Inter, system-ui, sans-serif" }}>
+          <p style={{ fontSize: "12px", color: "#707090", margin: 0, fontFamily: "var(--font-user, Inter, system-ui, sans-serif)" }}>
             Trial Ends
           </p>
           <p
@@ -163,7 +163,7 @@ export default function TrialModal({
               fontWeight: 600,
               color: "#E8E8F0",
               margin: 0,
-              fontFamily: "Inter, system-ui, sans-serif",
+              fontFamily: "var(--font-user, Inter, system-ui, sans-serif)",
             }}
           >
             {endDate}
@@ -183,7 +183,7 @@ export default function TrialModal({
             fontSize: "14px",
             fontWeight: 600,
             cursor: "pointer",
-            fontFamily: "Inter, system-ui, sans-serif",
+            fontFamily: "var(--font-user, Inter, system-ui, sans-serif)",
             transition: "background 0.2s ease",
           }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "#4A4EB8")}

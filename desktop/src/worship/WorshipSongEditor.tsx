@@ -7,7 +7,7 @@
  * Replaces the old SongFormModal in SongsTab.tsx.
  */
 
-import { ListX, Music, Save, Undo, Wand2, X } from "lucide-react";
+import { ListX, Music, Redo, Save, Scissors, Undo, Wand2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
 import { DEFAULT_THEME_SETTINGS, type BibleTheme, type BibleThemeSettings } from "../bible/types";
@@ -18,6 +18,17 @@ import {
 } from "./slideLayout";
 import { nextAutoSongTitle, isDummyTitle } from "./songTitleAutoGen";
 import { extractFirstLineAsTitle } from "./songTitleFromLyrics";
+import {
+  capitalizeLyricsText,
+  cleanLyricsText,
+  insertSectionLabel,
+  lineStats,
+  removeChords,
+  removeEmptyLyricsLines,
+  removeVerseNumbers,
+  SECTION_LABELS,
+  splitSlideAt,
+} from "./lyricTools";
 import type { Slide, Song } from "./types";
 import { saveSong } from "./worshipDb";
 import "./worshipSongModal.css";
@@ -51,6 +62,8 @@ const LAYOUT_PRESETS = [
   { key: "2", label: "2 Lines", linesPerSlide: 2, autoSplit: true },
   { key: "3", label: "3 Lines", linesPerSlide: 3, autoSplit: true },
   { key: "4", label: "4 Lines", linesPerSlide: 4, autoSplit: true },
+  { key: "5", label: "5 Lines", linesPerSlide: 5, autoSplit: true },
+  { key: "6", label: "6 Lines", linesPerSlide: 6, autoSplit: true },
   // The count is ignored in Original mode; the previous count is preserved.
   { key: "original", label: "Original", linesPerSlide: 2, autoSplit: false },
 ] as const;
@@ -60,60 +73,6 @@ const LAYOUT_PRESETS = [
 const FULLSCREEN_THEMES: BibleTheme[] = BUILTIN_THEMES.filter(
   (t) => t.templateType === "fullscreen" && !t.hidden,
 );
-
-function capitalizeLyricsText(text: string): string {
-  return text
-    .split("\n")
-    .map((line) =>
-      line.replace(/\b([A-Za-z])([A-Za-z'’-]*)/g, (_, first: string, rest: string) =>
-        `${first.toUpperCase()}${rest.toLowerCase()}`,
-      ),
-    )
-    .join("\n");
-}
-
-function cleanLyricsText(text: string): string {
-  return text
-    .split("\n")
-    .map((line) => {
-      let next = line;
-      next = next.replace(/\t/g, " ");
-      next = next.replace(/\s{2,}/g, " ");
-      next = next.replace(/ ,/g, ",");
-      next = next.replace(/ \./g, ".");
-      next = next.replace(/ :/g, ":");
-      next = next.replace(/([,:;.])([A-Za-z])/g, "$1 $2");
-      next = next.replace(/\s+$/g, "");
-      return next.trimStart();
-    })
-    .join("\n");
-}
-
-function removeEmptyLyricsLines(text: string): string {
-  const lines = text.split("\n");
-  const collapsed: string[] = [];
-  let blankCount = 0;
-  for (const line of lines) {
-    const trimmed = line.trim();
-    const isBlank = trimmed === "" || /^[^\w]+$/.test(trimmed);
-    if (isBlank) {
-      blankCount++;
-      if (blankCount <= 1) collapsed.push("");
-      continue;
-    }
-    blankCount = 0;
-    collapsed.push(line);
-  }
-  return collapsed.join("\n").replace(/^\n+/, "").replace(/\n+$/, "");
-}
-
-function removeVerseNumbers(text: string): string {
-  return text
-    .replace(/^\d+[.)]\s*/gm, "")
-    .replace(/^\[[\d]+\]\s*/gm, "")
-    .replace(/^\([\d]+\)\s*/gm, "")
-    .replace(/^Verse\s+\d+\s*:?\s*/gim, "");
-}
 
 /* ── Component ───────────────────────────────────────────────────────────── */
 
@@ -148,7 +107,19 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
   // Original mode can restore exactly what the user pasted.
   const authoredLyricsRef = useRef(song?.lyrics ?? "");
   const lyricsTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const formatUndoRef = useRef<string>("");
+  // Every button (layout, case, Clean, Trim Gaps, labels...) can be undone and redone, step by step.
+  const undoStackRef = useRef<string[]>([]);
+  const redoStackRef = useRef<string[]>([]);
+  const [, setHistoryTick] = useState(0);
+  const rememberForUndo = useCallback((previous: string) => {
+    const stack = undoStackRef.current;
+    if (stack[stack.length - 1] !== previous) stack.push(previous);
+    if (stack.length > 40) stack.shift();
+    redoStackRef.current = [];
+    setHistoryTick((n) => n + 1);
+  }, []);
+  /** Where long lines break when a counted layout is used (characters). 0 = never. */
+  const [wrapAt, setWrapAt] = useState(46);
   const [selectionRange, setSelectionRange] = useState({ start: 0, end: 0 });
   lyricsRef.current = lyrics;
 
@@ -237,19 +208,26 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
   const handleLayoutChange = useCallback(
     (preset: (typeof LAYOUT_PRESETS)[number]) => {
       const nextLayout = resolveWorshipLayoutSelection(linesPerSlide, preset);
+      rememberForUndo(lyricsRef.current);
       if (preset.autoSplit) {
-        formatUndoRef.current = lyricsRef.current;
-        const formatted = autoSplitLyricsText(authoredLyricsRef.current, preset.linesPerSlide);
+        const formatted = autoSplitLyricsText(authoredLyricsRef.current, preset.linesPerSlide, { maxLineLength: wrapAt });
         setLyrics(formatted);
       } else {
-        formatUndoRef.current = lyricsRef.current;
         setLyrics(authoredLyricsRef.current);
       }
       setLinesPerSlide(nextLayout.linesPerSlide);
       setAutoSplit(nextLayout.autoSplit);
     },
-    [linesPerSlide],
+    [linesPerSlide, rememberForUndo, wrapAt],
   );
+
+  /** Change where long lines break; re-flows the song when a counted layout is on. */
+  const handleWrapChange = useCallback((value: number) => {
+    setWrapAt(value);
+    if (!autoSplit) return;
+    rememberForUndo(lyricsRef.current);
+    setLyrics(autoSplitLyricsText(authoredLyricsRef.current, linesPerSlide, { maxLineLength: value }));
+  }, [autoSplit, linesPerSlide, rememberForUndo]);
 
   const syncSelectionRange = useCallback(() => {
     const textarea = lyricsTextareaRef.current;
@@ -270,7 +248,7 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
     const end = textarea?.selectionEnd ?? selectionRange.end;
     const hasSelection = end > start;
 
-    formatUndoRef.current = current;
+    rememberForUndo(current);
 
     let nextLyrics = current;
     let nextStart = start;
@@ -301,24 +279,48 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
       node.setSelectionRange(nextStart, nextEnd);
       setSelectionRange({ start: nextStart, end: nextEnd });
     });
-  }, [selectionRange.end, selectionRange.start]);
+  }, [rememberForUndo, selectionRange.end, selectionRange.start]);
 
-  const handleUndoFormatting = useCallback(() => {
-    if (!formatUndoRef.current) return;
-    const previous = formatUndoRef.current;
-    authoredLyricsRef.current = previous;
-    setLyrics(previous);
+  /** Put `text` in the box and the cursor back where it was (or at `caret`). */
+  const showText = useCallback((text: string, caret?: number) => {
+    authoredLyricsRef.current = text;
+    setLyrics(text);
     requestAnimationFrame(() => {
       const node = lyricsTextareaRef.current;
       if (!node) return;
       node.focus();
-      const end = Math.min(previous.length, selectionRange.end);
-      const start = Math.min(previous.length, selectionRange.start);
+      const start = caret ?? Math.min(text.length, selectionRange.start);
+      const end = caret ?? Math.min(text.length, selectionRange.end);
       node.setSelectionRange(start, end);
       setSelectionRange({ start, end });
     });
-    formatUndoRef.current = "";
   }, [selectionRange.end, selectionRange.start]);
+
+  const handleUndoFormatting = useCallback(() => {
+    const previous = undoStackRef.current.pop();
+    if (previous === undefined) return;
+    redoStackRef.current.push(lyricsRef.current);
+    showText(previous);
+    setHistoryTick((n) => n + 1);
+  }, [showText]);
+
+  const handleRedoFormatting = useCallback(() => {
+    const next = redoStackRef.current.pop();
+    if (next === undefined) return;
+    undoStackRef.current.push(lyricsRef.current);
+    showText(next);
+    setHistoryTick((n) => n + 1);
+  }, [showText]);
+
+  /** Insert-at-cursor tools: Add label, Split here. */
+  const handleInsertAtCursor = useCallback((tool: (text: string, caret: number) => { text: string; caret: number }) => {
+    const current = lyricsRef.current;
+    const caret = lyricsTextareaRef.current?.selectionStart ?? current.length;
+    const result = tool(current, caret);
+    if (result.text === current) return;
+    rememberForUndo(current);
+    showText(result.text, result.caret);
+  }, [rememberForUndo, showText]);
 
   const handleLyricsChange = useCallback((nextLyrics: string) => {
     authoredLyricsRef.current = nextLyrics;
@@ -334,6 +336,7 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
   }, [song?.metadata.title, title]);
 
   /* ── Line / slide counts ── */
+  const slideStats = useMemo(() => lineStats(slides), [slides]);
   const lineCount = useMemo(() => {
     return lyrics.split("\n").filter((l) => l.trim().length > 0).length;
   }, [lyrics]);
@@ -454,6 +457,20 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
                   </option>
                 ))}
               </select>
+              <label className="ws-layout-label" htmlFor="ws-wrap-select">Wrap at</label>
+              <select
+                id="ws-wrap-select"
+                className="ws-field-input ws-layout-select"
+                value={wrapAt}
+                disabled={!autoSplit}
+                title={autoSplit ? "Where a long line breaks onto the next line" : "Pick 1-6 lines first. Original keeps every line as you typed it."}
+                onChange={(e) => handleWrapChange(Number(e.target.value))}
+              >
+                <option value={0}>Off (keep lines)</option>
+                <option value={32}>32 letters</option>
+                <option value={46}>46 letters</option>
+                <option value={64}>64 letters</option>
+              </select>
             </div>
 
             <div className="ws-lyrics-wrap">
@@ -501,7 +518,7 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
                   type="button"
                   className="ws-lyrics-toolbar__btn"
                   onClick={() => applyLyricsTransformation(removeEmptyLyricsLines, "all")}
-                  title="Remove empty lines"
+                  title="Squeeze extra empty lines into one (one empty line = the gap between slides)"
                 >
                   <ListX size={12} />
                   <span>Trim Gaps</span>
@@ -518,12 +535,50 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
                 <button
                   type="button"
                   className="ws-lyrics-toolbar__btn"
+                  onClick={() => applyLyricsTransformation(removeChords, "all")}
+                  title="Remove chord lines and [G] style chords from a pasted chord sheet"
+                >
+                  <Music size={12} />
+                  <span>Chords</span>
+                </button>
+                <button
+                  type="button"
+                  className="ws-lyrics-toolbar__btn"
+                  onClick={() => handleInsertAtCursor(splitSlideAt)}
+                  title="Start a new slide where the cursor is"
+                >
+                  <Scissors size={12} />
+                  <span>Split here</span>
+                </button>
+                <select
+                  className="ws-lyrics-toolbar__btn ws-lyrics-toolbar__select"
+                  value=""
+                  onChange={(e) => { const label = e.target.value; e.target.value = ""; if (label) handleInsertAtCursor((text, caret) => insertSectionLabel(text, caret, label)); }}
+                  title="Put a label (Verse, Chorus...) above the line the cursor is on"
+                  aria-label="Add a section label"
+                >
+                  <option value="">+ Label</option>
+                  {SECTION_LABELS.map((label) => <option key={label} value={label}>{label}</option>)}
+                </select>
+                <button
+                  type="button"
+                  className="ws-lyrics-toolbar__btn"
                   onClick={handleUndoFormatting}
-                  title="Undo formatting"
-                  disabled={!formatUndoRef.current}
+                  title="Undo the last button (step by step)"
+                  disabled={undoStackRef.current.length === 0}
                 >
                   <Undo size={12} />
                   <span>Undo</span>
+                </button>
+                <button
+                  type="button"
+                  className="ws-lyrics-toolbar__btn"
+                  onClick={handleRedoFormatting}
+                  title="Put back what Undo took away"
+                  disabled={redoStackRef.current.length === 0}
+                >
+                  <Redo size={12} />
+                  <span>Redo</span>
                 </button>
               </div>
               <div className="ws-lyrics-editor-frame">
@@ -545,6 +600,7 @@ export default function WorshipSongEditor({ song, onClose, onSave }: WorshipSong
             <div className="ws-left-footer">
               <span>{lineCount} line{lineCount !== 1 ? "s" : ""}</span>
               <span>{slides.length} slide{slides.length !== 1 ? "s" : ""}</span>
+              <span title="Lines on each slide (the most common count, and the shortest to longest)">{slideStats.slides > 0 ? slideStats.label : ""}</span>
             </div>
           </div>
 

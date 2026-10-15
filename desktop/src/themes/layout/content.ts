@@ -74,7 +74,7 @@ export function resolveTokens(content: ThemeContent): ResolvedTokens {
 /** Countdown tokens: {time} {sign} {tm} {tmm} {d} {dd} {h} {hh} {m} {mm} {s} {ss} {ampm} {title} {subtitle} {message} {name} {speaker} */
 export const COUNTDOWN_TOKENS = ["time", "sign", "tm", "tmm", "d", "dd", "h", "hh", "m", "mm", "s", "ss", "ampm", "title", "subtitle", "message", "name", "speaker"] as const;
 
-const TOKEN_RE = /\{(text|reference|referenceShort|book|chapter|verses|chapterVerse|translation|time|sign|tm|tmm|d|dd|h|hh|m|mm|s|ss|ampm|title|subtitle|message|name|speaker)\}/g;
+const TOKEN_RE = /\{(text|text2|reference|referenceShort|book|chapter|verses|chapterVerse|translation|time|sign|tm|tmm|d|dd|h|hh|m|mm|s|ss|ampm|title|subtitle|message|name|speaker)\}/g;
 
 export function hasTokens(pattern: string | undefined): boolean {
   if (!pattern) return false;
@@ -87,7 +87,13 @@ export function fillTokens(pattern: string, tokens: ResolvedTokens): string {
 }
 
 export function isVerseTextPattern(pattern: string | undefined): boolean {
-  return (pattern || "").trim() === "{text}";
+  const value = (pattern || "").trim();
+  return value === "{text}" || value === "{text2}";
+}
+
+/** Which token holds the verse text of a verse layer: "{text2}" is the second column of a side-by-side compare. */
+export function verseTokenKey(pattern: string | undefined): "text" | "text2" {
+  return (pattern || "").trim() === "{text2}" ? "text2" : "text";
 }
 
 export interface VerseLine {

@@ -23,7 +23,7 @@ import {
 import { emphasisColorFor, emphasisWeightFor, parseEmphasis } from "./emphasis";
 import { headingLayers } from "./heading";
 import { segmentSvg } from "./segments";
-import { fillTokens, hasTokens, isVerseTextPattern, resolveTokens, splitVerseLines, type ResolvedTokens } from "./content";
+import { fillTokens, hasTokens, isVerseTextPattern, resolveTokens, splitVerseLines, verseTokenKey, type ResolvedTokens } from "./content";
 import {
   DESIGN_HEIGHT,
   DESIGN_WIDTH,
@@ -104,6 +104,7 @@ const BASE_CSS = `
 .mtl-text-inner{display:block}
 .mtl-line{display:inline}
 .mtl-line.is-block{display:block}
+.mtl-line.is-stack+.mtl-line.is-stack{margin-top:.4em}
 .mtl-em{font-weight:700}
 .mtl-num{font-size:.55em;vertical-align:super;line-height:0;margin-right:.25em;font-weight:inherit;opacity:.85}
 .mtl-w{display:inline-block;white-space:pre}
@@ -362,10 +363,20 @@ export class ThemeRenderer {
       this.stage.style.transform = `scale(${scale})`;
       return;
     }
+    if (this.layout?.format !== "lower-third") {
+      // Full screen on any screen shape (16:10 laptops, 4:3 projectors, ultra-wide): the stage fills
+      // the whole screen. The side that has spare room grows, the layout is spread over it, and the
+      // text is never stretched (see applyFill). Nothing changes on a 16:9 screen such as OBS.
+      this.stage.style.transform = `scale(${scale})`;
+      this.fill = { kx: w / scale / DESIGN_WIDTH, ky: h / scale / DESIGN_HEIGHT };
+      this.applyFill();
+      return;
+    }
+    this.fill = { kx: 1, ky: 1 };
     const spareX = Math.max(0, w - DESIGN_WIDTH * scale);
     const spareY = Math.max(0, h - DESIGN_HEIGHT * scale);
     const offsetX = spareX / 2;
-    const offsetY = this.layout?.format === "lower-third" ? spareY : spareY / 2;
+    const offsetY = spareY; // lower thirds sit at the bottom of the screen
     this.stage.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
     // Spare space in stage pixels on each side, for the backgrounds to bleed into.
     this.bleed = {
@@ -375,6 +386,51 @@ export class ThemeRenderer {
       bottom: (spareY - offsetY) / scale,
     };
     this.applyBleed();
+  }
+
+  /** How much bigger than 1920×1080 the full-screen area is on each axis (1 = same shape as 16:9). */
+  private fill = { kx: 1, ky: 1 };
+
+  /**
+   * Spread a full-screen layout over a screen that is not 16:9. Positions scale with the screen, so
+   * the frame, the background and the shapes reach every edge. Boxes and wide pictures grow with it, and
+   * so does everything placed on a panel that grew. Free text, lines, logos and round shapes keep their
+   * size and only move (never stretched or cropped).
+   */
+  private applyFill() {
+    const { kx, ky } = this.fill;
+    const px = (n: number) => `${n}px`;
+    const nodeById = new Map(this.nodes.map((n) => [n.layer.id, n]));
+    /** Layers that grew: their children follow with the same factors, so a panel and what is on it stay together. */
+    const grew = new Set<string>();
+    for (const node of this.nodes) {
+      const layer = node.layer;
+      const parent = layer.parentId ? nodeById.get(layer.parentId) : undefined;
+      const fx = parent ? (grew.has(parent.layer.id) ? kx : 1) : kx;
+      const fy = parent ? (grew.has(parent.layer.id) ? ky : 1) : ky;
+      const numericH = typeof layer.h === "number";
+      const h = numericH ? (layer.h as number) : 0;
+      const w = Math.max(1, layer.w);
+      const frame = !parent && isFullFrameBackground(layer);
+      let grows = false;
+      if (frame) grows = true;
+      else if (layer.type === "box") grows = numericH && Math.abs(w - h) / Math.max(w, h, 1) >= 0.12;
+      else if (layer.type === "image") grows = numericH && (w >= DESIGN_WIDTH * 0.5 || h >= DESIGN_HEIGHT * 0.5);
+      else if (layer.type === "text") grows = Boolean(parent) && grew.has(parent!.layer.id) && numericH; // keeps its place inside a panel that grew
+      if (grows) grew.add(layer.id);
+      // A little overscan on the backgrounds, so a half-pixel never shows a hairline at the screen edge.
+      const over = frame && (kx !== 1 || ky !== 1) ? 1 : 0;
+      node.pos.style.left = px(layer.x * fx - over);
+      node.pos.style.top = px(layer.y * fy - over);
+      if (grows && numericH) {
+        node.pos.style.width = px(w * fx + over * 2);
+        node.pos.style.height = px(Math.max(1, h) * fy + over * 2);
+      } else if (layer.type === "divider" && numericH) {
+        // A rule keeps its thickness and grows along its length, so rules made of pieces stay joined.
+        if (w >= h) node.pos.style.width = px(w * fx);
+        else node.pos.style.height = px(Math.max(1, h) * fy);
+      }
+    }
   }
 
   private bleed = { left: 0, right: 0, top: 0, bottom: 0 };
@@ -685,7 +741,7 @@ export class ThemeRenderer {
   private valueFor(n: LayerNode, tokens: ResolvedTokens, content: ThemeContent): string {
     if (n.layer.type !== "text") return "";
     if (n.heading === "text" && this.layout?.showHeading === false) return "";
-    if (n.isVerse) return `${content.lineCount ?? ""}|${tokens.text}`;
+    if (n.isVerse) return `${content.lineCount ?? ""}|${content.stackLines ? "s" : ""}|${tokens[verseTokenKey(n.layer.content)] ?? ""}`;
     return fillTokens(n.layer.content || "", tokens);
   }
 
@@ -771,11 +827,12 @@ export class ThemeRenderer {
 
     let isEmpty: boolean;
     if (n.isVerse) {
-      const lines = splitVerseLines(tokens.text, content.lineCount);
+      const lines = splitVerseLines(tokens[verseTokenKey(n.layer.content)] ?? "", content.lineCount);
       isEmpty = lines.length === 0;
       lines.forEach((line, i) => {
         const span = d.createElement("span");
-        span.className = lineRise ? "mtl-line is-block" : "mtl-line";
+        const stack = Boolean(content.stackLines);
+        span.className = lineRise ? "mtl-line is-block" : stack ? "mtl-line is-block is-stack" : "mtl-line";
         if (line.number && s.verseNumbers !== false) {
           const num = d.createElement("sup");
           num.className = "mtl-num";
@@ -784,7 +841,7 @@ export class ThemeRenderer {
           span.appendChild(num);
         }
         appendRich(span, line.body);
-        if (!lineRise && i < lines.length - 1) span.appendChild(d.createTextNode(" "));
+        if (!lineRise && !stack && i < lines.length - 1) span.appendChild(d.createTextNode(" "));
         inner.appendChild(span);
       });
     } else {

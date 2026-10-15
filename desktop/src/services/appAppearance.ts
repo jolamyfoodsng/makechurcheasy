@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { readNativeDockSetting, writeNativeDockSetting } from "./localDockSettings";
+import { buildDockFontFamilyStack, normalizeDockFontFamily } from "../dock/dockFontFamily";
 
 export type AppAppearancePaletteId =
   | "classic-blue"
@@ -28,6 +29,11 @@ export interface DockVisualPreferences {
 export interface AppAppearancePreferences {
   palette: AppAppearancePaletteId;
   customAccent: string;
+  /**
+   * Interface font for the desktop app. Holds one of the bundled families from
+   * DOCK_FONT_FAMILY_OPTIONS, or "" to keep the platform's system font.
+   */
+  fontFamily: string;
   dockVisuals: DockVisualPreferences;
   updatedAt: number;
 }
@@ -44,6 +50,7 @@ export const DEFAULT_DOCK_VISUALS: DockVisualPreferences = {
 export const DEFAULT_APP_APPEARANCE: AppAppearancePreferences = {
   palette: "classic-blue",
   customAccent: "#4F46E5",
+  fontFamily: "",
   dockVisuals: { ...DEFAULT_DOCK_VISUALS },
   updatedAt: 0,
 };
@@ -181,6 +188,7 @@ export function normalizeAppAppearance(value: unknown): AppAppearancePreferences
   return {
     palette,
     customAccent: normalizeHex(candidate.customAccent, DEFAULT_APP_APPEARANCE.customAccent),
+    fontFamily: normalizeDockFontFamily(candidate.fontFamily),
     dockVisuals: {
       glassSurface: normalizeBoolean(dockVisualsCandidate.glassSurface, DEFAULT_DOCK_VISUALS.glassSurface),
       radialGlow: normalizeBoolean(dockVisualsCandidate.radialGlow, DEFAULT_DOCK_VISUALS.radialGlow),
@@ -320,7 +328,21 @@ export function getAppAppearanceCssVariables(
   const primarySoftBorder = rgba(accent, isLight ? 0.2 : 0.32);
   const activeSurface = rgba(accent, isLight ? 0.06 : 0.16);
 
+  const fontVariables: Record<string, string> = {};
+  if (preferences.fontFamily) {
+    // Same glyph-safe stack the Dock uses, so African-language and symbol
+    // characters still render when the chosen font lacks them.
+    const stack = buildDockFontFamilyStack(preferences.fontFamily);
+    fontVariables["--font-body"] = stack;
+    fontVariables["--font-heading"] = stack;
+    fontVariables["--font-headline"] = stack;
+    // Stylesheets that kept their own font (Settings, modals, Studio, Transcripts…)
+    // read this first, so the chosen font reaches every screen.
+    fontVariables["--font-user"] = stack;
+  }
+
   return {
+    ...fontVariables,
     // Main application tokens
     "--primary": accent,
     "--primary-hover": accentHover,
@@ -420,5 +442,13 @@ export function applyAppAppearanceToDOM(
   const variables = getAppAppearanceCssVariables(preferences, mode);
   for (const [key, value] of Object.entries(variables)) {
     root.style.setProperty(key, value);
+  }
+  // Back to the platform's system font: drop any inline override so the
+  // stylesheet's :root[data-platform] stack applies again.
+  if (!preferences.fontFamily) {
+    root.style.removeProperty("--font-body");
+    root.style.removeProperty("--font-heading");
+    root.style.removeProperty("--font-headline");
+    root.style.removeProperty("--font-user");
   }
 }

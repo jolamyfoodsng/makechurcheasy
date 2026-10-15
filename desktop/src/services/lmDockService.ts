@@ -1058,6 +1058,31 @@ export class LmDockService {
     this.pushStatus();
 
     try {
+      // Show keyword-index suggestions straight away (a few ms). The slower exact-quote search below
+      // can still replace them, and a verse read out in full is promoted there.
+      try {
+        const quickMatches = await this.scriptureEngine.quickQuoteSuggestions(text, boundPassage, options.mode ?? "strict");
+        if (searchId === this.latestSearchId && token === this.sessionToken && this.snapshot.status === "listening") {
+          const quickUsable = quickMatches.filter((match) => match.confidence >= (options.mode === "closest"
+            ? MIN_SILENCE_QUOTE_CONFIDENCE
+            : MIN_LIVE_QUOTE_CONFIDENCE));
+          if (quickUsable.length > 0) {
+            const quickSuggestions = retainSuggestionsUntilReplacement(
+              this.snapshot.suggestions,
+              quickUsable.map((m) => ({ ...m.candidate, detectedAt: Date.now() })),
+            );
+            const quickCandidates = [...this.snapshot.queue, ...quickSuggestions].slice(0, 20);
+            this.snapshot = { ...this.snapshot, suggestions: quickSuggestions, candidates: quickCandidates, latestMatch: quickSuggestions[0] };
+            this.telemetry.lastResultsAt = Date.now();
+            this.pushCandidates();
+          }
+        }
+
+      } catch (quickError) {
+        // Quick suggestions are a bonus; the full search below still runs.
+        console.warn("[LmDockService] Quick suggestions failed:", quickError);
+      }
+
       const quoteMatches = await this.scriptureEngine.searchQuotesWithText(
         text,
         boundPassage,

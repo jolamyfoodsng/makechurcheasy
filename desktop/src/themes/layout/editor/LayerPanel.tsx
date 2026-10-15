@@ -2,7 +2,7 @@
  * LayerPanel — the right-hand panel of the Theme Editor for layer themes:
  * the layers list (top = drawn last) and an inspector for the selected layer.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Eye, EyeOff, Lock, Unlock } from "lucide-react";
 import "./layerEditor.css";
 import type { AnimationPreset, LayerAnimation, LayerStyle, LayerType, SegmentStyle, ThemeLayer, ThemeLayout, WarnLevel } from "../types";
@@ -20,6 +20,8 @@ import {
 } from "./layoutOps";
 import { headingLayers, hasHeading, isHeadingShown } from "../heading";
 import { themeMediaUrl, type MediaRef } from "./mediaUrl";
+import { BACKGROUND_PATTERNS } from "../../../library/backgroundAssets";
+import { PATTERN_GLOW_LAYER_ID, PATTERN_LAYER_ID } from "../backgroundPatterns";
 
 /** A Media Library item, as much as the picker needs. */
 export interface LayerMediaItem extends MediaRef {
@@ -72,27 +74,53 @@ interface Props {
   mediaItems?: LayerMediaItem[];
   /** Preview address for a library item in the app. */
   mediaPreviewSrc?: (item: LayerMediaItem) => string;
+  /** Save a picture or video from this computer into the Media Library (the list then refreshes). */
+  onImportMedia?: (file: File) => Promise<void> | void;
 }
 
-type BgKind = "colour" | "image" | "video";
+type BgKind = "colour" | "image" | "video" | "pattern";
 
-/** Colour / picture / video (Media Library) and darkness for a box — e.g. the theme background. */
-function BoxBackground({ layer, onStyle, mediaItems, mediaPreviewSrc }: {
+const BG_KIND_LABEL: Record<BgKind, string> = { colour: "Colour", image: "Picture", video: "Video", pattern: "Pattern" };
+
+/** The theme's own background: the first big box that is not the animated pattern or glow. */
+export function findThemeBackground(layout: ThemeLayout): ThemeLayer | null {
+  return layout.layers.find((l) => (
+    l.type === "box"
+    && !l.parentId
+    && l.id !== PATTERN_LAYER_ID
+    && l.id !== PATTERN_GLOW_LAYER_ID
+    && l.w >= 1728
+    && typeof l.h === "number" && l.h >= 972
+    && Boolean(l.style.fill || l.style.gradient || l.style.src || l.style.videoSrc)
+  )) ?? null;
+}
+
+/** Colour / picture / video / pattern and darkness for a box — e.g. the theme background. */
+function BoxBackground({ layer, onStyle, mediaItems, mediaPreviewSrc, onImportMedia }: {
   layer: ThemeLayer;
   onStyle: (patch: Partial<ThemeLayer["style"]>) => void;
   mediaItems: LayerMediaItem[];
   mediaPreviewSrc: (item: LayerMediaItem) => string;
+  onImportMedia?: (file: File) => Promise<void> | void;
 }) {
   const s = layer.style;
-  const kind: BgKind = s.videoSrc ? "video" : s.src ? "image" : "colour";
+  const isPattern = Boolean(s.src) && !s.videoSrc && BACKGROUND_PATTERNS.some((p) => p.src === s.src);
+  const kind: BgKind = s.videoSrc ? "video" : isPattern ? "pattern" : s.src ? "image" : "colour";
   const [picking, setPicking] = useState<BgKind | null>(null);
+  const [importing, setImporting] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const shown: BgKind = picking ?? kind;
   const items = mediaItems.filter((m) => m.type === (shown === "video" ? "video" : "image"));
   const current = shown === "video" ? s.videoSrc : s.src;
+  const importFile = async (file: File | undefined) => {
+    if (!file || !onImportMedia) return;
+    setImporting(true);
+    try { await onImportMedia(file); } finally { setImporting(false); if (fileRef.current) fileRef.current.value = ""; }
+  };
   return (
     <>
       <div className="le-chips">
-        {(["colour", "image", "video"] as BgKind[]).map((k) => (
+        {(["colour", "image", "video", "pattern"] as BgKind[]).map((k) => (
           <button
             key={k}
             type="button"
@@ -102,17 +130,36 @@ function BoxBackground({ layer, onStyle, mediaItems, mediaPreviewSrc }: {
               if (k === "colour") { onStyle({ src: undefined, videoSrc: undefined, dim: undefined }); setPicking(null); }
             }}
           >
-            {k === "colour" ? "Colour" : k === "image" ? "Picture" : "Video"}
+            {BG_KIND_LABEL[k]}
           </button>
         ))}
       </div>
       <ColorField label={shown === "colour" ? "Fill" : "Colour under it"} value={s.gradient ? undefined : s.fill} allowNone onChange={(v) => onStyle({ fill: v, gradient: undefined })} />
       {s.gradient && <p className="le-hint">This layer uses a gradient. Picking a fill colour replaces it.</p>}
-      {shown !== "colour" && (
+      {shown === "pattern" && (
+        <>
+          <div className="le-field"><span>Patterns</span></div>
+          <div className="le-media-grid">
+            {BACKGROUND_PATTERNS.map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                className={`le-media${s.src === p.src && !s.videoSrc ? " le-media--on" : ""}`}
+                title={p.label}
+                onClick={() => { setPicking(null); onStyle({ src: p.src, videoSrc: undefined, fit: "cover" }); }}
+              >
+                <img src={p.src} alt={p.label} />
+                <span>{p.label}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {(shown === "image" || shown === "video") && (
         <>
           <div className="le-field"><span>From your Media Library</span></div>
           {items.length === 0 ? (
-            <p className="le-hint">No {shown === "video" ? "videos" : "pictures"} in your Media Library yet. Add some in Library → Media, then come back.</p>
+            <p className="le-hint">No {shown === "video" ? "videos" : "pictures"} in your Media Library yet.{onImportMedia ? " Add one with the button below." : " Add some in Library → Media, then come back."}</p>
           ) : (
             <div className="le-media-grid">
               {items.map((item) => {
@@ -140,25 +187,33 @@ function BoxBackground({ layer, onStyle, mediaItems, mediaPreviewSrc }: {
               })}
             </div>
           )}
+          {onImportMedia && (
+            <>
+              <button type="button" className="le-btn" disabled={importing} onClick={() => fileRef.current?.click()}>
+                {importing ? "Adding…" : shown === "video" ? "Add a video from this computer" : "Add a picture from this computer"}
+              </button>
+              <input ref={fileRef} type="file" accept={shown === "video" ? "video/*" : "image/*"} style={{ display: "none" }} onChange={(e) => void importFile(e.target.files?.[0])} />
+            </>
+          )}
           {shown === "image" && (
             <label className="le-field">
               <span>Or a picture address</span>
-              <input className="tc-input" value={s.src ?? ""} placeholder="https://…" onChange={(e) => { setPicking(null); onStyle({ src: e.target.value.trim() || undefined, videoSrc: undefined }); }} />
+              <input className="tc-input" value={isPattern ? "" : s.src ?? ""} placeholder="https://…" onChange={(e) => { setPicking(null); onStyle({ src: e.target.value.trim() || undefined, videoSrc: undefined }); }} />
             </label>
           )}
-          {kind !== "colour" && (
-            <>
-              <div className="le-chips">
-                {(["cover", "contain", "fill"] as const).map((f) => (
-                  <button key={f} type="button" className={`le-chip${(s.fit ?? "cover") === f ? " le-chip--on" : ""}`} onClick={() => onStyle({ fit: f })}>{f === "cover" ? "Fill area" : f === "contain" ? "Fit inside" : "Stretch"}</button>
-                ))}
-              </div>
-              <label className="le-field">
-                <span>Darkness {Math.round(s.dim ?? 0)}%</span>
-                <input type="range" min={0} max={90} step={5} value={s.dim ?? 0} onChange={(e) => onStyle({ dim: Number(e.target.value) || undefined })} />
-              </label>
-            </>
-          )}
+        </>
+      )}
+      {shown !== "colour" && kind !== "colour" && (
+        <>
+          <div className="le-chips">
+            {(["cover", "contain", "fill"] as const).map((f) => (
+              <button key={f} type="button" className={`le-chip${(s.fit ?? "cover") === f ? " le-chip--on" : ""}`} onClick={() => onStyle({ fit: f })}>{f === "cover" ? "Fill area" : f === "contain" ? "Fit inside" : "Stretch"}</button>
+            ))}
+          </div>
+          <label className="le-field">
+            <span>Darkness {Math.round(s.dim ?? 0)}%</span>
+            <input type="range" min={0} max={90} step={5} value={s.dim ?? 0} onChange={(e) => onStyle({ dim: Number(e.target.value) || undefined })} />
+          </label>
         </>
       )}
     </>
@@ -322,12 +377,13 @@ function TimerBoxControls({ s, onStyle }: { s: LayerStyle; onStyle: StylePatch }
   );
 }
 
-export default function LayerPanel({ layout, selectedId, onSelect, onChange, mediaItems = [], mediaPreviewSrc = (item) => item.url || "" }: Props) {
+export default function LayerPanel({ layout, selectedId, onSelect, onChange, mediaItems = [], mediaPreviewSrc = (item) => item.url || "", onImportMedia }: Props) {
   const isCountdown = layout.kind === "countdown";
   const roles = isCountdown ? COUNTDOWN_TEXT_ROLES : TEXT_ROLES;
   const fonts = isCountdown ? COUNTDOWN_FONTS : FONTS;
   const [addOpen, setAddOpen] = useState(false);
   const layer = getLayer(layout, selectedId);
+  const themeBg = findThemeBackground(layout);
   const ordered = [...layout.layers].reverse(); // top of the list = drawn on top
   const set = (patch: Partial<ThemeLayer>) => layer && onChange(updateLayer(layout, layer.id, patch));
   const style = (patch: Partial<ThemeLayer["style"]>) => layer && onChange(updateLayerStyle(layout, layer.id, patch));
@@ -352,6 +408,20 @@ export default function LayerPanel({ layout, selectedId, onSelect, onChange, med
 
   return (
     <div className="le-panel">
+      {themeBg && (
+        <div className="le-section le-themebg">
+          <span className="tc-inspector-section-title" style={{ margin: 0 }}>THEME BACKGROUND</span>
+          <p className="le-hint">What is behind the words: a colour, a picture, a video or a pattern.</p>
+          <BoxBackground
+            key={themeBg.id}
+            layer={themeBg}
+            onStyle={(patch) => onChange(updateLayerStyle(layout, themeBg.id, patch))}
+            mediaItems={mediaItems}
+            mediaPreviewSrc={mediaPreviewSrc}
+            onImportMedia={onImportMedia}
+          />
+        </div>
+      )}
       <div className="le-section">
         <div className="le-section-head">
           <span className="tc-inspector-section-title" style={{ margin: 0 }}>LAYERS</span>
@@ -582,8 +652,10 @@ export default function LayerPanel({ layout, selectedId, onSelect, onChange, med
           {layer.type !== "image" && (
             <>
               <div className="le-subtitle">{layer.type === "text" ? "Background behind the text" : layer.type === "box" ? "Background" : "Fill"}</div>
-              {layer.type === "box" ? (
-                <BoxBackground layer={layer} onStyle={style} mediaItems={mediaItems} mediaPreviewSrc={mediaPreviewSrc} />
+              {layer.type === "box" && themeBg && layer.id === themeBg.id ? (
+                <p className="le-hint">This is the theme background. Change it in the Theme background box at the top.</p>
+              ) : layer.type === "box" ? (
+                <BoxBackground layer={layer} onStyle={style} mediaItems={mediaItems} mediaPreviewSrc={mediaPreviewSrc} onImportMedia={onImportMedia} />
               ) : (
                 <>
                   <ColorField label="Fill" value={s.gradient ? undefined : s.fill} allowNone onChange={(v) => style({ fill: v, gradient: undefined })} />

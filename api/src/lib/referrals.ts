@@ -33,6 +33,8 @@ export interface ReferralListItem {
 export interface ReferralDashboard {
   code: string;
   promptSkippedAt: string | null;
+  /** True while this account still has to enter a referral code (new Google sign-ups). */
+  referralRequired: boolean;
   referredBy: {
     code: string;
     referrerUserId: string;
@@ -168,7 +170,7 @@ export async function getReferralDashboard(userId: string): Promise<ReferralDash
 
   const user = await db.collection("users").findOne(
     { _id: userObjectId },
-    { projection: { referredBy: 1, referralPromptSkippedAt: 1 } },
+    { projection: { referredBy: 1, referralPromptSkippedAt: 1, referralRequired: 1 } },
   );
 
   const referrals = await db
@@ -204,6 +206,7 @@ export async function getReferralDashboard(userId: string): Promise<ReferralDash
   return {
     code,
     promptSkippedAt: user?.referralPromptSkippedAt || null,
+    referralRequired: Boolean(user?.referralRequired) && !user?.referredBy,
     referredBy: user?.referredBy || null,
     stats: {
       totalSignups,
@@ -213,6 +216,41 @@ export async function getReferralDashboard(userId: string): Promise<ReferralDash
     },
     referrals: referrals.map((referral) => referralItemFromDoc(referral, usersById)),
   };
+}
+
+export interface ReferralCodeCheck {
+  valid: boolean;
+  code: string;
+  /** Why it is not valid, written for the person typing it. */
+  error?: string;
+}
+
+/**
+ * Checks a referral code without using it. Used on the signup form and the "Have a referral code?"
+ * page so a wrong code is reported under the input before anything is created.
+ */
+export async function validateReferralCode(
+  rawCode: unknown,
+  options: { excludeUserId?: string } = {},
+): Promise<ReferralCodeCheck> {
+  const code = normalizeReferralCode(rawCode);
+  if (!code) return { valid: false, code, error: "Enter a referral code" };
+  if (code.length < 6 || code.length > 16) {
+    return { valid: false, code, error: "This referral code isn't valid. Check it and try again." };
+  }
+
+  const client = await clientPromise;
+  const referrer = await client
+    .db()
+    .collection("users")
+    .findOne({ referralCode: code }, { projection: { _id: 1 } });
+  if (!referrer?._id) {
+    return { valid: false, code, error: "This referral code isn't valid. Check it and try again." };
+  }
+  if (options.excludeUserId && referrer._id.toString() === options.excludeUserId) {
+    return { valid: false, code, error: "You cannot use your own referral code" };
+  }
+  return { valid: true, code };
 }
 
 export async function applyReferralCode(
@@ -309,7 +347,7 @@ export async function applyReferralCode(
           appliedAt: now,
         },
       },
-      $unset: { referralPromptSkippedAt: "" },
+      $unset: { referralPromptSkippedAt: "", referralRequired: "" },
     },
   );
 
@@ -347,6 +385,8 @@ export async function dismissReferralPrompt(userId: string): Promise<string> {
   const now = new Date().toISOString();
   const client = await clientPromise;
   const db = client.db();
+  const flagged = await db.collection("users").findOne({ _id: userObjectId }, { projection: { referralRequired: 1 } });
+  if (flagged?.referralRequired) throw new Error("A referral code is required to continue");
   await db
     .collection("users")
     .updateOne({ _id: userObjectId }, { $set: { referralPromptSkippedAt: now } });
@@ -541,7 +581,7 @@ export async function adminAssignReferral(params: {
           appliedAt: now,
         },
       },
-      $unset: { referralPromptSkippedAt: "" },
+      $unset: { referralPromptSkippedAt: "", referralRequired: "" },
     }
   );
 

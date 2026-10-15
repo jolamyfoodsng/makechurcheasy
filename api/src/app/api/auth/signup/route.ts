@@ -12,7 +12,7 @@ import { sendEmail, verificationCodeEmail } from "@/lib/emailTemplates";
 import { setAuthCookieOnResponse } from "@/lib/auth";
 import { isKnownCountryCode, normalizeCountryCode } from "@/lib/countryNormalization";
 import { getPlatformSettings } from "@/lib/platformSettings";
-import { applyReferralCode } from "@/lib/referrals";
+import { applyReferralCode, normalizeReferralCode, validateReferralCode } from "@/lib/referrals";
 import { detectRequestCountry, resolveSignupLanguage } from "@/lib/signupDefaults";
 import { notifyTelegramNewSignup } from "@/lib/telegramNotifications";
 
@@ -49,6 +49,19 @@ export async function POST(req: NextRequest) {
         { error: "Name, email, and password are required" },
         { status: 400 }
       );
+    }
+
+    // A referral code is optional, but one that was typed or came in the link must be real. Say so
+    // now, next to the field, instead of creating the account and quietly ignoring the code.
+    const submittedReferralCode = normalizeReferralCode(referralCode);
+    if (submittedReferralCode) {
+      const check = await validateReferralCode(submittedReferralCode);
+      if (!check.valid) {
+        return NextResponse.json(
+          { error: check.error || "This referral code isn't valid.", field: "referralCode" },
+          { status: 400 },
+        );
+      }
     }
 
     const client = await clientPromise;
@@ -164,9 +177,9 @@ export async function POST(req: NextRequest) {
       source: "Website signup",
     });
 
-    if (referralCode) {
+    if (submittedReferralCode) {
       try {
-        await applyReferralCode(newUserId, referralCode);
+        await applyReferralCode(newUserId, submittedReferralCode);
       } catch (err: any) {
         console.warn("[signup] Referral code was not applied:", err?.message || err);
       }

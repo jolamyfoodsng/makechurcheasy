@@ -18,7 +18,7 @@
   --green-text: #4ade80;
   --yellow-text: #facc15;
 
-  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-user, 'Inter', ui-sans-serif, system-ui, sans-serif);
 }
 
 * {

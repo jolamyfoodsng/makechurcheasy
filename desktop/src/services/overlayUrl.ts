@@ -186,6 +186,28 @@ export async function getOverlayBaseUrl(): Promise<string> {
 }
 
 /**
+ * Same server, this computer's own address (127.0.0.1). The cached base can be the Wi-Fi
+ * address (for OBS on another laptop); the desktop webview won't load or post to that plain-http
+ * address from inside the app, so in-app previews must use loopback.
+ */
+export function toLoopbackBase(base: string): string {
+  try {
+    const url = new URL(base);
+    if (url.protocol === "http:" && !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
+      url.hostname = "127.0.0.1";
+    }
+    return url.origin;
+  } catch {
+    return base;
+  }
+}
+
+/** Base URL for previews shown INSIDE the app (iframes). Never the Wi-Fi address. */
+export function getInAppPreviewBaseUrlSync(): string {
+  return toLoopbackBase(getOverlayBaseUrlSync());
+}
+
+/**
  * Synchronous getter — returns the cached base URL.
  * Returns window.location.origin if not yet resolved.
  * Call getOverlayBaseUrl() first to ensure it's initialized.

@@ -52,15 +52,20 @@ function getClientIp(req: Request): string {
   return "unknown";
 }
 
+let limiterCount = 0;
+
 export function rateLimit(config?: RateLimitConfig) {
   const windowMs = config?.windowMs ?? 60_000;
   const max = config?.max ?? 30;
+  // Each limiter counts on its own, so a busy endpoint (like the referral code check while someone
+  // types) cannot use up another endpoint's allowance for the same IP.
+  const namespace = ++limiterCount;
 
   return {
     check(req: Request): RateLimitResult {
       const ip = getClientIp(req);
       const now = Date.now();
-      const key = ip;
+      const key = `${namespace}:${ip}`;
       const entry = store.get(key);
 
       if (!entry || now > entry.resetAt) {

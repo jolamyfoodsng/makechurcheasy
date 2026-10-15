@@ -33,7 +33,7 @@ import {
   LT_EXIT_STYLE_LABELS,
 } from "../../lowerthirds/types";
 import type { LTSize, LTFontSize, LTPosition, LTAnimationIn, LTCustomStyle } from "../../lowerthirds/types";
-import { getOverlayBaseUrlSync } from "../../services/overlayUrl";
+import { getInAppPreviewBaseUrlSync } from "../../services/overlayUrl";
 import { buildOverlayUrl } from "../../lowerthirds/lowerThirdObsService";
 import { obsService } from "../../services/obsService";
 import { getDisplaySceneName } from "../../services/obsSceneTargets";
@@ -295,7 +295,8 @@ function usePreviewUrl(
     if (customStyles.heightPx > 0) payload.heightPx = customStyles.heightPx;
     if (customStyles.logoScale > 0) payload.logoScale = customStyles.logoScale;
     const encoded = encodeURIComponent(JSON.stringify(payload));
-    return getOverlayBaseUrlSync() + "/lower-third-overlay.html#data=" + encoded;
+    // In-app preview iframe: this computer's address (the Wi-Fi one shows a white box in the app).
+    return getInAppPreviewBaseUrlSync() + "/lower-third-overlay.html#data=" + encoded;
   }, [theme, values, size, fontSize, position, customX, customY, animationIn, customStyles, brandingSettings]);
 }
 

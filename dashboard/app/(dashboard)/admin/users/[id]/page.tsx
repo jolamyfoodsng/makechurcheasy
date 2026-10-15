@@ -238,6 +238,7 @@ interface UserDetail {
   twoFactorEnabled?: boolean;
   referralCode?: string;
   referredBy?: string;
+  referredByName?: string;
   lastIp?: string;
   role: string;
   accountStatus?: "active" | "suspended";
@@ -2322,7 +2323,7 @@ export default function AdminUserDetailPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1">
             <InfoRow label="Referral code" value={user.referralCode || "—"} />
-            <InfoRow label="Referred by" value={typeof user.referredBy === "string" ? (user.referredBy || "Direct / None") : String((user.referredBy as unknown as { code?: string } | null)?.code || "Direct / None")} />
+            <InfoRow label="Referred by" value={(() => { const code = typeof user.referredBy === "string" ? user.referredBy : String((user.referredBy as unknown as { code?: string } | null)?.code || ""); if (!code) return "Direct / None"; return user.referredByName ? `${user.referredByName} · ${code}` : code; })()} />
             <InfoRow label="IP Address" value={user.lastIp || "—"} />
             <InfoRow
               label={t('common.signedUp')}

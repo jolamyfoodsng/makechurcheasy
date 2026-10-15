@@ -175,3 +175,45 @@ describe("scripture engine conversations", () => {
     expect((await engine.searchQuotesWithText(text))[0]?.candidate).toMatchObject({ book, chapter, verse });
   });
 });
+
+describe("keyword index suggestions (no AI, fast)", () => {
+  const FAMOUS_GOOD = ["Psalms 34:8", "Psalms 100:5", "Psalms 136:1", "Psalms 107:1", "1 Chronicles 16:34", "Nahum 1:7"];
+  const label = (m: { candidate: { book: string; chapter: number; verse: number } }) =>
+    `${m.candidate.book} ${m.candidate.chapter}:${m.candidate.verse}`;
+
+  it("suggests verses when the pastor does not use the King James wording", async () => {
+    vi.mocked(loadBibleEmbeddings).mockClear();
+    const engine = new ScriptureDetectionEngine();
+    const matches = await engine.quickQuoteSuggestions("God has been so good");
+    expect(matches.length).toBeGreaterThanOrEqual(3);
+    expect(matches.some((m) => FAMOUS_GOOD.includes(label(m)))).toBe(true);
+    // Suggestions only: never confident enough to project on their own.
+    expect(matches.every((m) => m.candidate.source === "fuzzy" && m.confidence < 0.9)).toBe(true);
+    expect(loadBibleEmbeddings).not.toHaveBeenCalled();
+  }, 30_000);
+
+  it("finds the verse for modern wording of a famous passage", async () => {
+    const engine = new ScriptureDetectionEngine();
+    const matches = await engine.quickQuoteSuggestions("the Lord is my shepherd and I will not lack anything");
+    expect(label(matches[0])).toBe("Psalms 23:1");
+  }, 30_000);
+
+  it("answers in well under 100 ms once the index is built", async () => {
+    const engine = new ScriptureDetectionEngine();
+    await engine.quickQuoteSuggestions("God is good");
+    const started = performance.now();
+    await engine.quickQuoteSuggestions("don't worry about anything but pray about everything");
+    expect(performance.now() - started).toBeLessThan(100);
+  }, 30_000);
+
+  it("fills in suggestions from the index when the exact-quote search finds little", async () => {
+    const engine = new ScriptureDetectionEngine();
+    const matches = await engine.searchQuotesWithText("don't be anxious about anything", undefined, { mode: "closest" });
+    expect(matches.map(label)).toEqual(expect.arrayContaining(["Philippians 4:6"]));
+  }, 60_000);
+
+  it("ignores ordinary sermon chatter", async () => {
+    const engine = new ScriptureDetectionEngine();
+    expect(await engine.quickQuoteSuggestions("you know what I mean church")).toEqual([]);
+  }, 30_000);
+});

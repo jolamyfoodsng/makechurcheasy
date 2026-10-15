@@ -433,6 +433,8 @@ export interface UserProfile {
     appliedAt: string;
   } | null;
   referralPromptSkippedAt?: string | null;
+  /** New Google accounts that arrived without a referral code must enter one before using the dashboard. */
+  referralRequired?: boolean;
   onboardingCompleted?: boolean;
   /** Guided onboarding milestones — downloadedStudio is set server-side by downloads API */
   onboarding?: {

@@ -28,6 +28,8 @@ import {
 } from "./scriptureParser";
 import { getVerse, getVerseCount, getChapterCount } from "../bible/bibleData";
 import { resolveScriptureProjection } from "./scriptureProjection";
+import { getReadyQuoteIndex, warmQuoteIndex } from "../bible/quoteIndexStore";
+import { isVerbatimLikely, quoteHitConfidence, searchQuoteIndex, type QuoteHit } from "../bible/quoteIndex";
 import type { VoiceBibleCandidate } from "./voiceBibleTypes";
 
 type BibleDataModule = typeof import("../bible/bibleData");
@@ -223,6 +225,21 @@ const MIN_FUZZY_QUOTE_GAP = 0.06;
 const CLOSEST_QUOTE_SEARCH_MIN_SCORE = 0.08;
 const MIN_CLOSEST_QUOTE_SCORE = 0.08;
 const MIN_UNSCOPED_CLOSEST_QUOTE_SCORE = 0.08;
+
+/**
+ * Semantic (embedding) quote search is switched off: it needs a very large model file, is slow, and
+ * the plain keyword index (`bible/quoteIndex.ts`) finds paraphrases faster. Flip to true to restore it.
+ */
+const ENABLE_SEMANTIC_QUOTE_SEARCH = false;
+
+/** Lowest index score a live (strict) search will show. */
+const STRICT_INDEX_MIN_SCORE = 0.7;
+/** The exact-quote search's own list is kept as is when it has at least this many verses. */
+const INDEX_FILL_BELOW = 3;
+/** The most index suggestions offered for one sentence. */
+const INDEX_SUGGESTION_LIMIT = 6;
+/** How long a search may wait for the index to finish building the first time. */
+const INDEX_BUILD_WAIT_MS = 1500;
 
 /** Score decay factor per update cycle for unreinforced candidates */
 const CANDIDATE_DECAY_FACTOR = 0.98;
@@ -448,6 +465,23 @@ function fastKeywordMatch(speech: string): { book: string; chapter: number; vers
   return bestMatch;
 }
 
+interface IndexSearchOutcome {
+  matches: ScriptureMatch[];
+  top: QuoteHit | null;
+  verbatimLikely: boolean;
+}
+
+/** Combine two result lists: one entry per verse (the more confident one), best first. */
+function mergeQuoteMatches(primary: ScriptureMatch[], secondary: ScriptureMatch[]): ScriptureMatch[] {
+  const byVerse = new Map<string, ScriptureMatch>();
+  for (const match of [...primary, ...secondary]) {
+    const key = `${match.candidate.book}|${match.candidate.chapter}|${match.candidate.verse}`;
+    const existing = byVerse.get(key);
+    if (!existing || match.confidence > existing.confidence) byVerse.set(key, match);
+  }
+  return [...byVerse.values()].sort((a, b) => b.confidence - a.confidence).slice(0, 8);
+}
+
 export class ScriptureDetectionEngine {
   private context: ScriptureContext = createScriptureContext();
   private translation = "KJV";
@@ -490,6 +524,9 @@ export class ScriptureDetectionEngine {
    * lower-RAM laptops.
    */
   async preload(options: { includeEmbeddings?: boolean } = {}): Promise<void> {
+    // The quote index is small and builds in under a second; start it first so the very first
+    // sentence already gets suggestions.
+    void warmQuoteIndex(this.translation);
     try {
       if (!this.bibleDataLoaded) {
         this.bibleDataLoadPromise ??= (async () => {
@@ -935,6 +972,117 @@ export class ScriptureDetectionEngine {
     signal: AbortSignal,
     options: QuoteSearchOptions = {},
   ): Promise<ScriptureMatch[]> {
+    if (searchInput.length < MIN_QUOTE_LENGTH || signal.aborted) return [];
+
+    // 1) Plain keyword index: a few milliseconds, understands paraphrase and King James wording.
+    const mode: QuoteSearchMode = options.mode === "closest" ? "closest" : "strict";
+    let indexed: IndexSearchOutcome | null = null;
+    try {
+      indexed = await this.searchQuoteIndexMatches(searchInput, searchScope, mode);
+    } catch (err) {
+      console.warn("[ScriptureEngine] Quote index search failed:", err);
+    }
+    if (signal.aborted) return [];
+
+    // 2) Exact-quote / alias / lexical search (slower, and the one that recognises a verse read out
+    //    word for word with a confident match). When it finds a few verses, those are the answer;
+    //    when it finds little or nothing, the index's suggestions fill in.
+    const legacy = await this.runExactQuoteSearchPipeline(searchInput, searchScope, signal, options);
+    if (signal.aborted) return [];
+    // Live (strict) searches stay conservative: the index only speaks when the exact-quote search is
+    // silent and the index match is strong. The final-sentence ("closest") search is the generous one.
+    if (mode === "strict") return legacy.length > 0 ? legacy : (indexed?.matches ?? []);
+    if (legacy.length >= INDEX_FILL_BELOW) return legacy;
+    return mergeQuoteMatches(legacy, indexed?.matches ?? []);
+  }
+
+  /**
+   * Fast suggestions for a spoken sentence: only the keyword index, no waiting for the slower
+   * exact-quote search. Returns [] while the index is still building.
+   */
+  async quickQuoteSuggestions(
+    text: string,
+    scope?: QuoteSearchScope,
+    mode: QuoteSearchMode = "closest",
+  ): Promise<ScriptureMatch[]> {
+    const searchInput = text.trim();
+    if (searchInput.length < MIN_QUOTE_LENGTH) return [];
+    const searchScope = normalizeQuoteSearchScope(scope) ?? this.getBoundPassage() ?? undefined;
+    try {
+      return (await this.searchQuoteIndexMatches(searchInput, searchScope, mode))?.matches ?? [];
+    } catch (err) {
+      console.warn("[ScriptureEngine] Quick suggestions failed:", err);
+      return [];
+    }
+  }
+
+  /** Search the keyword index and turn the hits into suggestions. */
+  private async searchQuoteIndexMatches(
+    searchInput: string,
+    searchScope: { book: string; chapter?: number } | undefined,
+    mode: QuoteSearchMode,
+  ): Promise<IndexSearchOutcome | null> {
+    let index = getReadyQuoteIndex(this.translation);
+    if (!index) {
+      index = await Promise.race([
+        warmQuoteIndex(this.translation),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), INDEX_BUILD_WAIT_MS)),
+      ]);
+    }
+    if (!index) return null;
+
+    const pool: QuoteHit[] = searchQuoteIndex(index, searchInput, { limit: INDEX_SUGGESTION_LIMIT + 2 });
+    if (searchScope) {
+      // The chapter being preached from gets a small lift; a verse elsewhere must be a clearly better fit.
+      const inScope = searchQuoteIndex(index, searchInput, { limit: INDEX_SUGGESTION_LIMIT, scope: searchScope });
+      const seen = new Set(inScope.map((hit) => `${hit.book}|${hit.chapter}|${hit.verse}`));
+      for (const hit of inScope) hit.score = Math.min(1, hit.score + 0.08);
+      const outside = pool.filter(
+        (hit) => !seen.has(`${hit.book}|${hit.chapter}|${hit.verse}`) &&
+          !matchesQuoteSearchScope(hit.book, hit.chapter, searchScope) && hit.score >= 0.6,
+      );
+      pool.length = 0;
+      pool.push(...inScope, ...outside);
+      pool.sort((a, b) => b.score - a.score);
+    }
+
+    // Live (strict) searches only trust a strong match built on several matched words.
+    const hits = pool
+      .filter((hit) => mode === "closest" || (hit.score >= STRICT_INDEX_MIN_SCORE && hit.matched.length >= 3))
+      .slice(0, INDEX_SUGGESTION_LIMIT);
+    if (hits.length === 0) return { matches: [], top: null, verbatimLikely: false };
+
+    const matches: ScriptureMatch[] = hits.map((hit) => {
+      const confidence = quoteHitConfidence(hit);
+      return {
+        candidate: {
+          book: hit.book,
+          chapter: hit.chapter,
+          verse: hit.verse,
+          translation: this.translation,
+          label: `${hit.book} ${hit.chapter}:${hit.verse}`,
+          snippet: hit.text,
+          confidence,
+          // "fuzzy" = "Possible match": shown as a suggestion, never projected automatically.
+          source: "fuzzy" as const,
+        },
+        source: "quote" as const,
+        confidence,
+      };
+    });
+    return { matches, top: hits[0], verbatimLikely: isVerbatimLikely(hits[0]) };
+  }
+
+  /**
+   * Exact-quote search: fast keyword → lexical corpus search → verse alias → fuzzy.
+   * Slower than the index (hundreds of ms) but it is the one that recognises verses read out in full.
+   */
+  private async runExactQuoteSearchPipeline(
+    searchInput: string,
+    searchScope: { book: string; chapter?: number } | undefined,
+    signal: AbortSignal,
+    options: QuoteSearchOptions = {},
+  ): Promise<ScriptureMatch[]> {
 
     if (searchInput.length < MIN_QUOTE_LENGTH) return [];
     if (signal.aborted) return [];
@@ -1118,13 +1266,13 @@ export class ScriptureDetectionEngine {
     //   minScore = 0.15 — permissive threshold; the reranker handles precision
     // ────────────────────────────────────────────────────────────────────────
 
-    if (!quoteThresholds.allowSemanticSearch) {
+    if (ENABLE_SEMANTIC_QUOTE_SEARCH && !quoteThresholds.allowSemanticSearch) {
       return useClosestFallback
         ? this.buildClosestQuoteMatches(rankedSearchResults, quoteProfile, searchScope)
         : [];
     }
 
-    try {
+    if (ENABLE_SEMANTIC_QUOTE_SEARCH) try {
       const { hasEmbeddings, loadBibleEmbeddings, searchByEmbedding } = await loadBibleEmbeddingsModule();
       const { rerankCandidates } = await loadScriptureRerankerModule();
       if (signal.aborted) return [];

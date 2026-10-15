@@ -23,6 +23,7 @@ export function songSlides(song: Song): DeckSlide[] {
     reference: "",
     itemTitle: song.metadata.title,
     tone: slide.type,
+    origin: { kind: "song" as const, id: song.id, index },
   }));
 }
 
@@ -32,19 +33,28 @@ export function mediaPath(item: MediaItem): string {
   return (item.url || "").replace(/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/i, "");
 }
 
-export function mediaSlide(item: MediaItem): DeckSlide | null {
-  if (item.type !== "image" && item.type !== "video") return null;
+/** A rendered PDF / Word / PowerPoint page (they live in the media library as pictures). */
+export function isDocumentPage(item: MediaItem): boolean {
+  return Boolean(item.documentId) || item.source === "document-conversion";
+}
+
+export function mediaSlide(item: MediaItem, fit?: "contain" | "cover"): DeckSlide | null {
+  if (item.type !== "image" && item.type !== "video" && item.type !== "audio") return null;
   const url = mediaPath(item);
   if (!url) return null;
+  const doc = isDocumentPage(item);
+  const label = item.type === "video" ? "Video" : item.type === "audio" ? "Sound" : doc ? `Page ${item.documentPageNumber ?? 1}` : "Picture";
   return {
     key: `media:${item.id}`,
     module: "media",
-    label: item.type === "video" ? "Video" : "Picture",
+    label,
     text: "",
     reference: "",
-    itemTitle: item.name,
+    itemTitle: doc ? (item.documentSourceName || item.name) : item.name,
     thumb: item.thumbnailUrl || (item.type === "image" ? url : undefined),
-    media: { kind: item.type, url, fit: "cover", loop: true, muted: false },
+    // Document pages are shown whole; pictures and videos fill the screen (as before).
+    media: { kind: item.type, url, fit: fit ?? (doc ? "contain" : "cover"), loop: item.type !== "audio", muted: false },
+    origin: { kind: doc ? "doc" : "media", id: item.id, index: doc ? (item.documentPageNumber ?? 1) - 1 : undefined },
   };
 }
 

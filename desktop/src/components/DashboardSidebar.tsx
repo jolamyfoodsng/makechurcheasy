@@ -802,9 +802,8 @@ export default function DashboardSidebar({
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <button
                 type="button"
-                className="end-confirm-btn-cancel"
+                className="support-modal-done"
                 onClick={() => setShowSupportModal(false)}
-                style={{ width: "100%", justifyContent: "center" }}
               >
                 Done
               </button>

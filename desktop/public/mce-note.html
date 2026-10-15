@@ -14,15 +14,22 @@
       function fit() {
         stage = stage || document.getElementById('overlay-stage');
         if (!stage) return;
+        var vw0 = window.innerWidth || document.documentElement.clientWidth || W;
+        var vh0 = window.innerHeight || document.documentElement.clientHeight || H;
+        // A screen taller than 16:9 (16:10, 4:3) gets a taller canvas of the same width, so the page fills the
+        // whole height instead of stopping short; a wider screen keeps the 16:9 canvas centred as before.
+        var HH = Math.max(H, Math.round(W * vh0 / Math.max(1, vw0)));
+        document.documentElement.style.height = HH + 'px';
+        document.body.style.height = HH + 'px';
         stage.style.width = W + 'px';
-        stage.style.height = H + 'px';
+        stage.style.height = HH + 'px';
         stage.style.transformOrigin = '0 0';
         stage.style.position = 'absolute';
         stage.style.top = '0';
         stage.style.left = '0';
         var viewportWidth = window.innerWidth || document.documentElement.clientWidth || W;
         var viewportHeight = window.innerHeight || document.documentElement.clientHeight || H;
-        var s = Math.min(viewportWidth / W, viewportHeight / H);
+        var s = Math.min(viewportWidth / W, viewportHeight / HH);
         stage.style.transform = 'scale(' + Math.max(0.01, s) + ')';
       }
       if (document.readyState === 'loading') {
@@ -247,11 +254,14 @@
       text-shadow: var(--text-shadow);
       paint-order: stroke fill;
       -webkit-text-stroke: var(--outline-width) var(--outline-color);
+      /* Below the text by default (the verse text is order 1); .top moves it above. */
+      order: 2;
     }
 
     #reference.top {
       margin-top: 0;
       margin-bottom: var(--ref-spacing);
+      order: 0;
     }
 
     #reference:empty {
@@ -2338,7 +2348,7 @@
           compareLayout.style.display = 'none';
           verseContainer.classList.remove('is-hidden');
           verseText.innerHTML = safeSupText(sl.text);
-          const rt = typeof sl.reference === 'string' ? sl.reference.trim() : '';
+          const rt = typeof sl.reference === 'string' ? sl.reference.replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').trim() : '';
           reference.textContent = rt;
           reference.style.display = rt ? 'block' : 'none';
         }
@@ -2372,7 +2382,7 @@
           }
           ltRefText.textContent = '';
         } else {
-          ltVerseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.trim() : ''; ltRefText.textContent = rt;
+          ltVerseText.innerHTML = safeSupText(sl.text); const rt = typeof sl.reference === 'string' ? sl.reference.replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').trim() : ''; ltRefText.textContent = rt;
         }
 
         try { applyThemeIfChanged(data.theme || {}, !hasShownOnce, 'lower-third'); } catch (error) { console.error('mce-note-overlay lower-third theme error', error); }

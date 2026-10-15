@@ -23,12 +23,20 @@
     "core:window:allow-destroy",
     "core:window:allow-close",
     "opener:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "x-apple.systempreferences:*" },
+        { "url": "ms-settings:*" }
+      ]
+    },
     "shell:allow-open",
     "store:default",
     "dialog:default",
     "dialog:allow-save",
     "fs:default",
     "fs:allow-write-file",
+    "fs:allow-mkdir",
     {
       "identifier": "fs:scope",
       "allow": [

@@ -10,6 +10,10 @@ export interface ConceptEntry {
 
 export const CONCEPT_INDEX: ConceptEntry[] = [
   {
+    keywords: ["good", "goodness", "kind", "faithful"],
+    verses: ["Psalm 34:8", "Psalm 100:5", "Nahum 1:7", "Psalm 136:1", "1 Chronicles 16:34", "Psalm 107:1", "Psalm 118:1", "Psalm 145:9", "Lamentations 3:25", "Psalm 25:8", "Psalm 27:13", "Psalm 23:6"],
+  },
+  {
     keywords: ["jacob", "esau", "election", "chosen", "predestination", "hated", "hate"],
     verses: ["Romans 9:10", "Romans 9:11", "Romans 9:12", "Romans 9:13", "Malachi 1:2", "Malachi 1:3"],
   },

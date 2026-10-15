@@ -86,10 +86,8 @@ import {
   saveDockOutputFontFamily,
   saveDockOutputFontScale,
 } from "./dockOutputTypography";
-import {
-  downloadDockSession,
-  importDockSessionFromFile,
-} from "./dockSessionTransfer";
+import { importDockSessionFromFile } from "./dockSessionTransfer";
+import { downloadDockSessionBundle } from "./dockSessionBundle";
 import {
   hydrateNativeDockSettings,
   isNativeDockSettingsHydrated,
@@ -573,6 +571,7 @@ function DockPageContent({
   const [dockSessionTransferBusy, setDockSessionTransferBusy] = useState(false);
   const [dockSessionFeedback, setDockSessionFeedback] = useState<{ id: number; message: string; tone: "success" | "error" } | null>(null);
   const dockSessionImportInputRef = useRef<HTMLInputElement | null>(null);
+  const [dockSessionMerge, setDockSessionMerge] = useState(false);
   const dockSessionFeedbackTimerRef = useRef<number | null>(null);
 
   const showDockSaveFeedback = useCallback((message: string) => {
@@ -610,7 +609,7 @@ function DockPageContent({
     if (dockSessionTransferBusy) return;
     setDockSessionTransferBusy(true);
     try {
-      const result = await downloadDockSession();
+      const result = await downloadDockSessionBundle();
       if (result.cancelled) {
         showDockSessionFeedback("Export cancelled.", "error");
         return;
@@ -622,7 +621,11 @@ function DockPageContent({
         : result.usedBrowserDownload
           ? "Downloaded to your browser's Downloads folder."
           : "Saved as a JSON file.";
-      showDockSessionFeedback(`Exported ${sectionCount || result.session.sections.length} Dock sections. ${destination}`);
+      const mediaNote = result.mediaCount > 0
+        ? ` ${result.mediaCount} picture${result.mediaCount === 1 ? "" : "s"}/video${result.mediaCount === 1 ? "" : "s"} included.`
+        : "";
+      const missingNote = result.missingMedia.length > 0 ? ` ${result.missingMedia.length} missing file${result.missingMedia.length === 1 ? "" : "s"} skipped.` : "";
+      showDockSessionFeedback(`Exported ${sectionCount || result.session.sections.length} Dock sections.${mediaNote}${missingNote} ${destination}`);
     } catch (error) {
       console.error("[Dock] Failed to export Dock session:", error);
       showDockSessionFeedback("Could not export the Dock session.", "error");
@@ -638,9 +641,11 @@ function DockPageContent({
 
     setDockSessionTransferBusy(true);
     try {
-      const result = await importDockSessionFromFile(file);
+      const result = await importDockSessionFromFile(file, { merge: dockSessionMerge });
       setShowSettingsMenu(false);
-      showDockSessionFeedback(`Imported ${result.sectionCount} Dock sections. Refreshing the Dock…`);
+      const copied = result.warnings.length > 0 ? ` (${result.warnings.length} note${result.warnings.length === 1 ? "" : "s"}, see console)` : "";
+      if (result.warnings.length > 0) console.warn("[Dock] Session import notes:", result.warnings);
+      showDockSessionFeedback(`Imported ${result.sectionCount} Dock sections${copied}. Refreshing the Dock…`);
       window.setTimeout(() => window.location.reload(), 850);
     } catch (error) {
       console.error("[Dock] Failed to import Dock session:", error);
@@ -648,7 +653,7 @@ function DockPageContent({
     } finally {
       setDockSessionTransferBusy(false);
     }
-  }, [dockSessionTransferBusy, showDockSessionFeedback]);
+  }, [dockSessionMerge, dockSessionTransferBusy, showDockSessionFeedback]);
 
   // ── Global drag-and-drop ──
   const { isDragging, onDrop: registerDropHandler } = useDockDragDrop();
@@ -1230,7 +1235,7 @@ function DockPageContent({
       <input
         ref={dockSessionImportInputRef}
         type="file"
-        accept=".json,application/json"
+        accept=".json,.zip,application/json,application/zip"
         onChange={handleDockSessionImport}
         hidden
         aria-hidden="true"
@@ -1835,7 +1840,7 @@ function DockPageContent({
                       <span>{t('page.dockSession', 'Dock Session')}</span>
                     </span>
                     <span className="dock-session-transfer__desc">
-                      {t('page.dockSessionDesc', 'Move Bible, lyrics, notes, media, Ministry, Multi-View, and appearance in one JSON file.')}
+                      {t('page.dockSessionDesc', 'Move Bible, lyrics, notes, Studio, Ministry, Multi-View, appearance and your pictures and videos in one file.')}
                     </span>
                   </div>
                   <div className="dock-session-transfer__actions">
@@ -1860,7 +1865,10 @@ function DockPageContent({
                       {t('common.import', 'Import')}
                     </button>
                   </div>
-
+                  <label className="dock-session-transfer__hint" style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                    <input type="checkbox" checked={dockSessionMerge} onChange={(e) => setDockSessionMerge(e.target.checked)} />
+                    {t('page.dockSessionMerge', 'Keep what I already have (only add what is missing)')}
+                  </label>
                 </div>
               </div>
             </div>

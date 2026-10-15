@@ -97,3 +97,7 @@
 .le-media img, .le-media video { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 4px; background: #000; }
 .le-media span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .le-media--on { border-color: var(--tc-primary, #6366f1); box-shadow: 0 0 0 1px var(--tc-primary, #6366f1); }
+
+/* Theme background card at the top of the layer panel */
+.le-themebg { display: flex; flex-direction: column; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--tc-outline-variant, #2a3242); }
+.le-themebg > .le-btn { align-self: flex-start; }

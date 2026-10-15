@@ -123,6 +123,7 @@ export interface ReferralListItem {
 export interface ReferralDashboardData {
   code: string;
   promptSkippedAt: string | null;
+  referralRequired?: boolean;
   referredBy: {
     code: string;
     referrerUserId: string;
@@ -969,4 +970,15 @@ export async function adminAdjustUserCredits(
     method: "POST",
     body: JSON.stringify(params),
   });
+}
+
+/** Public check used on signup: does this referral code exist? (Never says who owns it.) */
+export async function validateReferralCode(code: string): Promise<{ valid: boolean; code: string; error?: string }> {
+  const res = await fetch(`/api/referrals/validate?code=${encodeURIComponent(code)}`, { cache: "no-store" });
+  const body = await res.json().catch(() => ({}));
+  // Anything but a clean answer (rate limit, server error) means "couldn't check", not "invalid".
+  if (!res.ok) {
+    throw new ApiError(body.error || `Request failed: ${res.status}`, res.status);
+  }
+  return { valid: Boolean(body.valid), code: String(body.code || code), error: typeof body.error === "string" ? body.error : undefined };
 }

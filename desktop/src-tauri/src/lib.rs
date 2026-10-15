@@ -32,6 +32,7 @@ mod obs_move_plugin;
 mod overlay_relay;
 mod presentation_remote;
 mod sandbox_migration;
+mod studio_camera;
 #[cfg(not(target_os = "macos"))]
 use local_llm_stub as local_llm;
 
@@ -304,9 +305,31 @@ mod app_nap {
     }
 }
 
+/// The app handle, so the local overlay server can open a native "Save as" dialog for pages that
+/// run outside the Tauri webview (the OBS Dock).
+static SAVE_DIALOG_APP: OnceLock<tauri::AppHandle> = OnceLock::new();
+
 static LM_STATE: OnceLock<Mutex<String>> = OnceLock::new();
 /// Presentation Studio program state: (revision, JSON). Written by the app, read by studio-output.html.
 static STUDIO_STATE: OnceLock<Mutex<(u64, String)>> = OnceLock::new();
+/// Presentation Studio live camera: (frame number, newest JPEG). The Studio POSTs frames of the camera
+/// it already has open; studio-output.html (projector window, TV, OBS) GETs the newest one, so the
+/// camera is opened only once (many cameras and capture cards allow a single user).
+static STUDIO_CAMERA_FRAME: OnceLock<Mutex<(u64, Vec<u8>)>> = OnceLock::new();
+
+/// Stores the newest native camera picture where `api/studio-camera` serves it (empty = camera off).
+fn publish_studio_camera_frame(bytes: Vec<u8>) {
+    let frame = STUDIO_CAMERA_FRAME.get_or_init(|| Mutex::new((0, Vec::new())));
+    if let Ok(mut state) = frame.lock() {
+        state.0 += 1;
+        state.1 = bytes;
+    }
+}
+/// When a screen window last asked for a camera picture (the Studio sends fewer while nobody does).
+static STUDIO_CAMERA_WANTED: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
+/// Small mailbox the Studio and the screen windows use to set up the live camera video link:
+/// (last message number, [(number, who it is for, message as JSON text)]).
+static STUDIO_RTC_MAILBOX: OnceLock<Mutex<(u64, Vec<(u64, String, String)>)>> = OnceLock::new();
 /// Live rundown/timer state shared between the OBS Dock (controller) and the
 /// presenter screen (rundown-presenter.html), possibly on another LAN device.
 static RUNDOWN_STATE: OnceLock<Mutex<String>> = OnceLock::new();
@@ -6149,6 +6172,93 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
             // The Dock can run inside OBS's embedded browser, where Blob downloads can
             // create a zero-byte file. Writing through the local server keeps the export
             // reliable in that environment.
+            // Native "Save as" for pages outside the Tauri webview (the OBS Dock). The body is the raw
+            // file; the user picks the folder and name, and we write it there.
+            if clean == "api/save-file-dialog" && request.method() == &tiny_http::Method::Options {
+                let resp = tiny_http::Response::from_string("")
+                    .with_header(overlay_header("Access-Control-Allow-Origin", "*"))
+                    .with_header(overlay_header("Access-Control-Allow-Methods", "POST, OPTIONS"))
+                    .with_header(overlay_header("Access-Control-Allow-Headers", "Content-Type"));
+                let _ = request.respond(resp);
+                continue;
+            }
+
+            if clean == "api/save-file-dialog" && request.method() == &tiny_http::Method::Post {
+                let requested_name = url_path
+                    .find('?')
+                    .and_then(|index| {
+                        url_path[index + 1..]
+                            .split('&')
+                            .find(|part| part.starts_with("filename="))
+                            .map(|part| part[9..].to_string())
+                    })
+                    .map(|value| urlencoding::decode(&value).unwrap_or_default().into_owned())
+                    .unwrap_or_else(|| "makechurch-easy-session.zip".to_string());
+                // The dialog blocks until the user answers, so it gets its own thread and the
+                // overlay server keeps serving everything else meanwhile.
+                std::thread::spawn(move || {
+                    let reply = |status: u16, json: String, request: tiny_http::Request| {
+                        let resp = tiny_http::Response::from_string(json)
+                            .with_status_code(status)
+                            .with_header(overlay_header("Content-Type", "application/json; charset=utf-8"))
+                            .with_header(overlay_header("Access-Control-Allow-Origin", "*"));
+                        let _ = request.respond(resp);
+                    };
+                    let mut request = request;
+                    let mut body: Vec<u8> = Vec::new();
+                    if std::io::Read::read_to_end(request.as_reader(), &mut body).is_err() || body.is_empty() {
+                        reply(400, r#"{"error":"A file body is required"}"#.to_string(), request);
+                        return;
+                    }
+                    let safe_name = match sanitize_filename_for_storage(&requested_name) {
+                        Ok(name) => name,
+                        Err(error) => {
+                            reply(400, serde_json::json!({ "error": error }).to_string(), request);
+                            return;
+                        }
+                    };
+                    let Some(app) = SAVE_DIALOG_APP.get() else {
+                        reply(503, r#"{"error":"The app is not ready to show a save dialog"}"#.to_string(), request);
+                        return;
+                    };
+                    use tauri_plugin_dialog::DialogExt;
+                    let is_zip = safe_name.to_lowercase().ends_with(".zip");
+                    let mut dialog = app.dialog().file().set_file_name(&safe_name);
+                    if let Some(downloads) = dirs::download_dir() {
+                        dialog = dialog.set_directory(downloads);
+                    }
+                    dialog = if is_zip {
+                        dialog.add_filter("Session bundle", &["zip"])
+                    } else {
+                        dialog.add_filter("JSON files", &["json"])
+                    };
+                    let Some(picked) = dialog.blocking_save_file() else {
+                        reply(200, r#"{"cancelled":true}"#.to_string(), request);
+                        return;
+                    };
+                    let path = match picked.into_path() {
+                        Ok(path) => path,
+                        Err(error) => {
+                            reply(500, serde_json::json!({ "error": format!("{}", error) }).to_string(), request);
+                            return;
+                        }
+                    };
+                    match fs::write(&path, &body) {
+                        Ok(()) => reply(
+                            200,
+                            serde_json::json!({ "path": path.to_string_lossy(), "bytes": body.len() }).to_string(),
+                            request,
+                        ),
+                        Err(error) => reply(
+                            500,
+                            serde_json::json!({ "error": format!("Could not save the file: {}", error) }).to_string(),
+                            request,
+                        ),
+                    }
+                });
+                continue;
+            }
+
             if clean == "api/save-dock-session" && request.method() == &tiny_http::Method::Options {
                 let resp = tiny_http::Response::from_string("")
                     .with_header(overlay_header("Access-Control-Allow-Origin", "*"))
@@ -7075,6 +7185,225 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                         let _ = request.respond(resp);
                     }
                 }
+                continue;
+            }
+
+            // API: the Studio camera opened natively (one capture for every window).
+            if clean.starts_with("api/studio-cam/") {
+                studio_camera::handle(request, clean, publish_studio_camera_frame);
+                continue;
+            }
+
+            // API: Presentation Studio camera picture (JPEG frames). POST = the Studio sends its newest
+            // frame (an empty body means the camera is off). GET ?since=<n> = the newest frame, or
+            // 204 when nothing newer than <n> exists. The frame number is in the X-Frame-Seq header.
+            if clean == "api/studio-camera" {
+                let frame = STUDIO_CAMERA_FRAME.get_or_init(|| Mutex::new((0, Vec::new())));
+                let cors =
+                    tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
+
+                if request.method() == &tiny_http::Method::Options {
+                    let resp = tiny_http::Response::from_string("")
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "GET, POST, OPTIONS",
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Headers",
+                                "Content-Type",
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(cors);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                if request.method() == &tiny_http::Method::Post {
+                    let mut body: Vec<u8> = Vec::new();
+                    if request.as_reader().read_to_end(&mut body).is_err() {
+                        let resp =
+                            tiny_http::Response::from_string("Bad Request").with_status_code(400);
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+                    if let Ok(mut state) = frame.lock() {
+                        state.0 += 1;
+                        state.1 = body;
+                    }
+                    let wanted = STUDIO_CAMERA_WANTED
+                        .get_or_init(|| Mutex::new(None))
+                        .lock()
+                        .map(|last| {
+                            last.map(|at| at.elapsed() < Duration::from_secs(2))
+                                .unwrap_or(false)
+                        })
+                        .unwrap_or(false);
+                    let resp = tiny_http::Response::from_string(format!(
+                        r#"{{"ok":true,"wanted":{}}}"#,
+                        wanted
+                    ))
+                    .with_header(cors);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                // GET
+                if let Ok(mut last) = STUDIO_CAMERA_WANTED
+                    .get_or_init(|| Mutex::new(None))
+                    .lock()
+                {
+                    *last = Some(Instant::now());
+                }
+                let since = request.url().split_once('?').and_then(|(_, query)| {
+                    query
+                        .split('&')
+                        .find_map(|pair| pair.strip_prefix("since="))
+                        .and_then(|v| v.parse::<u64>().ok())
+                });
+                let (seq, bytes) = frame
+                    .lock()
+                    .map(|state| match since {
+                        Some(seen) if seen >= state.0 => (state.0, Vec::new()),
+                        _ => (state.0, state.1.clone()),
+                    })
+                    .unwrap_or((0, Vec::new()));
+                let seq_header =
+                    tiny_http::Header::from_bytes("X-Frame-Seq", seq.to_string()).unwrap();
+                let expose = tiny_http::Header::from_bytes(
+                    "Access-Control-Expose-Headers",
+                    "X-Frame-Seq",
+                )
+                .unwrap();
+                let no_store =
+                    tiny_http::Header::from_bytes("Cache-Control", "no-store").unwrap();
+                if bytes.is_empty() {
+                    let resp = tiny_http::Response::from_data(Vec::<u8>::new())
+                        .with_status_code(204)
+                        .with_header(seq_header)
+                        .with_header(expose)
+                        .with_header(cors)
+                        .with_header(no_store);
+                    let _ = request.respond(resp);
+                } else {
+                    let resp = tiny_http::Response::from_data(bytes)
+                        .with_header(
+                            tiny_http::Header::from_bytes("Content-Type", "image/jpeg").unwrap(),
+                        )
+                        .with_header(seq_header)
+                        .with_header(expose)
+                        .with_header(cors)
+                        .with_header(no_store);
+                    let _ = request.respond(resp);
+                }
+                continue;
+            }
+
+            // API: live camera video link. The Studio and each screen window leave short JSON
+            // messages here for each other (offer / answer / network candidates).
+            // POST {"to": "<id>", ...}  stores a message.  GET ?to=<id>&since=<n>  reads them.
+            if clean == "api/studio-rtc" {
+                let mailbox = STUDIO_RTC_MAILBOX.get_or_init(|| Mutex::new((0, Vec::new())));
+                let cors =
+                    tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
+                let json_header = tiny_http::Header::from_bytes(
+                    "Content-Type",
+                    "application/json; charset=utf-8",
+                )
+                .unwrap();
+                let no_store =
+                    tiny_http::Header::from_bytes("Cache-Control", "no-store").unwrap();
+
+                if request.method() == &tiny_http::Method::Options {
+                    let resp = tiny_http::Response::from_string("")
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Methods",
+                                "GET, POST, OPTIONS",
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(
+                            tiny_http::Header::from_bytes(
+                                "Access-Control-Allow-Headers",
+                                "Content-Type",
+                            )
+                            .unwrap(),
+                        )
+                        .with_header(cors);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                if request.method() == &tiny_http::Method::Post {
+                    let mut body = String::new();
+                    if request.as_reader().read_to_string(&mut body).is_err() || body.len() > 200_000
+                    {
+                        let resp =
+                            tiny_http::Response::from_string("Bad Request").with_status_code(400);
+                        let _ = request.respond(resp);
+                        continue;
+                    }
+                    let to = serde_json::from_str::<serde_json::Value>(&body)
+                        .ok()
+                        .and_then(|value| value.get("to").and_then(|v| v.as_str()).map(String::from));
+                    let Some(to) = to else {
+                        let resp =
+                            tiny_http::Response::from_string("Bad Request").with_status_code(400);
+                        let _ = request.respond(resp);
+                        continue;
+                    };
+                    if let Ok(mut state) = mailbox.lock() {
+                        state.0 += 1;
+                        let number = state.0;
+                        state.1.push((number, to, body));
+                        // Keep it small: only recent messages matter.
+                        if state.1.len() > 300 {
+                            let drop = state.1.len() - 300;
+                            state.1.drain(0..drop);
+                        }
+                    }
+                    let resp = tiny_http::Response::from_string(r#"{"ok":true}"#)
+                        .with_header(json_header)
+                        .with_header(cors)
+                        .with_header(no_store);
+                    let _ = request.respond(resp);
+                    continue;
+                }
+
+                // GET
+                let query = request.url().split_once('?').map(|(_, q)| q.to_string()).unwrap_or_default();
+                let mut to = String::new();
+                let mut since: u64 = 0;
+                for pair in query.split('&') {
+                    if let Some(value) = pair.strip_prefix("to=") {
+                        to = urlencoding::decode(value).unwrap_or_default().into_owned();
+                    } else if let Some(value) = pair.strip_prefix("since=") {
+                        since = value.parse::<u64>().unwrap_or(0);
+                    }
+                }
+                let (last, messages) = mailbox
+                    .lock()
+                    .map(|state| {
+                        let list: Vec<String> = state
+                            .1
+                            .iter()
+                            .filter(|(number, target, _)| *number > since && *target == to)
+                            .map(|(_, _, body)| body.clone())
+                            .collect();
+                        (state.0, list)
+                    })
+                    .unwrap_or((0, Vec::new()));
+                let payload = format!(r#"{{"seq":{},"messages":[{}]}}"#, last, messages.join(","));
+                let resp = tiny_http::Response::from_string(payload)
+                    .with_header(json_header)
+                    .with_header(cors)
+                    .with_header(no_store);
+                let _ = request.respond(resp);
                 continue;
             }
 
@@ -8857,6 +9186,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
+            let _ = SAVE_DIALOG_APP.set(app.handle().clone());
             // Resolve the directory where overlay HTML files live.
             //
             // Bundled app:

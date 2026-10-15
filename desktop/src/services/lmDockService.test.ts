@@ -125,7 +125,33 @@ describe("live transcript routing", () => {
     expect(service.getSnapshot().suggestions).toEqual([]);
   });
 
+  it("shows fast keyword suggestions before the slower search finishes, and keeps them if it finds nothing", async () => {
+    const quick: ScriptureMatch = {
+      candidate: { book: "Psalms", chapter: 34, verse: 8, label: "Psalms 34:8", translation: "KJV", snippet: "O taste and see that the LORD is good", confidence: 0.7, source: "fuzzy" },
+      source: "quote", confidence: 0.7,
+    };
+    const slow = deferred<ScriptureMatch[]>();
+    vi.spyOn(harness.scriptureEngine, "quickQuoteSuggestions").mockResolvedValue([quick]);
+    vi.spyOn(harness.scriptureEngine, "searchQuotesWithText").mockReturnValueOnce(slow.promise);
+    harness.queueQuoteSearch("God has been so good to us");
+    await vi.waitFor(() => expect(service.getSnapshot().suggestions).toHaveLength(1));
+    expect(service.getSnapshot().suggestions[0]).toMatchObject({ label: "Psalms 34:8", source: "fuzzy" });
+    slow.resolve([]);
+    await settled();
+    expect(service.getSnapshot().suggestions).toHaveLength(1);
+  });
+
+  it("still runs the full search when the quick suggestions fail", async () => {
+    vi.spyOn(harness.scriptureEngine, "quickQuoteSuggestions").mockRejectedValue(new Error("index unavailable"));
+    const search = vi.spyOn(harness.scriptureEngine, "searchQuotesWithText").mockResolvedValue([match]);
+    harness.queueQuoteSearch("the lord is my shepherd");
+    await settled();
+    expect(search).toHaveBeenCalledTimes(1);
+    expect(service.getSnapshot().suggestions[0]).toMatchObject({ label: "Psalms 23:1" });
+  });
+
   it("invalidates old quote results when the next query is queued", async () => {
+    vi.spyOn(harness.scriptureEngine, "quickQuoteSuggestions").mockResolvedValue([]);
     const old = deferred<ScriptureMatch[]>();
     const next = deferred<ScriptureMatch[]>();
     vi.spyOn(harness.scriptureEngine, "searchQuotesWithText")

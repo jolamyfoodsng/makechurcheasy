@@ -18,7 +18,7 @@ function referralErrorStatus(message: string): number {
   const lower = message.toLowerCase();
   if (lower.includes("not found")) return 404;
   if (lower.includes("own referral") || lower.includes("already")) return 409;
-  if (lower.includes("enter") || lower.includes("invalid")) return 400;
+  if (lower.includes("enter") || lower.includes("invalid") || lower.includes("required")) return 400;
   return 500;
 }
 

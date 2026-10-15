@@ -14,7 +14,7 @@ import { isKnownCountryCode, normalizeCountryCode } from "@/lib/countryNormaliza
 import { detectRequestCountry, resolveSignupLanguage } from "@/lib/signupDefaults";
 import { extractRequestLocation, buildLoginLocationUpdates } from "@/lib/userLocation";
 import { notifyTelegramNewSignup } from "@/lib/telegramNotifications";
-import { applyReferralCode } from "@/lib/referrals";
+import { applyReferralCode, normalizeReferralCode } from "@/lib/referrals";
 
 function appOrigin(appUrl: string): string {
   try {
@@ -186,6 +186,11 @@ export async function GET(req: NextRequest) {
     const signupLanguage = resolveSignupLanguage(req.headers, normalizedCountry || "US");
 
     // Find or create user
+    // New Google accounts that arrive without a (working) referral code are sent to the "Have a
+    // referral code?" page right after sign-up.
+    let createdNewAccount = false;
+    let referralApplied = false;
+    let referralRejected = false;
     let user = await db.collection("users").findOne(
       { "googleAccount.sub": googleUser.id },
     );
@@ -336,6 +341,7 @@ export async function GET(req: NextRequest) {
 
       const result = await db.collection("users").insertOne(newUser);
       user = { ...newUser, _id: result.insertedId };
+      createdNewAccount = true;
 
       let zohoWelcomeResult: ProcessZohoSignupResult | null = null;
       if (platformSettings.notifications.welcomeEmail) {
@@ -361,7 +367,9 @@ export async function GET(req: NextRequest) {
       if (referralCodeFromState) {
         try {
           await applyReferralCode(result.insertedId.toString(), referralCodeFromState);
+          referralApplied = true;
         } catch (err: any) {
+          referralRejected = true;
           console.warn("[google/callback] Referral code was not applied:", err?.message || err);
         }
       }
@@ -423,7 +431,29 @@ export async function GET(req: NextRequest) {
     const tokenVersion = user.tokenVersion ?? 0;
     const jwt = await signSessionToken(user._id.toString(), tokenVersion);
 
-    const response = NextResponse.redirect(returnUrl);
+    let destination = returnUrl;
+    if (createdNewAccount && !referralApplied) {
+      // A new Google account must enter a referral code before it can use the dashboard (the flag is
+      // cleared when a code is applied, and the dashboard sends them back here until then).
+      try {
+        await db.collection("users").updateOne({ _id: user._id }, { $set: { referralRequired: true } });
+      } catch (err) {
+        console.error("[google/callback] Could not flag referral as required:", err);
+      }
+      // Next page: ask for the referral code. `next` is the page they were headed to.
+      try {
+        const target = new URL(returnUrl);
+        const next = `${target.pathname}${target.search}`;
+        const page = new URL("/signup/referral", clientOrigin);
+        page.searchParams.set("next", next);
+        if (referralRejected) page.searchParams.set("invalid", "1");
+        destination = page.toString();
+      } catch {
+        destination = returnUrl;
+      }
+    }
+
+    const response = NextResponse.redirect(destination);
     response.cookies.set("session-token", jwt, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

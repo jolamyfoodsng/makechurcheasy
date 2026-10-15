@@ -1549,6 +1549,14 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                 onChange={commitLayout}
                 mediaItems={backgroundMediaLibrary}
                 mediaPreviewSrc={(item) => resolveMediaPreviewSrc(item as MediaItem)}
+                onImportMedia={async (file) => {
+                  try {
+                    await saveLibraryMediaFile(file);
+                    await refreshBackgroundMediaLibrary();
+                  } catch (err) {
+                    console.error("[ThemeCreator] Import failed:", err);
+                  }
+                }}
               />
             </div>
           ) : (

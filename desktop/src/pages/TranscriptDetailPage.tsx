@@ -810,7 +810,7 @@ function TranslationView({ onBack, lines, transcript, transcriptText, targetLang
               {lines.map((line, i) => (
                 <div key={i} style={{ display: 'flex', gap: 16 }}>
                   <div style={{ width: 60, color: 'var(--app-text-accent)', fontSize: '12px', fontFamily: 'monospace' }}>{line.time}</div>
-                  <div style={{ flex: 1, fontSize: '14px', color: 'var(--app-text-main)', fontFamily: '"Charis SIL", "CMG Sans", sans-serif' }}>{line.text}</div>
+                  <div style={{ flex: 1, fontSize: '14px', color: 'var(--app-text-main)', fontFamily: 'var(--font-user, "Charis SIL", "CMG Sans", sans-serif)' }}>{line.text}</div>
                 </div>
               ))}
             </div>
@@ -827,7 +827,7 @@ function TranslationView({ onBack, lines, transcript, transcriptText, targetLang
                   <div style={{ width: 60, color: 'var(--app-text-accent)', fontSize: '12px', fontFamily: 'monospace' }}>{line.time || lines[i]?.time}</div>
                   <div
                     className="editable-line"
-                    style={{ flex: 1, fontSize: '14px', color: 'var(--app-text-main)', fontFamily: '"Charis SIL", "CMG Sans", sans-serif' }}
+                    style={{ flex: 1, fontSize: '14px', color: 'var(--app-text-main)', fontFamily: 'var(--font-user, "Charis SIL", "CMG Sans", sans-serif)' }}
                     contentEditable
                     suppressContentEditableWarning
                   >

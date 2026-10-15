@@ -1436,6 +1436,13 @@ export async function getBookIndex(
 }
 
 /**
+ * Raw verse data for one translation (book → chapter → verse → text). Used by the quote index.
+ */
+export async function getRawBibleData(translation: string): Promise<RawBibleData> {
+  return loadTranslation(translation.toUpperCase() as BibleTranslation);
+}
+
+/**
  * Pre-load a translation into memory (call on app start).
  */
 export async function preloadTranslation(

@@ -13,7 +13,7 @@
 
 /* ── Font aliases scoped to this file ── */
 :root {
-    --font-sans: 'Inter', sans-serif;
+    --font-sans: var(--font-user, 'Inter', sans-serif);
     --font-mono: 'Geist', monospace;
 }
 

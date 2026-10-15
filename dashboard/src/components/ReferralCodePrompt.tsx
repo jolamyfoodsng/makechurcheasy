@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { applyReferralCode, getReferrals } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -12,6 +13,8 @@ function normalizeReferralCode(value: string | null): string {
 
 export function ReferralCodePrompt() {
   const { mongoUser, refreshMongoUser } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!mongoUser?._id || mongoUser.role === "admin") return;
@@ -19,7 +22,19 @@ export function ReferralCodePrompt() {
     const pendingCode = normalizeReferralCode(
       localStorage.getItem(PENDING_REFERRAL_CODE_KEY),
     );
-    if (!pendingCode) return;
+    if (!pendingCode) {
+      // New Google accounts that still owe a referral code can't use the dashboard until they enter one.
+      let stop = false;
+      getReferrals()
+        .then((data) => {
+          if (stop || !data.referralRequired || data.referredBy) return;
+          router.replace(`/signup/referral?next=${encodeURIComponent(pathname || "/dashboard")}`);
+        })
+        .catch(() => undefined);
+      return () => {
+        stop = true;
+      };
+    }
 
     let cancelled = false;
 

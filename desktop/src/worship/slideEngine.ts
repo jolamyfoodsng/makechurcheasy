@@ -251,9 +251,22 @@ export function autoSplitLyricsText(
   if (!normalized) return rawLyrics;
 
   const safeLinesPerSlide = Math.max(1, Math.min(12, Math.floor(linesPerSlide) || 2));
-  const maxLineLength = Math.max(24, Math.min(80, Math.floor(options.maxLineLength ?? 46)));
-  const sections = parseAutoSplitTextSections(normalized);
-  if (sections.length === 0) return rawLyrics;
+  // maxLineLength 0 = never wrap: every line stays exactly as written.
+  const maxLineLength = options.maxLineLength === 0
+    ? Number.POSITIVE_INFINITY
+    : Math.max(24, Math.min(80, Math.floor(options.maxLineLength ?? 46)));
+  const parsed = parseAutoSplitTextSections(normalized);
+  if (parsed.length === 0) return rawLyrics;
+
+  // Text that was split before (the same label over and over, or unlabelled blocks one after another)
+  // is joined back into one stream first, so changing the line count always re-flows the whole song.
+  const sections: AutoSplitTextSection[] = [];
+  for (const section of parsed) {
+    const previous = sections[sections.length - 1];
+    const sameLabel = previous && ((!previous.label && !section.label) || (previous.label && section.label && previous.label.label === section.label.label));
+    if (sameLabel) previous.lines = [...previous.lines, ...section.lines];
+    else sections.push({ label: section.label, lines: [...section.lines] });
+  }
 
   const blocks: string[] = [];
 

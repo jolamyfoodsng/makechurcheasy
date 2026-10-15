@@ -2039,7 +2039,7 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
   },
   {
     "format": "mce-graphic@1",
-    "version": 1,
+    "version": 2,
     "category": "quotes",
     "hold": 0,
     "placement": {
@@ -2095,9 +2095,45 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
         "label": "Quote marks colour",
         "type": "color",
         "default": "#ffffff"
+      },
+      {
+        "key": "layout",
+        "label": "Layout",
+        "type": "select",
+        "default": "full",
+        "options": [
+          {
+            "value": "full",
+            "label": "Full screen (centred)"
+          },
+          {
+            "value": "lower",
+            "label": "Lower third"
+          }
+        ]
+      },
+      {
+        "key": "fit",
+        "label": "Size (full screen)",
+        "type": "select",
+        "default": "0.76",
+        "options": [
+          {
+            "value": "0.6",
+            "label": "Medium"
+          },
+          {
+            "value": "0.76",
+            "label": "Large"
+          },
+          {
+            "value": "0.9",
+            "label": "Extra large"
+          }
+        ]
       }
     ],
-    "html": "\n<div class=\"q1\">\n  {{#author}}<div class=\"q1-tag\"><span>{{author}}</span></div>{{/author}}\n  <div class=\"q1-box\"><div class=\"q1-t\">{{quote|words}}</div></div>\n  <div class=\"q1-mk\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n</div>",
+    "html": "\n<div class=\"q1\" data-pkg-layout=\"{{layout}}\" data-pkg-fit=\"{{fit}}\">\n  {{#author}}<div class=\"q1-tag\"><span>{{author}}</span></div>{{/author}}\n  <div class=\"q1-box\"><div class=\"q1-t\">{{quote|words}}</div></div>\n  <div class=\"q1-mk\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n</div>",
     "css": "\n.q1{position:relative;width:max-content;max-width:1100px;padding:0 54px 40px 0}\n.q1-tag{display:inline-block;background:var(--tag);padding:8px 14px 7px}\n.q1-tag span{display:block;font:800 27px/1 Montserrat,Arial,sans-serif;color:var(--tagt);text-transform:uppercase;letter-spacing:.02em;white-space:nowrap}\n.q1-box{position:relative;background:var(--accent);padding:18px 30px 26px 18px}\n.q1-t{font:800 41px/1.22 Montserrat,Arial,sans-serif;color:var(--t);text-transform:uppercase;white-space:normal}\n.q1-t .w{display:inline-block}\n.q1-mk{position:absolute;right:0;bottom:0;width:96px;color:var(--mk);filter:drop-shadow(0 3px 6px rgba(0,0,0,.3))}\n.q1-mk svg{display:block;width:100%}\n",
     "animation": {
       "in": [
@@ -2197,7 +2233,7 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
   },
   {
     "format": "mce-graphic@1",
-    "version": 1,
+    "version": 2,
     "category": "quotes",
     "hold": 0,
     "placement": {
@@ -2246,9 +2282,45 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
         "label": "Name colour",
         "type": "color",
         "default": "#ffffff"
+      },
+      {
+        "key": "layout",
+        "label": "Layout",
+        "type": "select",
+        "default": "full",
+        "options": [
+          {
+            "value": "full",
+            "label": "Full screen (centred)"
+          },
+          {
+            "value": "lower",
+            "label": "Lower third"
+          }
+        ]
+      },
+      {
+        "key": "fit",
+        "label": "Size (full screen)",
+        "type": "select",
+        "default": "0.76",
+        "options": [
+          {
+            "value": "0.6",
+            "label": "Medium"
+          },
+          {
+            "value": "0.76",
+            "label": "Large"
+          },
+          {
+            "value": "0.9",
+            "label": "Extra large"
+          }
+        ]
       }
     ],
-    "html": "\n<div class=\"q2\">\n  <i class=\"q2-b q2-bt\"></i><i class=\"q2-b q2-br\"></i><i class=\"q2-b q2-bb\"></i><i class=\"q2-b q2-bl\"></i>\n  <div class=\"q2-o\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\" class=\"mk-flip\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n  <div class=\"q2-c\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n  <div class=\"q2-t\">{{quote|words}}</div>\n  {{#author}}<div class=\"q2-a\">{{author|chars}}</div>{{/author}}\n</div>",
+    "html": "\n<div class=\"q2\" data-pkg-layout=\"{{layout}}\" data-pkg-fit=\"{{fit}}\">\n  <i class=\"q2-b q2-bt\"></i><i class=\"q2-b q2-br\"></i><i class=\"q2-b q2-bb\"></i><i class=\"q2-b q2-bl\"></i>\n  <div class=\"q2-o\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\" class=\"mk-flip\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n  <div class=\"q2-c\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n  <div class=\"q2-t\">{{quote|words}}</div>\n  {{#author}}<div class=\"q2-a\">{{author|chars}}</div>{{/author}}\n</div>",
     "css": "\n.q2{position:relative;width:max-content;max-width:1000px;margin:34px 30px 30px 26px;padding:34px 40px 30px 40px}\n.q2-b{position:absolute;background:var(--accent)}\n.q2-bt{left:56px;right:0;top:0;height:3px}\n.q2-br{right:0;top:0;bottom:44px;width:3px}\n.q2-bb{left:0;right:56px;bottom:0;height:3px}\n.q2-bl{left:0;top:44px;bottom:0;width:3px}\n.q2-o{position:absolute;left:-26px;top:-34px;width:70px;color:var(--mk)}\n.q2-c{position:absolute;right:-30px;bottom:-30px;width:70px;color:var(--mk)}\n.q2-o svg,.q2-c svg{display:block;width:100%}\n.q2-t{font:600 39px/1.3 Montserrat,Arial,sans-serif;color:var(--t);white-space:normal;text-shadow:0 2px 4px rgba(0,0,0,.35)}\n.q2-t .w{display:inline-block}\n.q2-a{margin-top:14px;font:800 32px/1 Montserrat,Arial,sans-serif;color:var(--at);white-space:nowrap}\n.q2-a .w,.q2-a .ch{display:inline-block}\n.mk-flip{transform:scale(-1,-1)}\n",
     "animation": {
       "in": [
@@ -2408,7 +2480,7 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
   },
   {
     "format": "mce-graphic@1",
-    "version": 1,
+    "version": 2,
     "category": "quotes",
     "hold": 0,
     "placement": {
@@ -2458,9 +2530,45 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
         "label": "Quote mark colour",
         "type": "color",
         "default": "#ffffff"
+      },
+      {
+        "key": "layout",
+        "label": "Layout",
+        "type": "select",
+        "default": "full",
+        "options": [
+          {
+            "value": "full",
+            "label": "Full screen (centred)"
+          },
+          {
+            "value": "lower",
+            "label": "Lower third"
+          }
+        ]
+      },
+      {
+        "key": "fit",
+        "label": "Size (full screen)",
+        "type": "select",
+        "default": "0.76",
+        "options": [
+          {
+            "value": "0.6",
+            "label": "Medium"
+          },
+          {
+            "value": "0.76",
+            "label": "Large"
+          },
+          {
+            "value": "0.9",
+            "label": "Extra large"
+          }
+        ]
       }
     ],
-    "html": "\n<div class=\"q3\">\n  <div class=\"q3-mk\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\" class=\"mk-flip\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n  <div class=\"q3-box\">\n    <div class=\"q3-t\">{{quote|words}}</div>\n    {{#author}}<div class=\"q3-a\">{{author}}</div>{{/author}}\n  </div>\n</div>",
+    "html": "\n<div class=\"q3\" data-pkg-layout=\"{{layout}}\" data-pkg-fit=\"{{fit}}\">\n  <div class=\"q3-mk\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\" class=\"mk-flip\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n  <div class=\"q3-box\">\n    <div class=\"q3-t\">{{quote|words}}</div>\n    {{#author}}<div class=\"q3-a\">{{author}}</div>{{/author}}\n  </div>\n</div>",
     "css": "\n.q3{position:relative;width:max-content;max-width:1100px;padding:26px 0 0 0}\n.q3-box{position:relative;background:linear-gradient(180deg,var(--accent-l) -40%,var(--accent) 40%,var(--accent-d) 160%);padding:22px 34px 20px 34px;box-shadow:0 12px 28px rgba(0,0,0,.35)}\n.q3-mk{position:absolute;left:-18px;top:0;width:60px;color:var(--mk);z-index:1;filter:drop-shadow(0 3px 6px rgba(0,0,0,.35))}\n.q3-mk svg{display:block;width:100%}\n.q3-t{font:800 37px/1.25 Montserrat,Arial,sans-serif;color:var(--t);text-transform:uppercase;white-space:normal}\n.q3-t .w{display:inline-block}\n.q3-a{margin-top:10px;font:700 24px/1 Montserrat,Arial,sans-serif;color:var(--at);text-transform:uppercase;letter-spacing:.12em;white-space:nowrap}\n.mk-flip{transform:scale(-1,-1)}\n",
     "animation": {
       "in": [
@@ -2552,7 +2660,7 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
   },
   {
     "format": "mce-graphic@1",
-    "version": 1,
+    "version": 2,
     "category": "quotes",
     "hold": 0,
     "placement": {
@@ -2611,9 +2719,45 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
             "label": "Hide"
           }
         ]
+      },
+      {
+        "key": "layout",
+        "label": "Layout",
+        "type": "select",
+        "default": "full",
+        "options": [
+          {
+            "value": "full",
+            "label": "Full screen (centred)"
+          },
+          {
+            "value": "lower",
+            "label": "Lower third"
+          }
+        ]
+      },
+      {
+        "key": "fit",
+        "label": "Size (full screen)",
+        "type": "select",
+        "default": "0.76",
+        "options": [
+          {
+            "value": "0.6",
+            "label": "Medium"
+          },
+          {
+            "value": "0.76",
+            "label": "Large"
+          },
+          {
+            "value": "0.9",
+            "label": "Extra large"
+          }
+        ]
       }
     ],
-    "html": "\n<div class=\"q4 q4-sh-{{shade}}\">\n  <div class=\"q4-sh\"></div>\n  <div class=\"q4-mk\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n  <div class=\"q4-t\">{{quote|words}}</div>\n  {{#author}}<div class=\"q4-ar\"><div class=\"q4-a\">{{author}}</div></div>{{/author}}\n</div>",
+    "html": "\n<div class=\"q4 q4-sh-{{shade}}\" data-pkg-layout=\"{{layout}}\" data-pkg-fit=\"{{fit}}\">\n  <div class=\"q4-sh\"></div>\n  <div class=\"q4-mk\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n  <div class=\"q4-t\">{{quote|words}}</div>\n  {{#author}}<div class=\"q4-ar\"><div class=\"q4-a\">{{author}}</div></div>{{/author}}\n</div>",
     "css": "\n.q4{position:relative;width:max-content;max-width:800px}\n.q4-sh{position:absolute;inset:-70px -200px -70px -120px;background:radial-gradient(closest-side,rgba(0,0,0,.55),rgba(0,0,0,.25) 60%,rgba(0,0,0,0))}\n.q4-sh-hide .q4-sh{display:none}\n.q4-mk{position:relative;width:92px;color:var(--mk);margin-bottom:14px}\n.q4-mk svg{display:block;width:100%}\n.q4-t{position:relative;font:500 41px/1.18 Montserrat,Arial,sans-serif;color:var(--t);white-space:normal}\n.q4-t .w{display:inline-block}\n.q4-ar{position:relative;overflow:hidden;margin-top:14px}\n.q4-a{font:800 49px/1.1 Montserrat,Arial,sans-serif;color:var(--at);white-space:nowrap}\n",
     "animation": {
       "in": [
@@ -2704,7 +2848,7 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
   },
   {
     "format": "mce-graphic@1",
-    "version": 1,
+    "version": 2,
     "category": "quotes",
     "hold": 0,
     "placement": {
@@ -2763,9 +2907,45 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
             "label": "Hide"
           }
         ]
+      },
+      {
+        "key": "layout",
+        "label": "Layout",
+        "type": "select",
+        "default": "full",
+        "options": [
+          {
+            "value": "full",
+            "label": "Full screen (centred)"
+          },
+          {
+            "value": "lower",
+            "label": "Lower third"
+          }
+        ]
+      },
+      {
+        "key": "fit",
+        "label": "Size (full screen)",
+        "type": "select",
+        "default": "0.76",
+        "options": [
+          {
+            "value": "0.6",
+            "label": "Medium"
+          },
+          {
+            "value": "0.76",
+            "label": "Large"
+          },
+          {
+            "value": "0.9",
+            "label": "Extra large"
+          }
+        ]
       }
     ],
-    "html": "\n<div class=\"q5 q5-r-{{rule}}\">\n  <div class=\"q5-mk\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n  <div class=\"q5-t\">{{quote|words}}</div>\n  <i class=\"q5-rule\"></i>\n  {{#author}}<div class=\"q5-tag\"><span>&ndash; {{author|chars}}</span></div>{{/author}}\n</div>",
+    "html": "\n<div class=\"q5 q5-r-{{rule}}\" data-pkg-layout=\"{{layout}}\" data-pkg-fit=\"{{fit}}\">\n  <div class=\"q5-mk\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n  <div class=\"q5-t\">{{quote|words}}</div>\n  <i class=\"q5-rule\"></i>\n  {{#author}}<div class=\"q5-tag\"><span>&ndash; {{author|chars}}</span></div>{{/author}}\n</div>",
     "css": "\n.q5{position:relative;width:max-content;max-width:940px;display:flex;flex-direction:column;align-items:center;text-align:center}\n.q5-mk{width:68px;color:var(--accent);margin-bottom:12px}\n.q5-mk svg{display:block;width:100%}\n.q5-t{font:800 39px/1.18 Montserrat,Arial,sans-serif;color:var(--t);text-transform:uppercase;white-space:normal;text-shadow:0 2px 4px rgba(0,0,0,.35)}\n.q5-t .w{display:inline-block}\n.q5-rule{display:block;width:100%;height:4px;margin-top:12px;background:var(--accent)}\n.q5-r-hide .q5-rule{display:none}\n.q5-tag{margin-top:10px;padding:8px 20px 9px;background:var(--accent)}\n.q5-tag span{display:block;font:800 37px/1 Montserrat,Arial,sans-serif;color:var(--tagt);text-transform:uppercase;white-space:nowrap}\n.q5-tag .w,.q5-tag .ch{display:inline-block}\n",
     "animation": {
       "in": [
@@ -2891,7 +3071,7 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
   },
   {
     "format": "mce-graphic@1",
-    "version": 1,
+    "version": 2,
     "category": "quotes",
     "hold": 0,
     "placement": {
@@ -2941,9 +3121,45 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
         "label": "Name colour",
         "type": "color",
         "default": "#ffffff"
+      },
+      {
+        "key": "layout",
+        "label": "Layout",
+        "type": "select",
+        "default": "full",
+        "options": [
+          {
+            "value": "full",
+            "label": "Full screen (centred)"
+          },
+          {
+            "value": "lower",
+            "label": "Lower third"
+          }
+        ]
+      },
+      {
+        "key": "fit",
+        "label": "Size (full screen)",
+        "type": "select",
+        "default": "0.76",
+        "options": [
+          {
+            "value": "0.6",
+            "label": "Medium"
+          },
+          {
+            "value": "0.76",
+            "label": "Large"
+          },
+          {
+            "value": "0.9",
+            "label": "Extra large"
+          }
+        ]
       }
     ],
-    "html": "\n<div class=\"q6\">\n  <div class=\"q6-blk\"><div class=\"q6-mk\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div></div>\n  <div class=\"q6-side\">\n    <div class=\"q6-t\">{{quote|words}}</div>\n    {{#author}}<div class=\"q6-tag\"><span>{{author}}</span></div>{{/author}}\n  </div>\n</div>",
+    "html": "\n<div class=\"q6\" data-pkg-layout=\"{{layout}}\" data-pkg-fit=\"{{fit}}\">\n  <div class=\"q6-blk\"><div class=\"q6-mk\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div></div>\n  <div class=\"q6-side\">\n    <div class=\"q6-t\">{{quote|words}}</div>\n    {{#author}}<div class=\"q6-tag\"><span>{{author}}</span></div>{{/author}}\n  </div>\n</div>",
     "css": "\n.q6{position:relative;display:flex;align-items:stretch;gap:20px;width:max-content;max-width:1300px}\n.q6-blk{position:relative;flex:none;width:200px;min-height:180px;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,var(--accent-l) -20%,var(--accent) 50%,var(--accent-d) 150%);box-shadow:0 12px 26px rgba(0,0,0,.35)}\n.q6-mk{width:124px;color:var(--mk)}\n.q6-mk svg{display:block;width:100%}\n.q6-side{display:flex;flex-direction:column;justify-content:center;align-items:flex-start;overflow:hidden;padding:4px 0}\n.q6-t{font:800 37px/1.3 Montserrat,Arial,sans-serif;color:var(--t);text-transform:uppercase;white-space:normal;max-width:940px;text-shadow:0 2px 4px rgba(0,0,0,.35)}\n.q6-t .w{display:inline-block}\n.q6-tag{margin-top:12px;padding:8px 16px 9px;background:var(--accent)}\n.q6-tag span{display:block;font:800 41px/1 Montserrat,Arial,sans-serif;color:var(--tagt);text-transform:uppercase;white-space:nowrap}\n",
     "animation": {
       "in": [
@@ -3049,7 +3265,7 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
   },
   {
     "format": "mce-graphic@1",
-    "version": 1,
+    "version": 2,
     "category": "quotes",
     "hold": 0,
     "placement": {
@@ -3114,9 +3330,45 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
             "label": "None"
           }
         ]
+      },
+      {
+        "key": "layout",
+        "label": "Layout",
+        "type": "select",
+        "default": "full",
+        "options": [
+          {
+            "value": "full",
+            "label": "Full screen (centred)"
+          },
+          {
+            "value": "lower",
+            "label": "Lower third"
+          }
+        ]
+      },
+      {
+        "key": "fit",
+        "label": "Size (full screen)",
+        "type": "select",
+        "default": "0.76",
+        "options": [
+          {
+            "value": "0.6",
+            "label": "Medium"
+          },
+          {
+            "value": "0.76",
+            "label": "Large"
+          },
+          {
+            "value": "0.9",
+            "label": "Extra large"
+          }
+        ]
       }
     ],
-    "html": "\n<div class=\"q7 q7-f-{{fill}}\">\n  <div class=\"q7-mk\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n  <div class=\"q7-box\">\n    <div class=\"q7-bg\"></div>\n    <i class=\"q7-b q7-bt\"></i><i class=\"q7-b q7-br\"></i><i class=\"q7-b q7-bb\"></i><i class=\"q7-b q7-bl\"></i>\n    <div class=\"q7-t\">{{quote|words}}</div>\n  </div>\n  {{#author}}<div class=\"q7-a\">{{author|words}}</div>{{/author}}\n</div>",
+    "html": "\n<div class=\"q7 q7-f-{{fill}}\" data-pkg-layout=\"{{layout}}\" data-pkg-fit=\"{{fit}}\">\n  <div class=\"q7-mk\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n  <div class=\"q7-box\">\n    <div class=\"q7-bg\"></div>\n    <i class=\"q7-b q7-bt\"></i><i class=\"q7-b q7-br\"></i><i class=\"q7-b q7-bb\"></i><i class=\"q7-b q7-bl\"></i>\n    <div class=\"q7-t\">{{quote|words}}</div>\n  </div>\n  {{#author}}<div class=\"q7-a\">{{author|words}}</div>{{/author}}\n</div>",
     "css": "\n.q7{position:relative;width:max-content;max-width:1050px;display:flex;flex-direction:column;align-items:stretch}\n.q7-mk{width:74px;color:var(--mk);margin:0 0 10px 6px}\n.q7-mk svg{display:block;width:100%}\n.q7-box{position:relative;padding:18px 26px 20px}\n.q7-bg{position:absolute;inset:0;background:rgba(0,0,0,.35)}\n.q7-f-none .q7-bg{display:none}\n.q7-b{position:absolute;background:var(--accent)}\n.q7-bt{left:0;right:0;top:0;height:4px}\n.q7-bb{left:0;right:0;bottom:0;height:4px}\n.q7-bl{left:0;top:0;bottom:0;width:4px}\n.q7-br{right:0;top:0;bottom:0;width:4px}\n.q7-t{position:relative;font:700 39px/1.2 Montserrat,Arial,sans-serif;color:var(--t);white-space:normal}\n.q7-t .w{display:inline-block}\n.q7-a{margin-top:14px;text-align:center;font:800 39px/1 Montserrat,Arial,sans-serif;color:var(--at);white-space:nowrap;text-shadow:0 2px 4px rgba(0,0,0,.35)}\n.q7-a .w{display:inline-block}\n",
     "animation": {
       "in": [
@@ -3279,7 +3531,7 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
   },
   {
     "format": "mce-graphic@1",
-    "version": 1,
+    "version": 2,
     "category": "quotes",
     "hold": 0,
     "placement": {
@@ -3327,9 +3579,45 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
         "label": "Subtitle colour",
         "type": "color",
         "default": "#ffffff"
+      },
+      {
+        "key": "layout",
+        "label": "Layout",
+        "type": "select",
+        "default": "full",
+        "options": [
+          {
+            "value": "full",
+            "label": "Full screen (centred)"
+          },
+          {
+            "value": "lower",
+            "label": "Lower third"
+          }
+        ]
+      },
+      {
+        "key": "fit",
+        "label": "Size (full screen)",
+        "type": "select",
+        "default": "0.76",
+        "options": [
+          {
+            "value": "0.6",
+            "label": "Medium"
+          },
+          {
+            "value": "0.76",
+            "label": "Large"
+          },
+          {
+            "value": "0.9",
+            "label": "Extra large"
+          }
+        ]
       }
     ],
-    "html": "\n<div class=\"q8\">\n  <div class=\"q8-row\">\n    <div class=\"q8-o\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\" class=\"mk-flip\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n    <div class=\"q8-pill\"><span>{{title|chars}}</span></div>\n    <div class=\"q8-c\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n  </div>\n  {{#sub}}<div class=\"q8-sub\">{{sub}}</div>{{/sub}}\n</div>",
+    "html": "\n<div class=\"q8\" data-pkg-layout=\"{{layout}}\" data-pkg-fit=\"{{fit}}\">\n  <div class=\"q8-row\">\n    <div class=\"q8-o\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\" class=\"mk-flip\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n    <div class=\"q8-pill\"><span>{{title|chars}}</span></div>\n    <div class=\"q8-c\"><svg viewBox=\"0 0 100 80\" fill=\"currentColor\"><path d=\"M6 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H6z\"/><path d=\"M56 0h38v38c0 22-12 38-34 42l-4-12c11-4 16-12 16-22H56z\"/></svg></div>\n  </div>\n  {{#sub}}<div class=\"q8-sub\">{{sub}}</div>{{/sub}}\n</div>",
     "css": "\n.q8{position:relative;width:max-content;display:flex;flex-direction:column;align-items:center}\n.q8-row{position:relative;display:flex;align-items:center;gap:12px}\n.q8-o,.q8-c{width:56px;color:var(--mk)}\n.q8-o{align-self:flex-start;margin-top:-14px}\n.q8-c{align-self:flex-end;margin-bottom:-16px}\n.q8-o svg,.q8-c svg{display:block;width:100%}\n.q8-pill{padding:16px 40px 15px;border:3px solid var(--accent);border-radius:10px;background:rgba(0,0,0,.25)}\n.q8-pill span{display:block;font:800 41px/1 Montserrat,Arial,sans-serif;color:var(--t);text-transform:uppercase;white-space:nowrap}\n.q8-pill .w,.q8-pill .ch{display:inline-block}\n.q8-sub{margin-top:10px;font:600 22px/1 Montserrat,Arial,sans-serif;color:var(--st);letter-spacing:.14em;text-transform:uppercase;white-space:nowrap;opacity:.9}\n.mk-flip{transform:scale(-1,-1)}\n",
     "animation": {
       "in": [

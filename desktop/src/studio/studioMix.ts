@@ -4,7 +4,7 @@
  * data kept in the Studio's program state; `public/studio-output.html` draws them.
  */
 
-export type MixKind = "video" | "image" | "camera" | "banner" | "logo";
+export type MixKind = "video" | "image" | "camera" | "banner" | "logo" | "graphic";
 export type MixCorner = "bottom-left" | "bottom-center" | "bottom-right" | "top-left" | "top-right";
 
 export interface StudioMixLayer {
@@ -29,6 +29,14 @@ export interface StudioMixLayer {
   seconds?: number;
   /** logo: picture to show. */
   logoUrl?: string;
+  /** graphic: a Broadcast graphic: the whole page drawn in a frame on top of the screen, and the frame's sandbox. */
+  graphicHtml?: string;
+  graphicSandbox?: string;
+  /** graphic: changes every time it is projected, so it plays its In animation again. */
+  graphicKey?: string;
+  /** graphic: where on the screen (e.g. "bottom-left") and how big (percent). */
+  graphicPos?: string;
+  graphicScale?: number;
 }
 
 /** Layers behind the words (video, picture, camera) and in front of them (banner, logo). */
@@ -76,7 +84,8 @@ export function loadMix(): StudioMixLayer[] {
 
 export function saveMix(layers: StudioMixLayer[]): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify(layers));
+    // A projected Broadcast graphic is temporary (and large), so it is never saved.
+    localStorage.setItem(KEY, JSON.stringify(layers.filter((layer) => layer.kind !== "graphic")));
   } catch {
     /* ignore */
   }

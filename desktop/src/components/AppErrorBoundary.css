@@ -10,7 +10,7 @@
   padding: 24px;
   background: var(--bg-dark, #0d0e12);
   color: var(--text-primary, #f1f3f9);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-user, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
   overflow-y: auto;
 }
 

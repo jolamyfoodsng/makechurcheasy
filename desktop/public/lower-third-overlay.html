@@ -616,7 +616,7 @@
   <script src="/kinetic/church-lower-thirds.js?v=4"></script>
   <script src="/kinetic/sunday-lower-thirds.js?v=2"></script>
   <script src="/kinetic/stream-lower-thirds.js?v=2"></script>
-  <script src="/kinetic/mce-graphic-packages.js?v=2"></script>
+  <script src="/kinetic/mce-graphic-packages.js?v=4"></script>
   <script>
     /**
      * Lower Third Overlay — MakeChurchEazy
@@ -1403,6 +1403,12 @@
       var autoCanvasScale = Math.min(rootWidth / 1920, rootHeight / 1080);
       if (!isFinite(autoCanvasScale) || autoCanvasScale <= 0) autoCanvasScale = 1;
       requestedScale *= autoCanvasScale;
+      // Full-screen and centred Broadcast Graphics size themselves to the whole output
+      // (mce-graphic-packages.js): no size preset and no edge fitting, which would leave a gap.
+      if (frame.querySelector(".pkg-full, .pkg-centred")) {
+        frame.style.transform = "scale(1)";
+        return;
+      }
       var frameRect = frame.getBoundingClientRect();
       var contentNode = frame.firstElementChild || frame;
       var contentRect = contentNode.getBoundingClientRect();

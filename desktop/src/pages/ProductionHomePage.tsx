@@ -35,6 +35,7 @@ import {
   isMovePluginLoaded,
 } from "../services/obsMovePlugin";
 import MultiPlatformStreamingBanner from "../components/MultiPlatformStreamingBanner";
+import BroadcastGraphicsPromoBanner from "../components/BroadcastGraphicsPromoBanner";
 import BroadcastHowItWorksModal from "../components/BroadcastHowItWorksModal";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -776,10 +777,16 @@ export default function ProductionHomePage() {
         onConnectObs={handleConnectObs}
       />
 
-      <MultiPlatformStreamingBanner
-        onOpenBroadcast={() => navigate("/broadcast")}
-        onHowItWorks={() => setShowHowItWorksModal(true)}
-      />
+      <div className="broadcast-promo-row">
+        <MultiPlatformStreamingBanner
+          onOpenBroadcast={() => navigate("/broadcast")}
+          onHowItWorks={() => setShowHowItWorksModal(true)}
+        />
+        <BroadcastGraphicsPromoBanner
+          onOpenGraphics={() => navigate("/broadcast-graphics")}
+          onWatchTutorials={() => navigate("/tutorials")}
+        />
+      </div>
 
       <FeatureGrid
         voiceBibleStatus={voiceBible.status}

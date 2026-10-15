@@ -16,6 +16,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useTranslations } from "next-intl";
 import { AuthShell } from "@/components/AuthLayout";
+import { useReferralCodeCheck } from "@/hooks/useReferralCodeCheck";
 import {
   verifyEmailCode as apiVerifyEmailCode,
   sendVerificationEmail as apiSendVerificationEmail,
@@ -66,6 +67,10 @@ function SignupInner() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [referralCode, setReferralCode] = useState("");
+  const [referralServerError, setReferralServerError] = useState("");
+  const referralCheck = useReferralCodeCheck(referralCode);
+  const referralError =
+    referralServerError || (referralCheck.status === "invalid" ? referralCheck.message : "");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -148,6 +153,11 @@ function SignupInner() {
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (referralCode && referralCheck.status === "invalid") {
+      setReferralServerError("");
+      document.getElementById("signup-referral-code")?.focus();
+      return;
+    }
     setLoading(true);
 
     try {
@@ -184,7 +194,10 @@ function SignupInner() {
       }, 1500);
     } catch (err: any) {
       setLoading(false);
-      if (err.message?.includes("already") || err.message?.includes("exists")) {
+      if (/referral code/i.test(err.message || "")) {
+        setReferralServerError(err.message);
+        document.getElementById("signup-referral-code")?.focus();
+      } else if (err.message?.includes("already") || err.message?.includes("exists")) {
         setError("This email is already registered. Please log in instead.");
       } else if (err.message?.includes("Password")) {
         setError(t("auth.signup.passwordMinLength") || "Password must be at least 8 characters");
@@ -196,6 +209,12 @@ function SignupInner() {
 
   async function handleGoogleSignUp() {
     setError("");
+    // A code that came in the link (or was typed) is checked before leaving for Google. With no code,
+    // the page after Google asks for one.
+    if (referralCode && referralCheck.status === "invalid") {
+      document.getElementById("signup-referral-code")?.focus();
+      return;
+    }
     setLoading(true);
     try {
       const needs2FA = await signInWithGoogle(safeCallbackUrl);
@@ -473,7 +492,7 @@ function SignupInner() {
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-600">
                 Referral Code <span className="text-slate-400 font-normal lowercase">(optional)</span>
               </label>
-              {referralCode && (
+              {referralCode && referralCheck.status === "valid" && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/60">
                   <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                   Code applied
@@ -488,6 +507,7 @@ function SignupInner() {
                 onChange={(e) => {
                   const val = normalizeReferralCode(e.target.value);
                   setReferralCode(val);
+                  setReferralServerError("");
                   try {
                     if (val) {
                       localStorage.setItem(PENDING_REFERRAL_CODE_KEY, val);
@@ -498,11 +518,29 @@ function SignupInner() {
                     // Ignore storage errors
                   }
                 }}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3.5 text-sm font-mono uppercase tracking-wider text-slate-900 outline-none transition-all placeholder:font-sans placeholder:normal-case placeholder:tracking-normal placeholder:text-slate-400 focus:border-blue-600 focus:ring-4 focus:ring-blue-600/10"
+                id="signup-referral-code"
+                aria-invalid={referralError ? true : undefined}
+                aria-describedby={referralError ? "signup-referral-code-error" : undefined}
+                className={`h-11 w-full rounded-xl border bg-white pl-10 pr-3.5 text-sm font-mono uppercase tracking-wider text-slate-900 outline-none transition-all placeholder:font-sans placeholder:normal-case placeholder:tracking-normal placeholder:text-slate-400 focus:ring-4 ${
+                  referralError
+                    ? "border-red-400 focus:border-red-500 focus:ring-red-500/10"
+                    : "border-slate-200 focus:border-blue-600 focus:ring-blue-600/10"
+                }`}
                 placeholder="e.g. MCEABC12"
                 maxLength={16}
               />
             </div>
+            {referralError ? (
+              <p id="signup-referral-code-error" role="alert" className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-red-600">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                {referralError}
+              </p>
+            ) : referralCode && referralCheck.status === "checking" ? (
+              <p className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Checking code…
+              </p>
+            ) : null}
           </div>
 
           <button

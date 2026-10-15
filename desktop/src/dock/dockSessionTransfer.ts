@@ -69,7 +69,14 @@ export interface DockSessionExport {
   };
   sections: DockSessionSection[];
   records: DockSessionRecords;
+  /** Studio settings (panel layout, text size, camera, saved verse queue…), kept as raw strings. */
+  studio?: Record<string, string>;
   warnings: string[];
+}
+
+export interface DockSessionApplyOptions {
+  /** Keep what is already on this computer and only add what is missing. */
+  merge?: boolean;
 }
 
 export interface DockSessionImportResult {
@@ -228,6 +235,38 @@ function backgroundPickerTransferKeys(scopes: readonly string[]): TransferKeyDef
     { baseKey: `dtb-bg-picker-type:${scope}:${overlayMode}`, scope: "user" as const },
     { baseKey: `dtb-bg-picker-local-styles:${scope}:${overlayMode}`, scope: "user" as const },
   ]));
+}
+
+const STUDIO_KEY_PATTERN = /^mce[-.]studio[-.]/;
+/** Machine-specific: which monitor the output sits on. */
+const STUDIO_SKIP_KEYS = new Set(["mce-studio-output-monitor"]);
+
+function isStudioKey(key: string): boolean {
+  return STUDIO_KEY_PATTERN.test(key) && !STUDIO_SKIP_KEYS.has(key);
+}
+
+function collectStudioSettings(): Record<string, string> {
+  const out: Record<string, string> = {};
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (!key || !isStudioKey(key)) continue;
+      const value = localStorage.getItem(key);
+      if (typeof value === "string") out[key] = value;
+    }
+  } catch {
+    // Storage blocked: the Studio settings are simply not exported.
+  }
+  return out;
+}
+
+function normalizeStudio(value: unknown): Record<string, string> | undefined {
+  if (!isRecord(value)) return undefined;
+  const out: Record<string, string> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (isStudioKey(key) && typeof item === "string") out[key] = item;
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -394,6 +433,7 @@ export async function createDockSessionExport(): Promise<DockSessionExport> {
   }
 
   const shell = isRecord(shellPreferences) ? shellPreferences : {};
+  const studio = collectStudioSettings();
   return {
     _format: DOCK_SESSION_FORMAT,
     _version: DOCK_SESSION_VERSION,
@@ -416,6 +456,7 @@ export async function createDockSessionExport(): Promise<DockSessionExport> {
       mediaLibrary,
       multiview,
     },
+    ...(Object.keys(studio).length ? { studio } : {}),
     warnings,
   };
 }
@@ -520,6 +561,7 @@ export function parseDockSessionJSON(jsonString: string): DockSessionExport {
     app: normalizeApp(parsed.app),
     sections: normalizeSections(parsed.sections),
     records: normalizeRecords(parsed.records),
+    ...(normalizeStudio(parsed.studio) ? { studio: normalizeStudio(parsed.studio) } : {}),
     warnings: Array.isArray(parsed.warnings)
       ? parsed.warnings.filter((warning): warning is string => typeof warning === "string")
       : [],
@@ -536,7 +578,43 @@ function prepareImportedValue(value: JsonValue): JsonValue {
   };
 }
 
-function writeStorageEntry(baseKey: string, entry: DockSessionStorageEntry): void {
+function itemIdentity(item: JsonValue): string {
+  if (isRecord(item)) {
+    for (const field of ["id", "key", "slug", "name"]) {
+      const candidate = item[field];
+      if (typeof candidate === "string" || typeof candidate === "number") return `${field}:${candidate}`;
+    }
+  }
+  return JSON.stringify(item);
+}
+
+/** Merge: what is already here wins; the file only adds what is missing. */
+function mergeJsonValues(existing: unknown, imported: JsonValue): JsonValue {
+  if (Array.isArray(existing) && Array.isArray(imported)) {
+    const seen = new Set((existing as JsonValue[]).map((item) => itemIdentity(item)));
+    const added = imported.filter((item) => !seen.has(itemIdentity(item)));
+    return [...(existing as JsonValue[]), ...added];
+  }
+  if (isRecord(existing) && isRecord(imported) && !Array.isArray(existing) && !Array.isArray(imported)) {
+    const out: Record<string, JsonValue> = { ...(imported as Record<string, JsonValue>) };
+    for (const [key, value] of Object.entries(existing)) {
+      const incoming = (imported as Record<string, JsonValue>)[key];
+      out[key] = incoming === undefined ? value as JsonValue : mergeJsonValues(value, incoming);
+    }
+    return out;
+  }
+  return existing === undefined || existing === null ? imported : existing as JsonValue;
+}
+
+function writeStorageEntry(baseKey: string, entry: DockSessionStorageEntry, merge = false): void {
+  if (merge) {
+    const existing = readNativeDockSetting<unknown>(baseKey);
+    if (existing !== undefined && existing !== null) {
+      if (entry.encoding === "text") return;
+      writeNativeDockSetting(baseKey, mergeJsonValues(existing, entry.value as JsonValue));
+      return;
+    }
+  }
   const value = entry.encoding === "json"
     ? prepareImportedValue(entry.value as JsonValue)
     : String(entry.value);
@@ -547,12 +625,12 @@ function hasImportedStorageEntry(session: DockSessionExport, baseKey: string): b
   return session.sections.some((section) => Object.prototype.hasOwnProperty.call(section.storage, baseKey));
 }
 
-function restoreExplicitAppPreferences(session: DockSessionExport): number {
+function restoreExplicitAppPreferences(session: DockSessionExport, merge = false): number {
   let restored = 0;
   const write = (baseKey: string, entry: DockSessionStorageEntry) => {
     if (hasImportedStorageEntry(session, baseKey)) return;
     try {
-      writeStorageEntry(baseKey, entry);
+      writeStorageEntry(baseKey, entry, merge);
       restored += 1;
     } catch {
       // The regular section pass will report failures for entries that were
@@ -680,13 +758,16 @@ function stripRecordOwner(value: JsonValue): JsonValue {
 async function restoreWorshipSongs(
   songs: JsonValue[],
   warnings: string[],
+  merge = false,
 ): Promise<number> {
   if (songs.length === 0) return 0;
   try {
-    const { saveSong } = await import("../worship/worshipDb");
+    const { saveSong, getAllSongs } = await import("../worship/worshipDb");
+    const have = merge ? new Set((await getAllSongs()).map((song) => song.id)) : new Set<string>();
     let restored = 0;
     let skipped = 0;
     for (const value of songs) {
+      if (merge && isRecord(value) && typeof value.id === "string" && have.has(value.id)) continue;
       if (!isWorshipSongRecord(value)) {
         skipped += 1;
         continue;
@@ -711,13 +792,16 @@ async function restoreWorshipSongs(
 async function restoreCountdowns(
   countdowns: JsonValue[],
   warnings: string[],
+  merge = false,
 ): Promise<number> {
   if (countdowns.length === 0) return 0;
   try {
-    const { saveCountdown } = await import("../countdowns/countdownStore");
+    const { saveCountdown, getCountdowns } = await import("../countdowns/countdownStore");
+    const have = merge ? new Set((await getCountdowns()).map((item) => item.id)) : new Set<string>();
     let restored = 0;
     let skipped = 0;
     for (const value of countdowns) {
+      if (merge && isRecord(value) && typeof value.id === "string" && have.has(value.id)) continue;
       if (!isCountdownRecord(value)) {
         skipped += 1;
         continue;
@@ -742,10 +826,11 @@ async function restoreCountdowns(
 async function restoreRecords(
   records: DockSessionRecords,
   warnings: string[],
+  merge = false,
 ): Promise<DockSessionImportResult["restored"]> {
   const restored = {
-    worshipSongs: await restoreWorshipSongs(records.worshipSongs, warnings),
-    countdowns: await restoreCountdowns(records.countdowns, warnings),
+    worshipSongs: await restoreWorshipSongs(records.worshipSongs, warnings, merge),
+    countdowns: await restoreCountdowns(records.countdowns, warnings, merge),
     media: 0,
     layouts: 0,
     assets: 0,
@@ -755,9 +840,11 @@ async function restoreRecords(
 
   if (records.mediaLibrary.length > 0) {
     try {
-      const { saveMedia } = await import("../library/libraryDb");
+      const { saveMedia, getAllMedia } = await import("../library/libraryDb");
+      const have = merge ? new Set((await getAllMedia()).map((item) => item.id)) : new Set<string>();
       for (const value of records.mediaLibrary) {
         if (!isMediaRecord(value)) continue;
+        if (merge && isRecord(value) && typeof value.id === "string" && have.has(value.id)) continue;
         await saveMedia(stripRecordOwner(value) as never);
         restored.media += 1;
       }
@@ -799,17 +886,21 @@ async function restoreRecords(
   return restored;
 }
 
-export async function applyDockSession(session: DockSessionExport): Promise<DockSessionImportResult> {
+export async function applyDockSession(
+  session: DockSessionExport,
+  options: DockSessionApplyOptions = {},
+): Promise<DockSessionImportResult> {
+  const merge = options.merge === true;
   await hydrateNativeDockSettings().catch(() => undefined);
   const warnings = [...session.warnings];
-  let storageEntryCount = restoreExplicitAppPreferences(session);
+  let storageEntryCount = restoreExplicitAppPreferences(session, merge);
 
   for (const section of session.sections) {
     for (const [baseKey, entry] of Object.entries(section.storage)) {
       const allowed = ALLOWED_STORAGE_KEYS.get(baseKey);
       if (!allowed || allowed.scope !== entry.scope) continue;
       try {
-        writeStorageEntry(baseKey, entry);
+        writeStorageEntry(baseKey, entry, merge);
         storageEntryCount += 1;
       } catch {
         warnings.push(`Could not restore ${baseKey}.`);
@@ -817,7 +908,18 @@ export async function applyDockSession(session: DockSessionExport): Promise<Dock
     }
   }
 
-  const restored = await restoreRecords(session.records, warnings);
+  for (const [key, raw] of Object.entries(session.studio ?? {})) {
+    if (!isStudioKey(key)) continue;
+    try {
+      if (merge && localStorage.getItem(key) !== null) continue;
+      localStorage.setItem(key, raw);
+      storageEntryCount += 1;
+    } catch {
+      warnings.push(`Could not restore ${key}.`);
+    }
+  }
+
+  const restored = await restoreRecords(session.records, warnings, merge);
   return {
     sectionCount: session.sections.length,
     storageEntryCount,
@@ -826,9 +928,12 @@ export async function applyDockSession(session: DockSessionExport): Promise<Dock
   };
 }
 
-export async function importDockSessionFromFile(file: File): Promise<DockSessionImportResult> {
-  const session = parseDockSessionJSON(await file.text());
-  return applyDockSession(session);
+export async function importDockSessionFromFile(
+  file: File,
+  options: DockSessionApplyOptions = {},
+): Promise<DockSessionImportResult> {
+  const { importDockSessionAnyFile } = await import("./dockSessionBundle");
+  return importDockSessionAnyFile(file, options);
 }
 
 export interface DockSessionDownloadResult {

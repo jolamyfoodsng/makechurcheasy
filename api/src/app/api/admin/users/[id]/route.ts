@@ -237,6 +237,21 @@ export async function GET(
               ? user.subscriptionExpiresAt
               : user.scheduledDowngradeAt || subscription?.currentPeriodEnd || null;
 
+    // Who referred this person (the admin page shows the name and email, not just the code).
+    let referredByName = "";
+    const referrerId = typeof user.referredBy === "object" && user.referredBy ? String(user.referredBy.referrerUserId || "") : "";
+    if (referrerId) {
+      try {
+        const referrer = await db.collection("users").findOne(
+          { _id: new ObjectId(referrerId) },
+          { projection: { name: 1, email: 1 } },
+        );
+        if (referrer) referredByName = [referrer.name, referrer.email ? `(${referrer.email})` : ""].filter(Boolean).join(" ");
+      } catch {
+        // Not a valid id: show the code only.
+      }
+    }
+
     return NextResponse.json({
       id: user._id.toString(),
       name: user.name || "",
@@ -263,6 +278,7 @@ export async function GET(
       emailVerified: Boolean(user.emailVerified),
       twoFactorEnabled: Boolean(user.twoFactorEnabled || user.twoFactorSecret),
       referralCode: user.referralCode || "",
+      referredByName,
       // Older accounts store a string; newer ones an object { code, referrerUserId, ... }.
       referredBy: typeof user.referredBy === "string"
         ? user.referredBy

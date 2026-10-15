@@ -30,12 +30,26 @@ export type StudioScreen = "live" | "black" | "logo";
 export const STUDIO_MODULES: StudioTextModule[] = ["bible", "worship", "notes"];
 
 export interface StudioMedia {
-  kind: "image" | "video";
+  kind: "image" | "video" | "audio";
   /** Path on the overlay server, e.g. /uploads/Welcome.mp4 */
   url: string;
   fit: "contain" | "cover";
   loop: boolean;
   muted: boolean;
+}
+
+/** Where the slide came from, so it can be found again (schedule, history, Project again). */
+export interface StudioSlideOrigin {
+  kind: "bible" | "song" | "note" | "media" | "doc";
+  /** Song, note or media id. */
+  id?: string;
+  /** Slide index inside the song or note. */
+  index?: number;
+  book?: string;
+  chapter?: number;
+  verse?: number;
+  endVerse?: number;
+  translation?: string;
 }
 
 /** One slide the operator can preview or send live. */
@@ -53,7 +67,67 @@ export interface StudioSlide {
   /** Bible verse number, shown big on the tile. */
   verse?: number;
   media?: StudioMedia;
+  origin?: StudioSlideOrigin;
+  /** Bible only: the same verse(s) in other translations, shown side by side on the screen. */
+  compare?: StudioCompareColumn[];
+  /** How the two translations are laid out on the screen (the Dock's "Line By Line" / "Side By Side"). */
+  compareLayout?: "line-by-line" | "side-by-side";
+  /** "translations" (same verse, two versions: the default) or "passages" (two different references). */
+  compareMode?: "translations" | "passages";
 }
+
+/** One translation of the verse(s) in a side-by-side Bible slide. */
+export interface StudioCompareColumn {
+  translation: string;
+  /** "John 3:16 (KJV)" */
+  reference: string;
+  text: string;
+  book: string;
+  chapter: number;
+  verse: number;
+  verseEnd: number;
+  /** "16" or "16-17" */
+  verseRange: string;
+}
+
+/** How the live camera sits with the words (see public/studio-output.html). */
+export type StudioCameraLayout = "camera-only" | "behind-content" | "in-front" | "hidden";
+
+export interface StudioCamera {
+  /** The camera is open (it stays open while hidden, so showing it again is instant). */
+  enabled: boolean;
+  /** Empty = the system's default camera. */
+  deviceId: string;
+  layout: StudioCameraLayout;
+  /** The camera's name. Another window can't use the id (ids belong to the window that listed them), so it finds the camera by name. */
+  label?: string;
+  /** Explicitly hide the text layers, even if the camera feed is missing. */
+  wordsOff?: boolean;
+  /** The app itself (not a window) opened this camera: screens only show the pictures it sends and never open a camera or a video link. */
+  native?: boolean;
+}
+
+/** Playback of the video or audio on the screen. `seekRev` changes each time the operator seeks. */
+export interface StudioMediaControl {
+  paused: boolean;
+  /** 0–1 */
+  volume: number;
+  muted: boolean;
+  loop: boolean;
+  fit: "contain" | "cover";
+  seekTo: number;
+  seekRev: number;
+}
+
+export const DEFAULT_MEDIA_CONTROL: StudioMediaControl = {
+  paused: false,
+  volume: 1,
+  muted: false,
+  loop: true,
+  fit: "cover",
+  seekTo: 0,
+  seekRev: 0,
+};
 
 export interface StudioThemeSet {
   fullscreen: BibleTheme | null;
@@ -112,7 +186,41 @@ function resolveSettings(
   const theme = mode === "lower-third" ? set.lowerThird ?? set.fullscreen : set.fullscreen ?? set.lowerThird;
   const settings = themeSettingsForMode(theme, mode);
   if (!settings) return null;
-  return (transition === "cut" ? withoutAnimation(settings) : settings) as unknown as Record<string, unknown>;
+  const scaled = withTextScale(settings, textScale);
+  return (transition === "cut" ? withoutAnimation(scaled) : scaled) as unknown as Record<string, unknown>;
+}
+
+/** Quick text size (percent) the operator picked in Settings; 100 = the theme's own size. */
+let textScale = 100;
+export function setStudioTextScale(percent: number): void {
+  textScale = Number.isFinite(percent) ? Math.max(50, Math.min(200, Math.round(percent))) : 100;
+}
+
+/** The theme with its text sizes multiplied (classic font size and every layer-theme text size). */
+export function withTextScale(settings: BibleThemeSettings, percent: number): BibleThemeSettings {
+  if (!percent || percent === 100) return settings;
+  const k = percent / 100;
+  const next: BibleThemeSettings = { ...settings };
+  if (typeof settings.fontSize === "number") next.fontSize = Math.round(settings.fontSize * k);
+  const layout = settings.layout;
+  if (layout && Array.isArray(layout.layers)) {
+    next.layout = {
+      ...layout,
+      layers: layout.layers.map((layer) => {
+        const style = layer.style;
+        if (!style || typeof style.fontSize !== "number") return layer;
+        return {
+          ...layer,
+          style: {
+            ...style,
+            fontSize: Math.round(style.fontSize * k),
+            ...(typeof style.minFontSize === "number" ? { minFontSize: Math.round(style.minFontSize * k) } : {}),
+          },
+        };
+      }),
+    };
+  }
+  return next;
 }
 
 export interface StudioPacket {
@@ -134,6 +242,9 @@ export function buildStudioPacket(
     reference: slide?.reference ?? "",
     mode,
     themeSettings: resolveSettings(themes, module, mode, transition),
+    compare: module === "bible" && slide?.compare && slide.compare.length >= 2 ? slide.compare : undefined,
+    compareLayout: slide?.compareLayout,
+    compareMode: slide?.compareMode,
   });
   return { module, data, css };
 }
@@ -146,15 +257,43 @@ function blankPacket(mode: StudioMode): Record<string, unknown> {
 
 // ── Program state ──────────────────────────────────────────────────────────
 
+export interface StudioBrand {
+  logoUrl?: string;
+  churchName?: string;
+  logoBg?: { color?: string; image?: string };
+  /** Logo size in percent (100 = normal). */
+  logoScale?: number;
+}
+
+/** Bumped when public/studio-output.html changes in a way an already-open projector window must reload for. */
+export const OUTPUT_PAGE_REV = 4;
+
 export interface StudioProgramState {
   revision: number;
+  /** The newest output page this Studio expects; an older page that is still open reloads itself. */
+  pageRev?: number;
   /** Which layer is on screen (the others are hidden after their exit animation). */
   active: StudioModule | null;
   screen: StudioScreen;
   logoUrl?: string;
   churchName?: string;
+  /** What is behind the logo: one colour or a picture (nothing = the default look). */
+  logoBg?: { color?: string; image?: string };
+  /** How far a tall picture or document page is scrolled on screen, 0 (top) to 100 (bottom), when it fills the width. */
+  scrollY?: number;
+  /** The church's logo as set in the Studio: shown on the logo screen AND while nothing is on the screen. */
+  brand?: StudioBrand;
   packets: Partial<Record<StudioTextModule, Record<string, unknown>>>;
   media: StudioMedia | null;
+  /** Playback of the video in `media`: pause, volume, seek, loop, fit. */
+  mediaControl?: StudioMediaControl;
+  /** Sound only (it plays under whatever is on the screen). */
+  audio?: StudioMedia | null;
+  audioControl?: StudioMediaControl;
+  /** The live camera and where it sits. */
+  camera?: StudioCamera;
+  /** The camera as arranged in Preview (it goes live with Go Live). */
+  previewCamera?: StudioCamera;
   /** Screen Mix: video / camera behind the words, banners and the logo on top. */
   mix?: StudioMixLayer[];
   /** What Preview shows, for Preview projectors (always rendered as Cut, no curtain). */
@@ -174,62 +313,103 @@ function nextRevision(): number {
 }
 
 let program: StudioProgramState = { revision: 0, active: null, screen: "live", packets: {}, media: null };
-let postChain: Promise<void> = Promise.resolve();
+let postChain: Promise<boolean> = Promise.resolve(true);
+let lastError = "";
 
 export function getProgramState(): StudioProgramState {
   return program;
 }
 
-/** Write the new state to the local server and ping the output page over the relay. */
-function commit(next: Omit<StudioProgramState, "revision">): void {
-  program = { ...next, revision: nextRevision() };
+/** Why the last update could not reach the output ("" when it did). */
+export function getLastOutputError(): string {
+  return lastError;
+}
+
+/**
+ * Write the new state to the local server and ping the output page over the relay.
+ * Resolves true once the output server has it, false when it could not be reached
+ * (the caller then must not count the item as shown).
+ */
+function commit(next: Omit<StudioProgramState, "revision">): Promise<boolean> {
+  program = { ...next, pageRev: OUTPUT_PAGE_REV, revision: nextRevision() };
   const body = JSON.stringify(program);
   const revision = program.revision;
-  postChain = postChain
-    .then(async () => {
-      const base = await getOverlayBaseUrl();
+  const result = postChain.then(async () => {
+    try {
+      const base = await studioBaseUrl();
       // text/plain keeps it a "simple" request (no CORS preflight).
-      await fetch(`${base}/api/studio-state`, { method: "POST", headers: { "Content-Type": "text/plain" }, body });
+      const response = await fetch(`${base}/api/studio-state`, { method: "POST", headers: { "Content-Type": "text/plain" }, body });
+      if (!response.ok) throw new Error(`The output server answered ${response.status}.`);
       overlayBridge.publish({ channel: "studio", type: "studio-ping", revision });
-    })
-    .catch((error) => {
+      lastError = "";
+      return true;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "The output could not be updated.";
       console.warn("[Studio] Could not update the output:", error);
-    });
+      return false;
+    }
+  });
+  postChain = result;
+  return result;
+}
+
+/** Scroll a tall picture or document page up or down on Program and Preview (0 = top, 100 = bottom). */
+export function setProgramScroll(scrollY: number): Promise<boolean> {
+  const clamped = Math.max(0, Math.min(100, Math.round(scrollY)));
+  if ((program.scrollY ?? 0) === clamped) return Promise.resolve(true);
+  return commit({ ...program, scrollY: clamped });
+}
+
+/** The logo, church name, background and size used when nothing is on the screen (and by the Logo button). */
+export function setProgramBrand(brand: StudioBrand): Promise<boolean> {
+  return commit({ ...program, brand });
 }
 
 /** Screen state on top of the content: live, black, or the church logo. */
-export function setProgramScreen(screen: StudioScreen, extra: { logoUrl?: string; churchName?: string } = {}): void {
-  commit({
+export function setProgramScreen(screen: StudioScreen, extra: { logoUrl?: string; churchName?: string; logoBg?: { color?: string; image?: string } } = {}): Promise<boolean> {
+  return commit({
     ...program,
     screen,
     logoUrl: screen === "logo" ? extra.logoUrl : undefined,
     churchName: screen === "logo" ? extra.churchName : undefined,
+    logoBg: screen === "logo" ? extra.logoBg : undefined,
   });
 }
 
 /**
  * Send a slide to Program. The module that was live is blanked first (it plays
  * its exit animation), and the screen goes back to live (lifts Black / Logo).
+ * Sound (audio) plays under the screen and leaves the words alone.
+ * Resolves true when the output has it.
  */
 export function goLive(
   slide: StudioSlide,
   themes: StudioThemes | null,
   mode: StudioMode,
   transition: StudioTransition,
-): void {
+): Promise<boolean> {
+  if (slide.module === "media" && slide.media?.kind === "audio") {
+    return commit({
+      ...program,
+      audio: slide.media,
+      audioControl: { ...DEFAULT_MEDIA_CONTROL, loop: slide.media.loop, muted: slide.media.muted, seekRev: Date.now() },
+    });
+  }
   const packets = { ...program.packets };
   const previous = program.active;
   if (previous && previous !== slide.module && previous !== "media") {
     packets[previous] = blankPacket(mode);
   }
   let media = program.media;
+  let mediaControl = program.mediaControl;
   if (slide.module === "media") {
     media = slide.media ?? null;
+    if (media) mediaControl = { ...DEFAULT_MEDIA_CONTROL, loop: media.loop, muted: media.muted, fit: media.fit, seekRev: Date.now() };
   } else {
     packets[slide.module] = buildStudioPacket(slide.module, slide, themes, mode, transition).data;
     if (previous === "media") media = null;
   }
-  commit({ ...program, active: slide.module, screen: "live", logoUrl: undefined, churchName: undefined, packets, media });
+  return commit({ ...program, active: slide.module, screen: "live", logoUrl: undefined, churchName: undefined, logoBg: undefined, packets, media, mediaControl });
 }
 
 /** Something ready to show: an overlay packet for a text module, or a picture / video. */
@@ -238,7 +418,7 @@ export type StudioItem =
   | { module: "media"; media: StudioMedia; label: string };
 
 /** Send a ready item (e.g. from the Dock) to Program; the previous module animates out. */
-export function goLiveItem(item: StudioItem, mode: StudioMode): void {
+export function goLiveItem(item: StudioItem, mode: StudioMode): Promise<boolean> {
   const packets = { ...program.packets };
   const previous = program.active;
   if (previous && previous !== item.module && previous !== "media") {
@@ -251,40 +431,85 @@ export function goLiveItem(item: StudioItem, mode: StudioMode): void {
     packets[item.module] = item.data;
     if (previous === "media") media = null;
   }
-  commit({ ...program, active: item.module, screen: "live", logoUrl: undefined, churchName: undefined, packets, media });
+  return commit({ ...program, active: item.module, screen: "live", logoUrl: undefined, churchName: undefined, logoBg: undefined, packets, media });
 }
 
 /** Set the Screen Mix layers (what is `shown` appears on Program and Preview screens). */
-export function setProgramMix(mix: StudioMixLayer[]): void {
-  commit({ ...program, mix });
+export function setProgramMix(mix: StudioMixLayer[]): Promise<boolean> {
+  return commit({ ...program, mix });
+}
+
+/** Open, move or hide the live camera. Hiding keeps it open so it comes back at once. */
+export function setProgramCamera(camera: StudioCamera): Promise<boolean> {
+  return commit({ ...program, camera: { ...camera } });
+}
+
+/** Arrange the camera in Preview only (the screen does not change until Go Live). */
+export function setPreviewCamera(camera: StudioCamera): Promise<boolean> {
+  return commit({ ...program, previewCamera: { ...camera } });
+}
+
+/** Play / pause / seek / volume of the video ("video") or the sound ("audio") that is on. */
+export function setProgramMediaControl(change: Partial<StudioMediaControl>, target: "video" | "audio" = "video"): Promise<boolean> {
+  if (target === "audio") {
+    const current = program.audioControl ?? DEFAULT_MEDIA_CONTROL;
+    return commit({ ...program, audioControl: { ...current, ...change } });
+  }
+  const current = program.mediaControl ?? DEFAULT_MEDIA_CONTROL;
+  return commit({ ...program, mediaControl: { ...current, ...change } });
+}
+
+/** Stop the sound that is playing. */
+export function stopProgramAudio(): Promise<boolean> {
+  return commit({ ...program, audio: null });
 }
 
 /** Show an item on Preview projectors (null = empty Preview). */
-export function setPreviewItem(item: StudioItem | null): void {
+export function setPreviewItem(item: StudioItem | null): Promise<boolean> {
   const packets = { ...(program.preview?.packets ?? {}) };
   let media: StudioMedia | null = null;
   if (item?.module === "media") media = item.media;
   else if (item) packets[item.module] = item.data;
-  commit({ ...program, preview: { active: item?.module ?? null, packets, media } });
+  return commit({ ...program, preview: { active: item?.module ?? null, packets, media } });
 }
 
-/** Clear everything on Program (each module animates out). */
-export function clearProgram(mode: StudioMode): void {
+/** Clear everything on Program (each module animates out). Sound and the camera stay. */
+export interface ClearProgramOptions {
+  screen?: StudioScreen;
+  logoUrl?: string;
+  churchName?: string;
+  logoBg?: { color?: string; image?: string };
+  camera?: StudioCamera;
+}
+
+export function clearProgram(mode: StudioMode, options: ClearProgramOptions = {}): Promise<boolean> {
   const packets: StudioProgramState["packets"] = {};
   for (const module of STUDIO_MODULES) packets[module] = blankPacket(mode);
-  commit({ ...program, active: null, screen: "live", logoUrl: undefined, churchName: undefined, packets, media: null });
+  const screen = options.screen ?? "live";
+  return commit({
+    ...program,
+    active: null,
+    screen,
+    logoUrl: screen === "logo" ? options.logoUrl : undefined,
+    churchName: screen === "logo" ? options.churchName : undefined,
+    logoBg: screen === "logo" ? options.logoBg : undefined,
+    packets,
+    media: null,
+    ...(options.camera ? { camera: { ...options.camera } } : {}),
+  });
 }
 
 /** Show a slide on Preview projectors (null = empty Preview). */
-export function setPreviewState(slide: StudioSlide | null, themes: StudioThemes | null, mode: StudioMode): void {
+export function setPreviewState(slide: StudioSlide | null, themes: StudioThemes | null, mode: StudioMode): Promise<boolean> {
   const packets = { ...(program.preview?.packets ?? {}) };
   let media: StudioMedia | null = null;
-  if (slide?.module === "media") {
+  if (slide?.module === "media" && slide.media?.kind !== "audio") {
     media = slide.media ?? null;
-  } else if (slide) {
+  } else if (slide && slide.module !== "media") {
     packets[slide.module] = buildStudioPacket(slide.module, slide, themes, mode, "cut").data;
   }
-  commit({ ...program, preview: { active: slide?.module ?? null, packets, media } });
+  const active = slide ? (slide.module === "media" && !media ? null : slide.module) : null;
+  return commit({ ...program, preview: { active, packets, media } });
 }
 
 // ── Frames ─────────────────────────────────────────────────────────────────
@@ -305,8 +530,27 @@ export function previewMonitorUrl(base: string): string {
   return `${base}/studio-output.html?monitor=1&feed=preview`;
 }
 
+/**
+ * The Studio always talks to this computer's own copy of the local server (127.0.0.1).
+ * The app may have cached its Wi-Fi address (http://192.168.x.x:45678) for OBS on other
+ * laptops; the desktop webview blocks that address inside the app, which left the Preview
+ * white and the output never updated. Same port, loopback host.
+ */
+export function toLoopbackBase(base: string): string {
+  // Kept here (same as services/overlayUrl's) so the engine has no extra dependency.
+  try {
+    const url = new URL(base);
+    if (url.protocol === "http:" && !["127.0.0.1", "localhost", "[::1]"].includes(url.hostname)) {
+      url.hostname = "127.0.0.1";
+    }
+    return url.origin;
+  } catch {
+    return base;
+  }
+}
+
 export async function studioBaseUrl(): Promise<string> {
-  return getOverlayBaseUrl();
+  return toLoopbackBase(await getOverlayBaseUrl());
 }
 
 // ── Slides ─────────────────────────────────────────────────────────────────
@@ -326,7 +570,35 @@ export function bibleSlides(
     text: v.text,
     reference: `${book} ${chapter}:${v.verse} (${translation})`,
     itemTitle: `${book} ${chapter}`,
+    origin: { kind: "bible" as const, book, chapter, verse: v.verse, translation },
   }));
+}
+
+/**
+ * Several verses in a row as one slide ("John 3:16-18"). Each verse keeps its number in
+ * brackets, the way the Dock shows a passage.
+ */
+export function bibleRangeSlide(
+  book: string,
+  chapter: number,
+  translation: string,
+  verses: Array<{ verse: number; text: string }>,
+): StudioSlide | null {
+  const sorted = [...verses].sort((a, b) => a.verse - b.verse);
+  if (sorted.length === 0) return null;
+  if (sorted.length === 1) return bibleSlides(book, chapter, translation, sorted)[0];
+  const first = sorted[0].verse;
+  const last = sorted[sorted.length - 1].verse;
+  return {
+    key: `bible:${book}:${chapter}:${first}-${last}:${translation}`,
+    module: "bible",
+    label: `${first}-${last}`,
+    verse: first,
+    text: sorted.map((v) => `[${v.verse}] ${v.text}`).join("\n"),
+    reference: `${book} ${chapter}:${first}-${last} (${translation})`,
+    itemTitle: `${book} ${chapter}`,
+    origin: { kind: "bible", book, chapter, verse: first, endVerse: last, translation },
+  };
 }
 
 /** Split note text into slides on blank lines. */
@@ -342,5 +614,6 @@ export function noteSlides(noteId: string, title: string, content: string): Stud
       text: block,
       reference: "",
       itemTitle: title,
+      origin: { kind: "note" as const, id: noteId, index: i },
     }));
 }

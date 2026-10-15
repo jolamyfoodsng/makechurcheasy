@@ -6794,6 +6794,15 @@ export class DockObsClient {
     lineCount?: number;
     mode: "fullscreen" | "lower-third";
     themeSettings: Record<string, unknown> | null;
+    /** Studio side-by-side Bible: the same verse(s) in two translations. */
+    compare?: Array<{
+      translation: string; reference: string; text: string; book: string; chapter: number;
+      verse: number; verseEnd: number; verseRange: string;
+    }>;
+    /** "line-by-line" (one translation under the other) or "side-by-side"; side-by-side when not given. */
+    compareLayout?: "line-by-line" | "side-by-side";
+    /** "passages" = two different references side by side (always columns); "translations" when not given. */
+    compareMode?: "translations" | "passages";
   }): { data: Record<string, unknown>; css: string } {
     let cleanTheme: Record<string, unknown> | null = null;
     let css = "";
@@ -6806,8 +6815,35 @@ export class DockObsClient {
       css = stripCompatModeCSS(stripped.css);
     }
     const text = (input.text || "").trim();
+    const compareColumns = (input.compare ?? []).slice(0, 2);
+    const comparePassages = input.compareMode === "passages";
     const slide = text
-      ? this.buildBibleSlide(text, input.reference, input.verseRange ?? "", "", "original-first", input.lineCount)
+      ? compareColumns.length === 2
+        ? {
+          id: "dock-bible-compare-slide",
+          layout: "compare",
+          compareEnabled: true,
+          compareMode: comparePassages ? "passages" : "translations",
+          compareLayout: !comparePassages && input.compareLayout === "line-by-line" ? "line-by-line" : "side-by-side",
+          reference: input.reference,
+          text,
+          verseRange: input.verseRange ?? "",
+          index: 0,
+          total: 1,
+          translationA: compareColumns[0].translation,
+          translationB: compareColumns[1].translation,
+          columns: compareColumns.map((column) => ({
+            book: column.book,
+            chapter: column.chapter,
+            verse: column.verse,
+            verseEnd: column.verseEnd,
+            reference: column.reference,
+            translation: column.translation,
+            text: column.text,
+            verseRange: column.verseRange,
+          })),
+        } as Record<string, unknown>
+        : this.buildBibleSlide(text, input.reference, input.verseRange ?? "", "", "original-first", input.lineCount)
       : null;
     const timestamp = Date.now();
     const data = this.buildStandaloneOverlayPacket(

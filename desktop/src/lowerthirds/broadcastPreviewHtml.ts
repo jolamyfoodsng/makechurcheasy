@@ -148,7 +148,7 @@ ${kineticFontLinks}
 <script src="/kinetic/church-lower-thirds.js?v=4"></script>
 <script src="/kinetic/sunday-lower-thirds.js?v=2"></script>
 <script src="/kinetic/stream-lower-thirds.js?v=2"></script>
-<script src="/kinetic/mce-graphic-packages.js?v=3"></script>
+<script src="/kinetic/mce-graphic-packages.js?v=4"></script>
 </head>
 <body>
 <div id="kx-canvas">${html}</div>

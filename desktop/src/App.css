@@ -4561,6 +4561,35 @@ input[type="radio"] {
   transition: all 0.2s;
 }
 
+/* Support modal "Done" button: full width, same height as the contact rows' neighbours */
+.support-modal-done {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary, #f8fafc);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.support-modal-done:hover {
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.support-modal-done:focus-visible {
+  outline: 2px solid var(--primary, #4f46e5);
+  outline-offset: 2px;
+}
+
 .end-confirm-btn-cancel {
   background: var(--surface-raised);
   color: var(--text-muted);
@@ -18500,19 +18529,22 @@ html.mv-theme-light .dash-v2-footer {
 
 .sts3-timer {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   color: var(--text);
-  padding: 5px 9px;
+  padding: 4px 7px;
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .sts3-header-actions {
   display: flex;
   gap: 4px;
+  flex: 0 0 auto;
 }
 
 .sts3-header-icon-btn {

@@ -481,7 +481,7 @@ html.studio-page .studio { height: 100vh; height: 100dvh; }
 .sx-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--input-text); font-size: 12.5px; }
 
 /* Bible doc (left) */
-.sx-bible { --studio-reading-font: "Charis SIL", "Questrial", Georgia, serif; position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.sx-bible { --studio-reading-font: var(--font-user, "Charis SIL", "Questrial", Georgia, serif); position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .sx-bible__search { position: relative; display: flex; gap: 6px; padding: 10px; border-bottom: 1px solid var(--border); }
 .sx-trans { position: relative; }
 .sx-trans__btn { display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface-raised); color: var(--text); font-size: 12px; font-weight: 700; cursor: pointer; }
@@ -673,7 +673,7 @@ html.studio-page .studio { height: 100vh; height: 100dvh; }
 .sx-sl__row.is-live { background: rgba(220, 38, 38, 0.16); border-left-color: var(--error); }
 .sx-sl__head { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 3px; }
 .sx-sl__tag { padding: 1px 6px; border-radius: 4px; background: var(--surface-hover); color: var(--text-secondary); font-size: 10px; font-weight: 800; letter-spacing: 0.05em; }
-.sx-sl__text { font-family: "Charis SIL", "Questrial", Georgia, serif; font-size: 12.5px; line-height: 1.4; color: #f4f4f4; white-space: pre-line; }
+.sx-sl__text { font-family: var(--font-user, "Charis SIL", "Questrial", Georgia, serif); font-size: 12.5px; line-height: 1.4; color: #f4f4f4; white-space: pre-line; }
 .sx-livestatus { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; color: var(--text-muted); min-width: 0; }
 .sx-livestatus.is-on { color: var(--text-primary); border-color: var(--error); }
 .sx-livestatus__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

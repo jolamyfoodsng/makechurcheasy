@@ -13,6 +13,9 @@
     The app keeps one program state on its local server (/api/studio-state):
       { revision, active, screen, logoUrl?, churchName?, packets: {bible, worship, notes}, media, mix? }
     `mix` is the Screen Mix: video / picture / camera layers behind the words, banners and the logo on top.
+    `camera` is the Studio camera: { enabled, deviceId, layout } with layout camera-only | behind-content |
+    in-front | hidden. Hidden keeps the camera open (instant to show again); only enabled:false closes it.
+    `mediaControl` / `audioControl` play, pause, seek, loop and set the volume of the video / sound.
     This page reads it (immediately when the relay pings, otherwise every 400 ms)
     and gives each overlay page its packet through the URL hash, the same way the
     Studio's Preview works. The overlay pages ignore the relay (mceRelay=0), so the
@@ -54,8 +57,53 @@
       height: 100%;
       object-fit: contain;
     }
-    /* Screen Mix: backdrops sit behind the words (DOM order), banners and the logo in front. */
+    /* Stacking: Screen Mix backdrops < camera behind < words / media < banners, logo < camera in front < curtain. */
     #mix-back, #mix-front { position: absolute; inset: 0; pointer-events: none; }
+    #mix-back { z-index: 1; }
+    .layer { z-index: 3; transition: opacity 0.35s ease; }
+    #mix-front { z-index: 5; }
+    /* Camera only is a full-screen camera layer over the active scene. Keep the scene underneath
+       so it remains visible if the camera cannot open or stops sending pictures. */
+    body.content-off .layer { opacity: 0 !important; }
+    #cam {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      opacity: 0;
+      overflow: hidden;
+      background: #000;
+      pointer-events: none;
+      transition: opacity 0.35s ease;
+    }
+    #cam video, #cam img { width: 100%; height: 100%; display: block; object-fit: cover; }
+    #cam img, #cam #cam-rtc { display: none; position: absolute; inset: 0; }
+    #cam.has-frame img { display: block; }
+    #cam.has-frame video { display: none; }
+    #cam.has-live #cam-rtc { display: block !important; }
+    #cam.has-live img, #cam.has-live video:not(#cam-rtc) { display: none !important; }
+    #cam.is-on { opacity: 1; }
+    /* Preview only: if the camera can't open inside the preview, still show where it will sit. */
+    body.feed-preview #cam.no-video { background: linear-gradient(135deg, #1b2438, #0b1020); }
+    body.feed-preview #cam.no-video::after {
+      content: 'CAMERA';
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      color: rgba(255, 255, 255, 0.55);
+      font: 700 3vw/1 sans-serif; letter-spacing: 0.3em;
+    }
+    body.feed-preview #cam.l-in-front.no-video::after { font-size: 1.6vw; }
+    #cam.l-camera-only { z-index: 6; }
+    /* In front: a picture-in-picture box over the words. */
+    #cam.l-in-front {
+      z-index: 6;
+      inset: auto 3vw auto auto;
+      top: 4vh;
+      width: 30vw;
+      height: 16.875vw;
+      border-radius: 1vw;
+      box-shadow: 0 1vw 3vw rgba(0, 0, 0, 0.55);
+      border: 0.25vw solid rgba(255, 255, 255, 0.85);
+    }
     .mix-item { position: absolute; inset: 0; opacity: 0; transition: opacity 0.45s ease; }
     .mix-item.is-on { opacity: 1; }
     .mix-item video, .mix-item img.mix-fill { width: 100%; height: 100%; display: block; background: #000; }
@@ -84,6 +132,8 @@
     .mix-banner.c-bottom-right { right: 3vw; bottom: 6vh; }
     .mix-banner.c-top-left { left: 3vw; top: 5vh; }
     .mix-banner.c-top-right { right: 3vw; top: 5vh; }
+    .mix-graphic { position: absolute; inset: 0; pointer-events: none; }
+    .mix-graphic__frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; color-scheme: normal; }
     .mix-logo { position: absolute; max-width: 14vw; max-height: 16vh; object-fit: contain; opacity: 0; transition: opacity 0.45s ease; }
     .mix-logo.is-on { opacity: 1; }
     .mix-logo.c-bottom-left { left: 3vw; bottom: 4vh; }
@@ -94,7 +144,7 @@
     #curtain {
       position: absolute;
       inset: 0;
-      z-index: 10;
+      z-index: 10 !important;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -108,17 +158,40 @@
       visibility: visible;
       transition: opacity 0.35s ease;
     }
-    #curtain img {
-      max-width: 42vw;
-      max-height: 42vh;
+    /* The logo (or the church name) sits exactly in the middle, across and down. */
+    #curtain img, #idle img {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      display: block; margin: 0;
+      width: calc(42vw * var(--logo-scale, 1));
+      height: calc(42vh * var(--logo-scale, 1));
+      max-width: 96vw;
+      max-height: 96vh;
       object-fit: contain;
     }
-    #curtain .name {
+    #curtain.has-bg-image { background-size: cover; background-position: center; background-repeat: no-repeat; }
+    #curtain .name, #idle .name {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      width: 88vw;
       color: #fff;
       font: 600 4.2vw/1.2 Inter, "Segoe UI", system-ui, sans-serif;
       text-align: center;
-      padding: 0 6vw;
     }
+    /* The picture shown when the logo screen has no church logo, and behind everything while nothing is on. */
+    #idle {
+      position: absolute; inset: 0; z-index: 0;
+      background: #0a3be8 center / cover no-repeat url('/make_church_easy_onboarding.png');
+      opacity: 0; visibility: hidden;
+      transition: opacity 0.45s ease, visibility 0s linear 0.45s;
+    }
+    #idle.is-on { opacity: 1; visibility: visible; transition: opacity 0.45s ease; }
+    #curtain.is-default { background: #0a3be8 center / cover no-repeat url('/make_church_easy_onboarding.png'); }
+    #diag {
+      display: none; position: fixed; left: 12px; bottom: 12px; z-index: 60; margin: 0;
+      max-width: 70vw; padding: 10px 12px; border-radius: 8px;
+      background: rgba(0, 0, 0, 0.78); color: #d7e3ff; font: 12px/1.5 ui-monospace, Menlo, monospace;
+      white-space: pre-wrap; pointer-events: none;
+    }
+    body.show-diag #diag { display: block; }
     #hint, #menu {
       position: absolute;
       z-index: 20;
@@ -174,19 +247,32 @@
 </head>
 <body>
   <div id="mix-back" aria-hidden="true"></div>
-  <iframe class="layer" id="layer-bible" title="Bible" src="mce-bible-overlay.html?tab=bible&amp;mceRelay=0&amp;mceSource=studio-output-bible"></iframe>
-  <iframe class="layer" id="layer-worship" title="Worship" src="mce-worship-overlay.html?mceRelay=0&amp;mceSource=studio-output-worship"></iframe>
-  <iframe class="layer" id="layer-notes" title="Notes" src="mce-note.html?mceRelay=0&amp;mceSource=studio-output-notes"></iframe>
+  <div id="cam" aria-hidden="true"><video muted playsinline></video><video id="cam-rtc" muted playsinline></video><img id="cam-img" alt=""></div>
+  <audio id="audio" preload="auto"></audio>
+  <iframe class="layer" id="layer-bible" title="Bible" data-src="mce-bible-overlay.html?tab=bible&amp;mceRelay=0&amp;mceSource=studio-output-bible"></iframe>
+  <iframe class="layer" id="layer-worship" title="Worship" data-src="mce-worship-overlay.html?mceRelay=0&amp;mceSource=studio-output-worship"></iframe>
+  <iframe class="layer" id="layer-notes" title="Notes" data-src="mce-note.html?mceRelay=0&amp;mceSource=studio-output-notes"></iframe>
   <div class="layer" id="layer-media"></div>
   <div id="mix-front" aria-hidden="true"></div>
+  <div id="idle" aria-hidden="true"></div>
   <div id="curtain" aria-hidden="true"></div>
   <div id="hint" role="status"></div>
+  <pre id="diag" aria-hidden="true"></pre>
   <div id="menu" role="menu"><button type="button" id="menu-close" role="menuitem">Close projector <span>Esc</span></button></div>
   <script>
     (function () {
       var params = new URLSearchParams(window.location.search);
       var isMonitor = params.get('monitor') === '1';
       if (isMonitor) document.body.classList.add('monitor');
+      if (params.get('feed') === 'preview') document.body.classList.add('feed-preview');
+      // The Studio's own monitors (Preview, Live card) get the camera picture from the Studio itself,
+      // drawn behind / over this page, so the camera is never opened twice. Transparent here.
+      var NOCAM = params.get('nocam') === '1';
+      if (NOCAM) {
+        document.body.classList.add('nocam');
+        document.documentElement.style.background = 'transparent';
+        document.body.style.background = 'transparent';
+      }
       // program (default) or preview: which part of the Studio state this screen shows.
       var feed = params.get('feed') === 'preview' ? 'preview' : 'program';
       // Window label when opened as a projector by the app (Esc asks the app to close it).
@@ -201,15 +287,20 @@
         media: document.getElementById('layer-media')
       };
       var curtain = document.getElementById('curtain');
+      var idleEl = document.getElementById('idle');
       var baseSrc = {};
       ['bible', 'worship', 'notes'].forEach(function (key) {
-        baseSrc[key] = layers[key].getAttribute('src');
+        baseSrc[key] = layers[key].getAttribute('data-src');
       });
+      var LITE = /iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent || '') && !winLabel;
+      function ensureLoaded(key) { if (!layers[key].getAttribute('src') && baseSrc[key]) layers[key].setAttribute('src', baseSrc[key]); }
+      if (!LITE) ['bible', 'worship', 'notes'].forEach(ensureLoaded);
       var loaded = { bible: false, worship: false, notes: false };
       var queued = {};
       var appliedPacket = {};
       var hideTimers = {};
       var lastRevision = 0;
+      var PAGE_REV = 4;
       var lastScreenKey = '';
       var lastMediaKey = '';
 
@@ -227,7 +318,7 @@
       // A new hash on the same page is a fragment navigation: the overlay page's
       // hashchange handler renders it without reloading.
       function sendPacket(key, packet) {
-        if (!loaded[key]) { queued[key] = packet; return; }
+        if (!loaded[key]) { queued[key] = packet; ensureLoaded(key); return; }
         var json = JSON.stringify(packet);
         if (appliedPacket[key] === json) return;
         appliedPacket[key] = json;
@@ -250,13 +341,20 @@
         });
       }
 
+      var mediaNode = null;
+      var lastVideoSeek = 0;
+
       function applyMedia(media) {
         var el = layers.media;
-        var key = media ? [media.kind, media.url, media.fit, media.loop, media.muted].join('|') : '';
+        // Only a new file rebuilds the element; fit, loop, sound and seeking come from mediaControl.
+        var key = media ? [media.kind, media.url].join('|') : '';
         if (key === lastMediaKey) return;
         lastMediaKey = key;
         if (!media || !media.url) {
           el.classList.remove('is-on');
+          var old = mediaNode;
+          mediaNode = null;
+          if (old && old.tagName === 'VIDEO') { try { old.pause(); } catch (e) { /* ignore */ } }
           setTimeout(function () { if (!lastMediaKey) el.textContent = ''; }, 400);
           return;
         }
@@ -270,31 +368,380 @@
           node.muted = isMonitor || media.muted === true;
           node.playsInline = true;
           node.src = media.url;
-          node.addEventListener('canplay', function () { try { node.play(); } catch (e) { /* ignore */ } }, { once: true });
+          node.addEventListener('canplay', function () {
+            if (!node.dataset.paused) { try { node.play(); } catch (e) { /* ignore */ } }
+          }, { once: true });
         } else {
           node = document.createElement('img');
           node.alt = '';
           node.src = media.url;
         }
         node.style.objectFit = media.fit === 'cover' ? 'cover' : 'contain';
+        mediaNode = node;
         el.appendChild(node);
         requestAnimationFrame(function () { el.classList.add('is-on'); });
       }
 
+      // Pause / play / seek / volume / loop / fit for a video or audio element.
+      function controlPlayer(node, ctrl, lastSeekRef) {
+        if (!node || !ctrl) return lastSeekRef;
+        if (node.tagName === 'IMG') {
+          node.style.objectFit = ctrl.fit === 'cover' ? 'cover' : 'contain';
+          return lastSeekRef;
+        }
+        if (node.tagName === 'VIDEO') node.style.objectFit = ctrl.fit === 'cover' ? 'cover' : 'contain';
+        node.loop = ctrl.loop !== false;
+        node.muted = isMonitor || ctrl.muted === true;
+        var volume = Number(ctrl.volume);
+        if (isFinite(volume)) node.volume = Math.max(0, Math.min(1, volume));
+        var rev = Number(ctrl.seekRev) || 0;
+        if (rev && rev !== lastSeekRef) {
+          lastSeekRef = rev;
+          var to = Math.max(0, Number(ctrl.seekTo) || 0);
+          var seek = function () { try { node.currentTime = to; } catch (e) { /* ignore */ } };
+          if (node.readyState >= 1) seek(); else node.addEventListener('loadedmetadata', seek, { once: true });
+        }
+        if (ctrl.paused) {
+          node.dataset.paused = '1';
+          try { node.pause(); } catch (e) { /* ignore */ }
+        } else {
+          delete node.dataset.paused;
+          if (node.paused) { var p = node.play(); if (p && p.catch) p.catch(function () { /* autoplay blocked */ }); }
+        }
+        return lastSeekRef;
+      }
+
+      // ── Sound (plays under the screen) ──
+      var audioEl = document.getElementById('audio');
+      var lastAudioKey = '';
+      var lastAudioSeek = 0;
+      function applyAudio(audio, ctrl) {
+        var key = audio && audio.url ? audio.url : '';
+        // The in-app Preview monitor never plays sound.
+        if (isMonitor || feed === 'preview') key = '';
+        if (key !== lastAudioKey) {
+          lastAudioKey = key;
+          lastAudioSeek = 0;
+          if (!key) {
+            try { audioEl.pause(); } catch (e) { /* ignore */ }
+            audioEl.removeAttribute('src');
+            try { audioEl.load(); } catch (e) { /* ignore */ }
+            return;
+          }
+          audioEl.src = key;
+        }
+        if (key) lastAudioSeek = controlPlayer(audioEl, ctrl || {}, lastAudioSeek);
+      }
+
+      // ── Camera ──
+      var camBox = document.getElementById('cam');
+      var camVideo = camBox.querySelector('video');
+      var camVideoRtc = document.getElementById('cam-rtc');
+      var camStream = null;
+      var camDevice = null;
+      var camToken = 0;
+      function stopCam() {
+        camToken++;
+        if (camStream) {
+          camStream.getTracks().forEach(function (track) { try { track.stop(); } catch (e) { /* ignore */ } });
+          camStream = null;
+        }
+        camVideo.srcObject = null;
+        camDevice = null;
+      }
+      // The Studio already has the camera open, so it sends the pictures here (a second app window
+      // can't always open the same camera). Used on the screen/projector feed; if no pictures arrive,
+      // this page opens the camera itself as a fallback.
+      var camImg = document.getElementById('cam-img');
+      var frameSeq = 0;
+      var frameTimer = null;
+      var frameBusy = false;
+      var frameLastAt = 0;
+      var frameWantedAt = 0;
+      var everLinked = false; // the Studio has sent the camera to this window at least once
+      var frameUrl = '';
+      var useFrames = !NOCAM && feed === 'program';
+      function hasFrame() { return useFrames && frameLastAt > 0 && Date.now() - frameLastAt < 3000; }
+      function frameBase() {
+        try { if (location.protocol === 'http:' || location.protocol === 'https:') return location.origin; } catch (e) { /* ignore */ }
+        return 'http://127.0.0.1:' + (params.get('port') || '17890');
+      }
+      function dropFrame() {
+        frameLastAt = 0; // frameSeq stays: an old picture is never shown again
+        camBox.classList.remove('has-frame');
+        if (frameUrl) { try { URL.revokeObjectURL(frameUrl); } catch (e) { /* ignore */ } frameUrl = ''; }
+        camImg.removeAttribute('src');
+      }
+      function pollFrame() {
+        if (frameBusy) return;
+        frameBusy = true;
+        fetch(frameBase() + '/api/studio-camera?since=' + frameSeq, { cache: 'no-store' }).then(function (res) {
+          diag.frameStatus = String(res.status);
+          if (res.status !== 200) { return null; }
+          var seq = Number(res.headers.get('X-Frame-Seq') || 0);
+          return res.blob().then(function (blob) { return { seq: seq, blob: blob }; });
+        }).then(function (got) {
+          frameBusy = false;
+          if (!got || !got.blob || !got.blob.size) {
+            if (frameLastAt && Date.now() - frameLastAt > 3000 && camBox.classList.contains('has-frame')) { dropFrame(); applyCamera(lastCam); }
+            return;
+          }
+          frameSeq = got.seq || frameSeq + 1;
+          var next = URL.createObjectURL(got.blob);
+          var prev = frameUrl;
+          frameUrl = next;
+          camImg.onload = function () {
+            if (prev) { try { URL.revokeObjectURL(prev); } catch (e) { /* ignore */ } }
+          };
+          camImg.src = next;
+          var first = !frameLastAt;
+          frameLastAt = Date.now();
+          camBox.classList.add('has-frame');
+          if (first) {
+            // Pictures are arriving: the page's own camera is not needed.
+            stopCam();
+            applyCamera(lastCam);
+          }
+        }).catch(function () { frameBusy = false; diag.frameStatus = 'no answer'; });
+      }
+      function startFramePolling(on) {
+        if (!useFrames) return;
+        if (on && !frameTimer) {
+          frameWantedAt = Date.now();
+          frameTimer = setInterval(pollFrame, LITE ? 200 : 70);
+        } else if (!on && frameTimer) {
+          clearInterval(frameTimer); frameTimer = null;
+          dropFrame();
+        }
+      }
+      // Press D on this window to see what it is receiving (for when the screen stays black).
+      var diag = { okAt: 0, err: '', camErr: '', via: 'none', rev: 0, frameStatus: '' };
+      var diagBox = document.getElementById('diag');
+      function renderDiag() {
+        if (!document.body.classList.contains('show-diag')) return;
+        var c = lastCam;
+        var ago = diag.okAt ? Math.round((Date.now() - diag.okAt) / 1000) + 's ago' : 'never';
+        var lines = [
+          'Studio link: ' + (diag.err ? 'PROBLEM (' + diag.err + ')' : 'ok') + ' · last answer ' + ago + ' · revision ' + lastRevision,
+          'Screen: ' + (lastScreen || 'live') + ' · showing: ' + (lastActive || 'nothing'),
+          'Camera in Studio: ' + (c && c.enabled ? 'ON, layout ' + c.layout : 'OFF (press Go Live with the camera on)'),
+          'Picture link: ' + (diag.frameStatus || 'not asked yet') + ' · Camera picture here: ' + (rtcLive ? 'live video link' : hasFrame() ? 'pictures from the Studio' : camStream ? 'this window opened the camera' : 'none yet') + (diag.camErr ? ' · camera error: ' + diag.camErr : ''),
+          'Window: ' + window.location.href.replace(/^https?:\/\//, '')
+        ];
+        diagBox.textContent = lines.join('\n');
+      }
+      setInterval(renderDiag, 500);
+      var lastScreen = '';
+      var lastActive = '';
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'd' || e.key === 'D') { document.body.classList.toggle('show-diag'); renderDiag(); }
+      });
+
+      // ── Live video link ──
+      // The best way: the Studio sends the camera as real live video (WebRTC on this computer or
+      // network). Pictures above are the backup if the link can't be made.
+      var rtcId = 'v' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+      var rtcPc = null;
+      var rtcTimer = null;
+      var rtcSince = 0;
+      var rtcHelloAt = 0;
+      var rtcLive = false;
+      function rtcSend(msg) {
+        msg.from = rtcId; msg.to = 'studio';
+        return fetch(frameBase() + '/api/studio-rtc', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(msg) }).catch(function () { /* ignore */ });
+      }
+      function rtcClose() {
+        rtcLive = false;
+        if (rtcPc) { try { rtcPc.close(); } catch (e) { /* ignore */ } rtcPc = null; }
+        camBox.classList.remove('has-live');
+        camVideoRtc.srcObject = null;
+      }
+      function rtcOnMessage(msg) {
+        if (!msg || msg.from !== 'studio') return;
+        if (msg.type === 'offer') {
+          rtcClose();
+          var pc = new RTCPeerConnection({ iceServers: [] });
+          rtcPc = pc;
+          pc.onicecandidate = function (ev) { if (ev.candidate && rtcPc === pc) rtcSend({ type: 'candidate', candidate: ev.candidate.toJSON ? ev.candidate.toJSON() : ev.candidate }); };
+          pc.ontrack = function (ev) {
+            if (rtcPc !== pc) return;
+            camVideoRtc.srcObject = ev.streams && ev.streams[0] ? ev.streams[0] : new MediaStream([ev.track]);
+            try { camVideoRtc.play(); } catch (e) { /* ignore */ }
+          };
+          pc.onconnectionstatechange = function () {
+            if (rtcPc !== pc) return;
+            if (pc.connectionState === 'connected') {
+              rtcLive = true;
+              camBox.classList.add('has-live');
+              stopCam();
+              applyCamera(lastCam);
+            } else if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+              var wasLive = rtcLive;
+              rtcClose();
+              if (wasLive) applyCamera(lastCam);
+            } else if (pc.connectionState === 'disconnected') {
+              // A short blip often heals itself: keep the last picture for a few seconds before giving up.
+              setTimeout(function () {
+                if (rtcPc !== pc || pc.connectionState === 'connected') return;
+                var wasLive2 = rtcLive;
+                rtcClose();
+                if (wasLive2) applyCamera(lastCam);
+              }, 4000);
+            }
+          };
+          pc.setRemoteDescription({ type: 'offer', sdp: msg.sdp })
+            .then(function () { return pc.createAnswer(); })
+            .then(function (answer) { return pc.setLocalDescription(answer).then(function () { return answer; }); })
+            .then(function (answer) { rtcSend({ type: 'answer', sdp: answer.sdp }); })
+            .catch(function () { if (rtcPc === pc) rtcClose(); });
+        } else if (msg.type === 'candidate' && rtcPc && msg.candidate) {
+          rtcPc.addIceCandidate(msg.candidate).catch(function () { /* ignore */ });
+        } else if (msg.type === 'bye') {
+          rtcClose();
+          applyCamera(lastCam);
+        }
+      }
+      function rtcPoll() {
+        fetch(frameBase() + '/api/studio-rtc?to=' + encodeURIComponent(rtcId) + '&since=' + rtcSince, { cache: 'no-store' })
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            if (data && typeof data.seq === 'number') rtcSince = Math.max(rtcSince, data.seq);
+            ((data && data.messages) || []).forEach(rtcOnMessage);
+          }).catch(function () { /* ignore */ });
+        // Ask again until the Studio answers (it may not be sending yet).
+        if (!rtcLive && !rtcPc && Date.now() - rtcHelloAt > 2000) { rtcHelloAt = Date.now(); rtcSend({ type: 'hello' }); }
+      }
+      function startRtc(on) {
+        if (LITE || !useFrames || typeof RTCPeerConnection === 'undefined') return;
+        if (on && !rtcTimer) {
+          rtcHelloAt = 0;
+          rtcTimer = setInterval(rtcPoll, 300);
+          rtcPoll();
+        } else if (!on && rtcTimer) {
+          clearInterval(rtcTimer); rtcTimer = null;
+          rtcSend({ type: 'bye' });
+          rtcClose();
+        }
+      }
+      window.addEventListener('pagehide', function () { if (rtcTimer) rtcSend({ type: 'bye' }); });
+
+      function applyCamera(cam) {
+        var enabled = !!(cam && cam.enabled);
+        var layout = enabled ? String(cam.layout || 'hidden') : 'hidden';
+        // Text visibility is explicit. Older camera-only state still means words off; new state can
+        // keep the slide underneath the camera as a fallback when the camera feed is unavailable.
+        var wordsOff = !!(cam && cam.wordsOff) || (enabled && layout === 'camera-only' && cam.wordsOff == null);
+        document.body.classList.toggle('content-off', wordsOff);
+        if (NOCAM) { camBox.classList.remove('is-on'); return; }
+        camBox.classList.remove('l-camera-only', 'l-in-front', 'l-behind-content');
+        if (layout !== 'hidden') camBox.classList.add('l-' + layout);
+        startRtc(enabled && !(cam && cam.native)); // hidden keeps the live link open, so showing the camera again is instant (native: no link at all)
+        startFramePolling(enabled && layout !== 'hidden' && !rtcLive);
+        var haveFrame = hasFrame() || rtcLive;
+        if (haveFrame) everLinked = true;
+        camBox.classList.toggle('no-video', !camStream && !haveFrame);
+        camBox.classList.toggle('is-on', enabled && layout !== 'hidden' && (!!camStream || haveFrame || feed === 'preview'));
+        if (useFrames && enabled && layout !== 'hidden' && !haveFrame) {
+          // Give the Studio's pictures a moment to arrive before opening the camera here.
+          if (Date.now() - frameWantedAt < (everLinked ? 15000 : 2500)) { setTimeout(function () { applyCamera(lastCam); }, 700); return; }
+        }
+        if (haveFrame) { return; }
+        // Native camera: the app itself sends the pictures. This window never opens a camera.
+        if (cam && cam.native) return;
+        if (!enabled) {
+          if (camStream || camDevice !== null) setTimeout(function () { if (!lastCam || !lastCam.enabled) stopCam(); }, 400);
+          return;
+        }
+        var device = String(cam.deviceId || '');
+        if (camStream && camDevice === device) return;
+        if (camDevice === device && !camStream) return; // opening
+        stopCam();
+        camDevice = device;
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+        var token = camToken;
+        var wantLabel = String(cam.label || '');
+        var openStream = function (constraints) { return navigator.mediaDevices.getUserMedia({ video: constraints, audio: false }); };
+        // A camera id only means something inside the window that listed it, so the id the Studio sent is
+        // just a first try. When it does not fit here, open the default camera, then switch to the camera
+        // with the same name if there is one.
+        var opening = device
+          ? openStream({ deviceId: { exact: device } }).catch(function (err) {
+              if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) throw err;
+              return openStream(true);
+            })
+          : openStream(true);
+        opening.then(function (first) {
+          var track = first.getVideoTracks()[0];
+          if (!wantLabel || !track || track.label === wantLabel) return first;
+          return navigator.mediaDevices.enumerateDevices().then(function (list) {
+            var match = list.filter(function (d) { return d.kind === 'videoinput' && d.label === wantLabel; })[0];
+            var usedId = track.getSettings ? track.getSettings().deviceId : '';
+            if (!match || match.deviceId === usedId) return first;
+            return openStream({ deviceId: { exact: match.deviceId } }).then(function (better) {
+              first.getTracks().forEach(function (t) { try { t.stop(); } catch (e) { /* ignore */ } });
+              return better;
+            }).catch(function () { return first; });
+          }).catch(function () { return first; });
+        }).then(function (stream) {
+          if (token !== camToken) { stream.getTracks().forEach(function (tr) { tr.stop(); }); return; }
+          camStream = stream;
+          camVideo.srcObject = stream;
+          try { camVideo.play(); } catch (e) { /* ignore */ }
+          // The track ending (unplugged) closes it; the words stay on screen.
+          stream.getVideoTracks().forEach(function (track) {
+            track.addEventListener('ended', function () { if (camStream === stream) { stopCam(); camBox.classList.remove('is-on'); } });
+          });
+          applyCamera(lastCam);
+        }).catch(function (err) {
+          diag.camErr = (err && err.name) || 'unknown';
+          if (token === camToken) camDevice = null; /* no camera or no permission: nothing is shown */
+          // Say why on a projector window, so a blocked camera is not a silent black screen.
+          if (!isMonitor && typeof showHint === 'function') {
+            var why = err && err.name === 'NotAllowedError' ? 'Camera access is blocked for MakeChurchEazy (check System Settings > Privacy > Camera).'
+              : err && err.name === 'NotReadableError' ? 'The camera is busy in another app.'
+              : (diag.frameStatus === '404' || diag.frameStatus === 'no answer')
+                ? 'The Studio is not sending its camera to this screen. Close MakeChurchEazy completely and open it again, so the new version loads.'
+                : 'The camera from the Studio has not arrived yet. In the Studio, check the camera is on, then press Go Live.';
+            showHint(why, 15000);
+          }
+        });
+      }
+      var lastCam = null;
+
       function applyScreen(state) {
         var screen = String(state.screen || 'live');
-        var key = screen + '|' + (state.logoUrl || '') + '|' + (state.churchName || '');
+        var bg = (screen === 'logo' && state.logoBg && typeof state.logoBg === 'object') ? state.logoBg : null;
+        var bgColor = bg && typeof bg.color === 'string' && /^#[0-9a-f]{3,8}$/i.test(bg.color) ? bg.color : '';
+        var bgImage = bg && typeof bg.image === 'string' && /^data:image\//i.test(bg.image) ? bg.image : '';
+        var key = screen + '|' + (state.logoUrl || '') + '|' + (state.churchName || '') + '|' + bgColor + '|' + bgImage.length + bgImage.slice(-40);
         if (key === lastScreenKey) return;
         lastScreenKey = key;
         curtain.textContent = '';
+        curtain.classList.remove('is-default', 'has-bg-image');
+        curtain.style.backgroundColor = '';
+        curtain.style.backgroundImage = '';
+        var hasBg = !!(bgColor || bgImage);
+        if (bgImage) {
+          curtain.style.backgroundImage = 'url("' + bgImage.replace(/"/g, '%22') + '")';
+          curtain.classList.add('has-bg-image');
+        } else if (bgColor) {
+          curtain.style.backgroundColor = bgColor;
+        }
         if (screen === 'logo') {
           var showName = function () {
             curtain.textContent = '';
-            if (!state.churchName) return;
-            var n = document.createElement('div');
-            n.className = 'name';
-            n.textContent = String(state.churchName);
-            curtain.appendChild(n);
+            if (hasBg) {
+              // A background was chosen: keep it and show the church name in the middle.
+              if (state.churchName) {
+                var name = document.createElement('div');
+                name.className = 'name';
+                name.textContent = String(state.churchName);
+                curtain.appendChild(name);
+              }
+            } else {
+              // No church logo (or it did not load): the MakeChurchEazy picture is the default.
+              curtain.classList.add('is-default');
+            }
           };
           if (state.logoUrl) {
             var img = document.createElement('img');
@@ -309,6 +756,53 @@
         curtain.classList.toggle('is-on', screen === 'black' || screen === 'logo');
       }
 
+      // ── The church logo while nothing is on ──
+      // The logo the Studio sets (and its background and size) is what shows when the screen is cleared.
+      // Only when no logo and no church name are set does the MakeChurchEazy picture show.
+      var lastBrandKey = null;
+      function applyBrand(brand) {
+        brand = brand && typeof brand === 'object' ? brand : null;
+        var scale = brand && Number(brand.logoScale) > 0 ? Math.max(0.3, Math.min(3, Number(brand.logoScale) / 100)) : 1;
+        document.documentElement.style.setProperty('--logo-scale', String(scale));
+        var bg = brand && brand.logoBg && typeof brand.logoBg === 'object' ? brand.logoBg : null;
+        var bgColor = bg && typeof bg.color === 'string' && /^#[0-9a-f]{3,8}$/i.test(bg.color) ? bg.color : '';
+        var bgImage = bg && typeof bg.image === 'string' && /^data:image\//i.test(bg.image) ? bg.image : '';
+        var logo = brand && brand.logoUrl ? String(brand.logoUrl) : '';
+        var name = brand && brand.churchName ? String(brand.churchName) : '';
+        var key = [logo, name, bgColor, bgImage.length + bgImage.slice(-40)].join('|');
+        if (key === lastBrandKey) return;
+        lastBrandKey = key;
+        idleEl.textContent = '';
+        idleEl.classList.remove('has-brand');
+        idleEl.style.background = '';
+        if (!logo && !name) return;
+        idleEl.classList.add('has-brand');
+        if (bgImage) idleEl.style.background = '#000 center / cover no-repeat url("' + bgImage.replace(/"/g, '%22') + '")';
+        else idleEl.style.background = bgColor || '#000';
+        var showName = function () {
+          idleEl.textContent = '';
+          if (name) {
+            var label = document.createElement('div');
+            label.className = 'name';
+            label.textContent = name;
+            idleEl.appendChild(label);
+          } else {
+            // Nothing to show after all: back to the default picture.
+            idleEl.classList.remove('has-brand');
+            idleEl.style.background = '';
+          }
+        };
+        if (logo) {
+          var img = document.createElement('img');
+          img.alt = '';
+          img.onerror = showName;
+          img.src = logo;
+          idleEl.appendChild(img);
+        } else {
+          showName();
+        }
+      }
+
       // ── Screen Mix ──
       // Each layer keeps one element; it is rebuilt only when its content changes, and
       // `shown` just fades it in or out. Cameras are opened only while shown.
@@ -319,7 +813,7 @@
 
       function mixSig(layer) {
         return [layer.kind, layer.url, layer.fit, layer.loop, layer.muted, layer.deviceId,
-          layer.text, layer.subtext, layer.corner, layer.logoUrl].join('|');
+          layer.text, layer.subtext, layer.corner, layer.logoUrl, layer.graphicKey].join('|');
       }
 
       function buildMixElement(layer) {
@@ -364,6 +858,10 @@
             sub.textContent = layer.subtext;
             el.appendChild(sub);
           }
+        } else if (layer.kind === 'graphic') {
+          // A Broadcast graphic: drawn by the app's own runtime inside a frame; In and Out are its real animations.
+          el = document.createElement('div');
+          el.className = 'mix-graphic';
         } else if (layer.kind === 'logo') {
           el = document.createElement('img');
           el.className = 'mix-logo c-' + (layer.corner || 'top-right');
@@ -385,6 +883,45 @@
 
       function setMixShown(entry, shown) {
         var layer = entry.layer;
+        if (layer.kind === 'graphic') {
+          if (shown) {
+            if (entry.frame && entry.frame.parentNode) entry.frame.parentNode.removeChild(entry.frame);
+            var frame = document.createElement('iframe');
+            frame.className = 'mix-graphic__frame';
+            frame.setAttribute('sandbox', layer.graphicSandbox || 'allow-same-origin allow-scripts');
+            frame.setAttribute('allowtransparency', 'true');
+            frame.setAttribute('aria-hidden', 'true');
+            frame.srcdoc = layer.graphicHtml || '';
+            entry.el.appendChild(frame);
+            entry.frame = frame;
+            // If the graphic's own scripts did not load here, say so on screen instead of showing nothing.
+            frame.addEventListener('load', function () {
+              setTimeout(function () {
+                var ok = false;
+                try { ok = !!(frame.contentWindow && frame.contentWindow.MCEKinetic); } catch (e) { ok = true; }
+                var old = document.getElementById('gfx-warn');
+                if (old && old.parentNode) old.parentNode.removeChild(old);
+                if (ok || entry.frame !== frame) return;
+                var w = document.createElement('div');
+                w.id = 'gfx-warn';
+                w.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:99;padding:6px 10px;border-radius:6px;background:rgba(160,20,20,.92);color:#fff;font:12px system-ui,sans-serif;pointer-events:none';
+                w.textContent = 'Graphic could not start here: /kinetic scripts did not load (' + location.origin + '). Restart the app.';
+                document.body.appendChild(w);
+                setTimeout(function () { if (w.parentNode) w.parentNode.removeChild(w); }, 8000);
+              }, 1500);
+            });
+          } else if (entry.frame) {
+            var leaving = entry.frame;
+            try { leaving.contentWindow.postMessage({ type: 'mce-kx-out' }, '*'); } catch (e) { /* ignore */ }
+            setTimeout(function () {
+              if (entry.frame === leaving && !(entry.layer && entry.layer.shown)) {
+                if (leaving.parentNode) leaving.parentNode.removeChild(leaving);
+                entry.frame = null;
+              }
+            }, 2200);
+          }
+          return;
+        }
         if (shown) {
           if (layer.kind === 'camera') {
             if (!entry.stream && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -412,6 +949,19 @@
         }
       }
 
+      // Where a Broadcast graphic sits: it is drawn centred, so it is moved toward an edge and scaled.
+      var GFX_POS = {
+        'center': [0, 0], 'top-left': [-24, -34], 'top-center': [0, -34], 'top-right': [24, -34],
+        'middle-left': [-24, 0], 'middle-right': [24, 0],
+        'bottom-left': [-24, 34], 'bottom-center': [0, 34], 'bottom-right': [24, 34]
+      };
+      function placeGraphic(el, layer) {
+        var p = GFX_POS[layer.graphicPos] || GFX_POS.center;
+        var s = Math.max(30, Math.min(200, Number(layer.graphicScale) || 100)) / 100;
+        el.style.transform = 'translate(' + p[0] + '%,' + p[1] + '%) scale(' + s + ')';
+        el.style.transformOrigin = '50% 50%';
+      }
+
       function applyMix(layers) {
         layers = Array.isArray(layers) ? layers : [];
         var keep = {};
@@ -433,11 +983,12 @@
             entry.layer = layer;
             entry.shownNow = false;
             mixEntries[layer.id] = entry;
-            var host = (layer.kind === 'banner' || layer.kind === 'logo') ? mixFront : mixBack;
+            var host = (layer.kind === 'banner' || layer.kind === 'logo' || layer.kind === 'graphic') ? mixFront : mixBack;
             host.appendChild(entry.el);
             mixOrder = '';
           }
           entry.layer = layer;
+          if (layer.kind === 'graphic') placeGraphic(entry.el, layer);
           var shown = layer.shown === true;
           if (shown !== entry.shownNow) {
             entry.shownNow = shown;
@@ -474,9 +1025,22 @@
       function applyState(state) {
         if (!state || typeof state !== 'object' || state.unchanged) return;
         var revision = Number(state.revision) || 0;
+        // This window is running an older copy of this page than the Studio expects: load the new one (once).
+        if (Number(state.pageRev) > PAGE_REV) {
+          try {
+            if (sessionStorage.getItem('mce-out-reload') !== String(state.pageRev)) {
+              sessionStorage.setItem('mce-out-reload', String(state.pageRev));
+              window.location.reload();
+              return;
+            }
+          } catch (e) { /* no storage: do not reload */ }
+        }
         if (revision <= lastRevision) return;
         lastRevision = revision;
         var mixLayers = state.mix || [];
+        var brandState = state.brand || null;
+        var scrollState = Number(state.scrollY) || 0;
+        var cameraState = (feed === 'preview' ? (state.previewCamera || state.camera) : state.camera) || null;
         if (feed === 'preview') {
           var pv = state.preview || { active: null, packets: {}, media: null };
           state = { active: pv.active, packets: pv.packets || {}, media: pv.media || null, screen: 'live' };
@@ -485,20 +1049,61 @@
         ['bible', 'worship', 'notes'].forEach(function (key) {
           if (packets[key]) sendPacket(key, packets[key]);
         });
+        var mediaCtrl = state.mediaControl || null;
+        var audioState = state.audio || null;
+        var audioCtrl = state.audioControl || null;
+        applyBrand(brandState);
         applyMix(mixLayers);
+        lastCam = cameraState;
+        applyCamera(cameraState);
+        applyAudio(audioState, audioCtrl);
         applyMedia(state.media || null);
+        // A tall picture or document page that fills the width can be scrolled up and down.
+        if (mediaNode && mediaNode.tagName === 'IMG') mediaNode.style.objectPosition = '50% ' + Math.max(0, Math.min(100, scrollState)) + '%';
+        if (feed === 'program' && mediaNode) lastVideoSeek = controlPlayer(mediaNode, mediaCtrl, lastVideoSeek);
         applyActive(state.active || null);
         applyScreen(state);
+        lastScreen = String(state.screen || 'live'); lastActive = state.active ? String(state.active) : '';
+        // A projector window (and the Studio's own Output monitor) shows the logo while nothing is on,
+        // so an open screen is never just black. A browser source in OBS or a TV link stays as it was.
+        if (state.active || state.media) idleSince = 0;
+        idleWanted = feed === 'program' && (!!winLabel || isMonitor) && lastScreen === 'live' && !state.active && !state.media;
+        refreshIdle();
       }
+
+      // The logo covers the screen while nothing is on and no camera picture is showing. If the camera is
+      // switched on but its picture has not arrived, the logo stays (never a plain black screen) and a line says so.
+      var idleWanted = false;
+      var idleSince = 0;
+      function refreshIdle() {
+        var camWanted = !!(lastCam && lastCam.enabled && lastCam.layout !== 'hidden');
+        var camShown = camBox.classList.contains('is-on');
+        // Only after nothing has been on for a moment: switching Lower Third / Full Screen briefly
+        // clears the screen, and the logo must not flash in between.
+        var now = Date.now();
+        if (!(idleWanted && !camShown)) idleSince = 0;
+        else if (!idleSince) idleSince = now;
+        var showIdle = idleSince > 0 && now - idleSince > (camWanted ? 6000 : 3500);
+        if (!showIdle) idleEl.style.transition = 'none'; else idleEl.style.transition = '';
+        idleEl.classList.toggle('is-on', showIdle);
+        if (idleWanted && camWanted && !camShown && winLabel && typeof showHint === 'function') {
+          showHint('Waiting for the camera picture from the Studio… (press D to see why)', 900);
+        }
+      }
+      setInterval(refreshIdle, 500);
 
       var fetching = false;
       function refresh() {
         if (fetching) return;
         fetching = true;
         fetch('/api/studio-state?since=' + lastRevision, { cache: 'no-store' })
-          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (r) {
+            if (!r.ok) { diag.err = 'HTTP ' + r.status; return null; }
+            diag.err = ''; diag.okAt = Date.now();
+            return r.json();
+          })
           .then(applyState)
-          .catch(function () { /* the app may be restarting */ })
+          .catch(function () { diag.err = 'no answer'; /* the app may be restarting */ })
           .then(function () { fetching = false; });
       }
       refresh();

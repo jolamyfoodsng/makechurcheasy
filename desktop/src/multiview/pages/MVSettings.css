@@ -23,7 +23,7 @@
     overflow: hidden;
 
     /* Fonts */
-    --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-sans: var(--font-user, 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
     --font-serif: 'Noto Serif', Georgia, serif;
     --font-mono: 'JetBrains Mono', SFMono-Regular, Consolas, monospace;
 
@@ -965,6 +965,19 @@
     border-radius: 999px;
     background: var(--accent-color);
     color: #FFFFFF;
+}
+
+.app-font-group {
+    margin-top: 12px;
+}
+
+.app-font-group__title {
+    margin-bottom: 6px;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
 }
 
 .app-appearance-custom {

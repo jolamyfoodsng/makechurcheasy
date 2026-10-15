@@ -57,6 +57,9 @@ uuid = { version = "1", features = ["v4"] }
 socket2 = "0.6"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+# The Studio camera is opened once by the app itself (like OBS), then shown in every window.
+nokhwa = { version = "0.10", default-features = false, features = ["input-native"] }
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
 tauri-plugin-updater = "2"
 # Lets the OBS Dock paste with Ctrl/Cmd+V: OBS's browser dock can't read the clipboard itself.
 arboard = { version = "3", default-features = false }

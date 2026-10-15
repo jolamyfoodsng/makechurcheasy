@@ -204,6 +204,8 @@ export interface CloudSyncSnapshot {
     settings: {
       mvSettings: Partial<MVSettingsType>;
       customThemes?: string | null;
+      /** The logo picked in Studio settings (a picture, as a data URL). */
+      studioLogoData?: string;
     };
     media?: {
       items: MediaItem[];
@@ -507,6 +509,14 @@ export async function createLocalSnapshot(options: {
   };
 
   const customThemes = readUserScopedStorage("ocs-bible-custom-themes");
+  let studioLogoData = "";
+  try {
+    const { getOverlayBaseUrl } = await import("./overlayUrl");
+    const { readStudioLogoForBackup } = await import("../studio/studioPrefs");
+    studioLogoData = await readStudioLogoForBackup(await getOverlayBaseUrl());
+  } catch {
+    // No Studio logo to back up.
+  }
 
   // 5. Optional Media items metadata
   let mediaItems: MediaItem[] = [];
@@ -568,6 +578,7 @@ export async function createLocalSnapshot(options: {
       settings: {
         mvSettings: sanitizedMvSettings,
         customThemes,
+        ...(studioLogoData ? { studioLogoData } : {}),
       },
       ...(includeMedia ? { media: { items: mediaItems } } : {}),
       graphics: { items: graphics },
@@ -643,6 +654,17 @@ export async function restoreSnapshot(
   // 4. Restore Settings & Branding
   if (options.includeSettings !== false && data.settings?.mvSettings) {
     db.updateSettings(data.settings.mvSettings);
+    if (data.settings.studioLogoData) {
+      try {
+        const { saveStudioLogo } = await import("../studio/studioPrefs");
+        const url = await saveStudioLogo(data.settings.studioLogoData);
+        if (url) {
+          try { localStorage.setItem("mce.studio.logoOverride.v1", url); } catch { /* the file is the source of truth */ }
+        }
+      } catch {
+        // The logo could not be restored.
+      }
+    }
     if (data.settings.customThemes && typeof localStorage !== "undefined") {
       try {
         localStorage.setItem(

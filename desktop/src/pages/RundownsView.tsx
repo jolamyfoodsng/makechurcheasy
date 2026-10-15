@@ -33,7 +33,7 @@ import type {
   RundownTimerKind,
 } from "../countdowns/rundownTypes";
 import type { CountdownConfig } from "../countdowns/types";
-import { getOverlayBaseUrlSync, useLanDockBaseUrl } from "../services/overlayUrl";
+import { getInAppPreviewBaseUrlSync, getOverlayBaseUrlSync, useLanDockBaseUrl } from "../services/overlayUrl";
 
 // ── Small UI helpers ───────────────────────────────────────────────────────
 
@@ -144,7 +144,8 @@ function RundownPreview({
   level: "green" | "yellow" | "red";
   message: RundownMessage | null;
 }) {
-  const baseUrl = getOverlayBaseUrlSync();
+  // In-app preview: this computer's address (the Wi-Fi one shows a white box in the app).
+  const baseUrl = getInAppPreviewBaseUrlSync();
   const urls = useMemo(() => {
     if (!timer) return null;
     const single: Rundown = { ...rundown, timers: [timer] };

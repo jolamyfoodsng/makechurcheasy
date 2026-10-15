@@ -54,6 +54,10 @@
    * { "sel", "from", "to", "set", "at", "d", "e", "s", "sa", "fromEnd" } for any GSAP properties
    * ("s" = stagger per element, "sa" = most seconds the whole stagger may take, "fromEnd" = last first).
    * A displayed element with class "pkg-fullscreen" makes the graphic fill the whole 1920x1080 frame.
+   * Centred titles: "placement": { "mode": "centre", "fit": 0.76 } (or an element with
+   * data-pkg-layout="full" / "lower" and data-pkg-fit="0.76", so a field can switch it) puts the
+   * graphic in the middle of the screen, scaled up until it is "fit" of the screen wide (it never
+   * runs off the top or bottom). The Dock's position and size settings don't move it.
    * ==================================================================== */
   var DESIGN_W = 1920, DESIGN_H = 1080, EDGE_TOP = 40;
   var MAX_FIELDS = 80, MAX_STEPS = 120;
@@ -367,6 +371,22 @@
       .replace(/(href|src|xlink:href|action|formaction)\s*=\s*(["']?)\s*(javascript|vbscript)\s*:/gi, "$1=$2#");
   }
 
+  /* Centred-title layout: from placement.mode, or a [data-pkg-layout] element a field can switch. */
+  function centreLayout(box, place) {
+    var on = place.mode === "centre" || place.mode === "center";
+    var fit = +place.fit;
+    var el = box.querySelector("[data-pkg-layout]");
+    if (el) {
+      var v = String(el.getAttribute("data-pkg-layout") || "").toLowerCase();
+      if (v === "full" || v === "centre" || v === "center") on = true;
+      else if (v === "lower" || v === "corner") on = false;
+      var f = parseFloat(el.getAttribute("data-pkg-fit"));
+      if (f > 0) fit = f;
+    }
+    if (!on) return null;
+    return { fit: fit > .2 && fit <= 1 ? fit : .76 };
+  }
+
   function makeTemplate(pkg) {
     pkg = assign(pkg, { html: sanitizeMarkup(pkg.html) });
     var id = "pkg-" + String(pkg.id).replace(/[^\w-]/g, "");
@@ -414,16 +434,33 @@
         // (only when that element is displayed, so a "layout" option can switch it on and off).
         var fullEl = box.querySelector(".pkg-fullscreen");
         var full = !!(fullEl && fullEl.getClientRects().length);
+        // A centred title sits in the middle of the screen, scaled up to "fit" of its width.
+        var centre = !full && centreLayout(box, place);
         var bx = full ? 0 : X, by = full ? 0 : Y, bs = full ? 1 : PS;
         if (full) box.classList.add("pkg-full");
+        if (centre) box.classList.add("pkg-centred");
         // Outside OBS (library thumbnails, preview modals) the graphic is centred like the
         // other Motion graphics, with an even margin above and below it.
-        if (!inOverlay && !full) by = EDGE_TOP;
-        var w = box.offsetWidth * bs, h = box.offsetHeight * bs;
+        if (!inOverlay && !full && !centre) by = EDGE_TOP;
+        // In OBS a full-screen or centred graphic always covers the whole output (any source size):
+        // the size setting is applied to the centred graphic itself, not to the frame.
+        var sizeK = 1;
+        if (inOverlay && (full || centre)) {
+          sizeK = Math.max(.5, Math.min(1.5, Sc));
+          var host = kx.closest("#overlay-root");
+          var fitW = (host && host.clientWidth) || DESIGN_W, fitH = (host && host.clientHeight) || DESIGN_H;
+          Sc = Math.min(fitW / DESIGN_W, fitH / DESIGN_H) || 1;
+        }
+        var w0 = box.offsetWidth, h0 = box.offsetHeight;
+        if (centre && w0 > 0 && h0 > 0) {
+          bs = Math.min(DESIGN_W * centre.fit * sizeK / w0, DESIGN_W * .94 / w0, DESIGN_H * .86 / h0, 3);
+          by = Math.round((DESIGN_H - h0 * bs) / 2);
+        }
+        var w = w0 * bs, h = h0 * bs;
         var f0 = inOverlay ? justifyFactor(kx) : .5;
-        var left = f0 === 0 ? bx : f0 === 1 ? DESIGN_W - bx - w : (DESIGN_W - w) / 2;
+        var left = centre ? (DESIGN_W - w) / 2 : f0 === 0 ? bx : f0 === 1 ? DESIGN_W - bx - w : (DESIGN_W - w) / 2;
         box.style.cssText += ";left:" + left + "px;bottom:" + by + "px;transform:scale(" + bs + ")";
-        var H = Math.min(DESIGN_H, Math.ceil(by + h + (full ? 0 : EDGE_TOP)));
+        var H = (full || centre) ? DESIGN_H : Math.min(DESIGN_H, Math.ceil(by + h + EDGE_TOP));
         crop.style.cssText = "position:relative;overflow:visible;width:" + (inOverlay ? 0 : Math.round(DESIGN_W * Sc)) + "px;height:" + Math.round(H * Sc) + "px";
         frame.style.left = (inOverlay ? -DESIGN_W * Sc * f0 : 0) + "px";
         frame.style.transform = "scale(" + Sc + ") translateY(" + (-(DESIGN_H - H)) + "px)";

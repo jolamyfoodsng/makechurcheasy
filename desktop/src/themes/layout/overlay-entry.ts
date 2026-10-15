@@ -12,9 +12,10 @@ import { ThemeRenderer } from "./renderer";
 import { isThemeLayout, type ThemeLayout } from "./types";
 import { applyLayoutAdjust } from "./adjust";
 import { buildCountdownContent } from "../../countdowns/countdownTime";
+import { applyCompareToLayout, compareColumnsOf, compareContent, compareLayoutOf, type CompareSlide } from "./compare";
 
 interface OverlayPacket {
-  slide?: { text?: string; reference?: string; lineCount?: number } | null;
+  slide?: ({ text?: string; reference?: string; lineCount?: number } & CompareSlide) | null;
   theme?: { layout?: unknown } | null;
   blanked?: boolean;
   live?: boolean;
@@ -121,9 +122,18 @@ function handle(packet: OverlayPacket, hooks: OverlayHooks = {}): boolean {
   if (!packet || typeof packet !== "object") return false;
   const hasTheme = !!packet.theme && typeof packet.theme === "object";
   // The Dock's text-size / position tweaks travel as theme fields next to the layout.
-  const layout = hasTheme && isThemeLayout(packet.theme!.layout)
+  let layout = hasTheme && isThemeLayout(packet.theme!.layout)
     ? applyLayoutAdjust(packet.theme!.layout as ThemeLayout, packet.theme)
     : null;
+  // Side-by-side Bible (two translations): the verse block is split into two columns.
+  const compare = compareColumnsOf(packet.slide);
+  const compareMode = compareLayoutOf(packet.slide);
+  if (layout && compare) layout = applyCompareToLayout(layout, compareMode);
+  const contentOf = (slide: NonNullable<OverlayPacket["slide"]>) => (
+    compare
+      ? compareContent(compare, slide.lineCount, compareMode, packet.slide?.compareMode === "passages" ? "passages" : "translations")
+      : { text: slide.text || "", reference: slide.reference || "", lineCount: slide.lineCount }
+  );
 
   // A theme without a layout means a legacy theme was picked: step aside.
   if (hasTheme && !layout) {
@@ -159,11 +169,7 @@ function handle(packet: OverlayPacket, hooks: OverlayHooks = {}): boolean {
   ) {
     // Full <-> Lower third while a layout is on air: out, swap layout, in.
     safe(hooks.persist, packet);
-    void r.switchLayout(layout, {
-      text: packet.slide.text || "",
-      reference: packet.slide.reference || "",
-      lineCount: packet.slide.lineCount,
-    });
+    void r.switchLayout(layout, contentOf(packet.slide));
     // Ack now, like the in-place swap this replaces: the Dock only waits a few
     // hundred ms for it and must not be held up by the transition.
     safe(hooks.ack, packet, true);
@@ -187,7 +193,7 @@ function handle(packet: OverlayPacket, hooks: OverlayHooks = {}): boolean {
 
   safe(hooks.persist, packet);
   void r
-    .show({ text: slide.text || "", reference: slide.reference || "", lineCount: slide.lineCount })
+    .show(contentOf(slide))
     .then(() => safe(hooks.ack, packet, true));
   return true;
 }

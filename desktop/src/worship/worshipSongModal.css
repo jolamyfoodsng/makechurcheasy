@@ -682,3 +682,10 @@ html.mv-theme-light .ws-modal-header-icon {
 html.mv-theme-light .ws-slide-card-label {
   color: rgba(0, 0, 0, 0.4);
 }
+
+/* ── Slide layout bar: layout and wrap side by side, extra toolbar tools ── */
+.ws-layout-bar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 6px 8px; }
+.ws-layout-bar .ws-layout-select { width: 100%; min-width: 0; }
+.ws-layout-bar .ws-layout-select:disabled { opacity: 0.5; cursor: not-allowed; }
+.ws-lyrics-toolbar__select { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 8px; }
+.ws-left-footer span:last-child:not(:empty) { opacity: 0.9; }
