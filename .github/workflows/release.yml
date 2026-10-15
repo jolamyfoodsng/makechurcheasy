@@ -191,6 +191,33 @@ jobs:
             fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(conf, null, 2) + '\n');
           "
 
+      - name: Prepare GitHub release notes
+        id: release_notes
+        shell: pwsh
+        run: |
+          $notes = (Get-Content -Raw -Path "release.md").Trim()
+          $body = @(
+            "## MakeChurchEazy",
+            "",
+            "### Downloads",
+            "| Platform | File |",
+            "|----------|------|",
+            "| macOS (Apple Silicon) | `.dmg` (arm64) |",
+            "| macOS (Intel) | `.dmg` (x64) |",
+            "| Windows | `.exe` (NSIS installer) or `.msi` |",
+            "",
+            "### Auto-Update",
+            "Existing installations will automatically download and install this update on next launch.",
+            "",
+            $notes,
+            "",
+            "---",
+            "_Built automatically from commit ${{ github.sha }}_"
+          ) -join "`n"
+          $delimiter = "RELEASE_BODY_$([guid]::NewGuid().ToString('N'))"
+          $output = "body<<$delimiter`n$body`n$delimiter`n"
+          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, $output, [System.Text.UTF8Encoding]::new($false))
+
       - name: Verify Ninja
         shell: pwsh
         run: |
@@ -231,21 +258,7 @@ jobs:
           args: --target x86_64-pc-windows-msvc
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version || format('v{0}', 'latest') }}
           releaseName: "MakeChurchEazy ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version || 'latest' }}"
-          releaseBody: |
-            ## MakeChurchEazy
-
-            ### Downloads
-            | Platform | File |
-            |----------|------|
-            | macOS (Apple Silicon) | `.dmg` (arm64) |
-            | macOS (Intel) | `.dmg` (x64) |
-            | Windows | `.exe` (NSIS installer) or `.msi` |
-
-            ### Auto-Update
-            Existing installations will automatically download and install this update on next launch.
-
-            ---
-            _Built automatically from commit ${{ github.sha }}_
+          releaseBody: ${{ steps.release_notes.outputs.body }}
           releaseDraft: false
           prerelease: false
           uploadUpdaterJson: true

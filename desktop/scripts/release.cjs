@@ -10,8 +10,8 @@
  *      desktop/ also contains an old nested checkout of jolamyfoodsng/makechurcheasy;
  *      every git command here uses the root repo explicitly so nothing goes there.
  *   2. Bumps desktop/package.json and syncs tauri.conf.json.
- *   3. Commits only those version files, tags vX.Y.Z, and pushes the branch and tag
- *      to origin. The tag starts .github/workflows/release.yml in makechurcheasy-v2.
+ *   3. Commits the version files and release workflow metadata, tags vX.Y.Z,
+ *      and pushes the branch and tag to origin. The tag starts the release workflow.
  *
  * Other uncommitted changes are NOT included. Commit them first, or pass
  * --allow-dirty to release anyway.
@@ -43,11 +43,13 @@ if (!remote.replace(/\.git$/, "").endsWith(EXPECTED_REPO)) {
 }
 
 const versionFiles = ["desktop/package.json", "desktop/package-lock.json", "desktop/src-tauri/tauri.conf.json"];
-const dirty = git("status", "--porcelain")
-  .split("\n")
+const releaseMetadataFiles = [".github/workflows/release.yml", "desktop/scripts/release.cjs"];
+const releaseFiles = [...versionFiles, ...releaseMetadataFiles];
+const dirty = execFileSync("git", ["-C", repoRoot, "status", "--porcelain"], { encoding: "utf8" })
+  .split(/\r?\n/)
   .filter(Boolean)
   .map((line) => line.slice(3))
-  .filter((file) => !versionFiles.includes(file));
+  .filter((file) => !releaseFiles.includes(file));
 if (dirty.length && !allowDirty) {
   console.error(`There are ${dirty.length} other uncommitted changes, which would NOT be in this release:`);
   console.error(dirty.slice(0, 15).map((f) => `  ${f}`).join("\n") + (dirty.length > 15 ? "\n  ..." : ""));
@@ -73,7 +75,7 @@ if (dryRun) process.exit(0);
 execFileSync("npm", ["version", next, "--no-git-tag-version", "--allow-same-version"], { cwd: desktopDir, stdio: "inherit" });
 execFileSync("node", [path.join(__dirname, "sync-version.cjs")], { cwd: desktopDir, stdio: "inherit" });
 
-const toAdd = versionFiles.filter((file) => fs.existsSync(path.join(repoRoot, file)));
+const toAdd = releaseFiles.filter((file) => fs.existsSync(path.join(repoRoot, file)));
 git("add", "--", ...toAdd);
 git("commit", "-m", tag, "--", ...toAdd);
 git("tag", "-a", tag, "-m", `MakeChurchEazy ${tag}`);
