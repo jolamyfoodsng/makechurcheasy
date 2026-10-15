@@ -191,8 +191,6 @@ export function AppShell() {
     location.pathname.startsWith("/bible") ||
     location.pathname.startsWith("/hub") ||
     location.pathname.startsWith("/service-hub") ||
-    location.pathname.startsWith("/presentation/link") ||
-    location.pathname.startsWith("/presentation/remote-obs") ||
     location.pathname === "/studio" ||
     location.pathname === "/new";
 

@@ -26,7 +26,6 @@ import {
   LogOut,
   LayoutGrid,
   Timer,
-  Tv,
   Zap,
   GraduationCap,
   HelpCircle,
@@ -434,7 +433,6 @@ export default function DashboardSidebar({
 
           {navItem("/broadcast", Radio, t("sidebar.multiStream", { defaultValue: "Multi-Stream" }), !isFreePlan, isFreePlan)}
           {navItem("/studio", MonitorPlay, t("sidebar.studio", { defaultValue: "Studio" }))}
-          {navItem("/presentation", Tv, t("sidebar.presentation"))}
         </div>
       </div>
 

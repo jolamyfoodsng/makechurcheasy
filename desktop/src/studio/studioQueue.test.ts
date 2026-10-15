@@ -4,6 +4,7 @@ import {
   AUTO_COOLDOWN_MS,
   appendNew,
   candidateKey,
+  mentionKey,
   decideAutoProjection,
   isAutoProjectable,
   moveItem,
@@ -30,7 +31,7 @@ describe("queue lists", () => {
     const isaiah = c("Isaiah", 40, 31);
     // The service lists newest first.
     let list = appendNew([], [romans, john]);
-    expect(list.map((x) => x.label)).toEqual(["John 3:16", "Romans 8:28"]);
+    expect(list.map((x) => x.label)).toEqual(["Romans 8:28", "John 3:16"]);
     // Mentioned again: not duplicated.
     list = appendNew(list, [john, romans]);
     expect(list).toHaveLength(2);
@@ -65,7 +66,7 @@ describe("Auto mode", () => {
   it("projects the newest new reference", () => {
     const d = decideAutoProjection([c("John", 3, 16, { detectedAt: 2000 })], state(), 5000);
     expect(d.target?.label).toBe("John 3:16");
-    expect(d.target?.keys).toEqual([candidateKey(c("John", 3, 16))]);
+    expect(d.target?.keys).toEqual([mentionKey(c("John", 3, 16, { detectedAt: 2000 }))]);
   });
 
   it("ignores what was said before Auto mode was switched on", () => {
@@ -75,7 +76,7 @@ describe("Auto mode", () => {
 
   it("never projects the same reference twice", () => {
     const john = c("John", 3, 16, { detectedAt: 2000 });
-    const d = decideAutoProjection([john], state({ handled: new Set([candidateKey(john)]) }), 5000);
+    const d = decideAutoProjection([john], state({ handled: new Set([mentionKey(john)]) }), 5000);
     expect(d.target).toBeNull();
   });
 
@@ -87,7 +88,7 @@ describe("Auto mode", () => {
     expect(waiting.retryInMs).toBe(1800 + AUTO_COOLDOWN_MS - 2600);
     const later = decideAutoProjection([first, second], state({ lastAt: 1800 }), 1800 + AUTO_COOLDOWN_MS);
     expect(later.target?.label).toBe("Romans 8:28");
-    expect(later.skip).toEqual([candidateKey(first)]);
+    expect(later.skip).toEqual([mentionKey(first)]);
   });
 
   it("shows a spoken passage (one candidate per verse) as one range", () => {

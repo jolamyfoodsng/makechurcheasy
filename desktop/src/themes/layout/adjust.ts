@@ -203,17 +203,29 @@ function applyBackdrop(layers: ThemeLayer[], b: LayoutBackdrop): ThemeLayer[] {
   return next;
 }
 
+/** Lower thirds, Background: Off. Hide card / bar boxes and images; boxes that hold other layers just lose their fill. */
+function stripLowerThirdBackground(layers: ThemeLayer[]): ThemeLayer[] {
+  const parents = new Set(layers.map((l) => l.parentId).filter(Boolean) as string[]);
+  return layers.map((l) => {
+    if (l.hidden || l.parentId || (l.type !== "box" && l.type !== "image")) return l;
+    if (!parents.has(l.id)) return { ...l, hidden: true };
+    return { ...l, style: { ...l.style, fill: "transparent", gradient: undefined, src: undefined, videoSrc: undefined } };
+  });
+}
+
 /** The layout with the operator's size / position / background changes applied (same object when none). */
 export function applyLayoutAdjust(layout: ThemeLayout, source: unknown): ThemeLayout {
   const a = readLayoutAdjust(source);
   const offset = layout.format === "lower-third" ? a.layoutOffsetY : 0;
   const backdrop = layout.format === "fullscreen" ? readLayoutBackdrop(source) : null;
   const backdropChanged = backdrop !== null && !isLayoutBackdropDefault(backdrop);
+  // Lower thirds: only "Off" applies (the card / bar is the background).
+  const ltOff = layout.format === "lower-third" && readLayoutBackdrop(source).kind === "off";
   const showTitle = readLayoutShowTitle(source);
   // Switch on = the theme's default (heading shown); switch off = hidden.
   const nextShowHeading = showTitle === undefined ? layout.showHeading : showTitle ? undefined : false;
   const titleChanged = nextShowHeading !== layout.showHeading;
-  if (a.layoutTextScale === 100 && a.layoutRefScale === 100 && a.layoutLineHeight === 100 && offset === 0 && !backdropChanged && !titleChanged) return layout;
+  if (a.layoutTextScale === 100 && a.layoutRefScale === 100 && a.layoutLineHeight === 100 && offset === 0 && !backdropChanged && !ltOff && !titleChanged) return layout;
   const textK = a.layoutTextScale / 100;
   const refK = a.layoutRefScale / 100;
   const lineK = a.layoutLineHeight / 100;
@@ -237,7 +249,12 @@ export function applyLayoutAdjust(layout: ThemeLayout, source: unknown): ThemeLa
     if (offset && !layer.parentId) next = { ...next, y: layer.y + offset };
     return next;
   });
-  const out: ThemeLayout = { ...layout, layers: backdropChanged && backdrop ? applyBackdrop(layers, backdrop) : layers };
+  const finalLayers = backdropChanged && backdrop
+    ? applyBackdrop(layers, backdrop)
+    : ltOff
+      ? stripLowerThirdBackground(layers)
+      : layers;
+  const out: ThemeLayout = { ...layout, layers: finalLayers };
   if (titleChanged) {
     if (nextShowHeading === undefined) delete out.showHeading;
     else out.showHeading = nextShowHeading;

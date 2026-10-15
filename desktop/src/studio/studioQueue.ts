@@ -14,22 +14,33 @@ export function candidateKey(c: Pick<VoiceBibleCandidate, "book" | "chapter" | "
   return `${c.book}|${c.chapter}|${c.verse}|${c.endVerse ?? ""}`;
 }
 
-/** Add candidates that are not in the list yet (and were not removed by the operator), keeping the order. */
+/** Add candidates that are not in the list yet (and were not removed by the operator), newest first. */
 export function appendNew(
   list: VoiceBibleCandidate[],
   incoming: VoiceBibleCandidate[],
   removed: ReadonlySet<string> = new Set(),
 ): VoiceBibleCandidate[] {
-  const seen = new Set(list.map(candidateKey));
+  const known = new Map(list.map((c) => [candidateKey(c), c]));
+  const seen = new Set(known.keys());
   const added: VoiceBibleCandidate[] = [];
-  // The service lists newest first; the queue reads oldest first, like a running order.
-  for (const c of [...incoming].reverse()) {
+  const refreshed = new Set<string>();
+  // The service lists newest first, and so does the queue: the latest verse is at the top.
+  for (const c of incoming) {
     const key = candidateKey(c);
-    if (seen.has(key) || removed.has(key)) continue;
+    if (removed.has(key) || refreshed.has(key)) continue;
+    const old = known.get(key);
+    // Said again later: it comes back to the top with its new time (and Auto mode can show it again).
+    if (old && (c.detectedAt ?? 0) > (old.detectedAt ?? 0)) {
+      refreshed.add(key);
+      added.push(c);
+      continue;
+    }
+    if (seen.has(key)) continue;
     seen.add(key);
     added.push(c);
   }
-  return added.length ? [...list, ...added] : list;
+  if (added.length === 0) return list;
+  return [...added, ...list.filter((c) => !refreshed.has(candidateKey(c)))];
 }
 
 /** Move one entry from `from` to `to` (both indexes in the list). */
@@ -52,6 +63,11 @@ export function isAutoProjectable(c: VoiceBibleCandidate): boolean {
     && c.confidence >= AUTO_MIN_CONFIDENCE
     && Number.isInteger(c.verse)
     && c.verse > 0;
+}
+
+/** Identifies one mention: the same verse said again later is a new mention. */
+export function mentionKey(c: VoiceBibleCandidate): string {
+  return `${candidateKey(c)}@${typeof c.detectedAt === "number" ? c.detectedAt : 0}`;
 }
 
 export interface AutoTarget {
@@ -91,7 +107,7 @@ export interface AutoDecision {
 export function decideAutoProjection(detected: VoiceBibleCandidate[], state: AutoState, now: number): AutoDecision {
   const eligible = detected.filter((c) => {
     const at = typeof c.detectedAt === "number" ? c.detectedAt : 0;
-    return at >= state.since && !state.handled.has(candidateKey(c)) && isAutoProjectable(c);
+    return at >= state.since && !state.handled.has(mentionKey(c)) && isAutoProjectable(c);
   });
   if (eligible.length === 0) return { target: null, retryInMs: 0, skip: [] };
   const wait = state.lastAt + AUTO_COOLDOWN_MS - now;
@@ -106,8 +122,8 @@ export function decideAutoProjection(detected: VoiceBibleCandidate[], state: Aut
   const start = consecutive ? verses[0] : first.verse;
   const end = consecutive ? Math.max(verses[verses.length - 1], ...sameChapter.map((c) => c.endVerse ?? c.verse)) : (first.endVerse ?? first.verse);
   const covered = consecutive ? sameChapter : [first];
-  const keys = covered.map(candidateKey);
-  const skip = eligible.map(candidateKey).filter((k) => !keys.includes(k));
+  const keys = covered.map(mentionKey);
+  const skip = eligible.map(mentionKey).filter((k) => !keys.includes(k));
   return {
     target: {
       book: first.book,

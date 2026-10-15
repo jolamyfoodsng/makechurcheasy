@@ -1690,3 +1690,13 @@ html.st-resizing iframe { pointer-events: none !important; }
 .studio-message.st-message { position: fixed; right: 16px; bottom: 16px; left: auto; top: auto; z-index: 9000; max-width: min(380px, calc(100vw - 32px)); padding: 10px 12px; border: 1px solid var(--st-line-strong); border-radius: 10px; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); font-size: 12.5px; line-height: 1.4; animation: st-toast-in .18s ease-out; }
 .studio-message.st-message.is-error { border-color: #7f1d1d; }
 @keyframes st-toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* "Verse found" card (shown while the Verse AI panel is closed). */
+.st-found { position: fixed; right: 16px; bottom: 76px; z-index: 8990; display: flex; flex-direction: column; gap: 8px; width: min(340px, calc(100vw - 32px)); padding: 10px 12px; border-radius: 12px; border: 1px solid var(--st-line-strong); background: #0d1a33; color: #dbe7ff; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); animation: st-toast-in .18s ease-out; }
+.st-found__txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.st-found__txt strong { font-size: 13px; }
+.st-found__txt span { font-size: 12px; color: var(--st-text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.st-found__btns { display: flex; gap: 6px; align-items: center; }
+.st-found__btns button { height: 28px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--st-line-strong); background: var(--st-raised); color: var(--st-text); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
+.st-found__btns .st-found__go { background: var(--st-red); border-color: var(--st-red); color: #fff; }
+.st-found__btns .st-found__x { margin-left: auto; width: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }

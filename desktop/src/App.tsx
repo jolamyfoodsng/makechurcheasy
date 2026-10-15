@@ -139,7 +139,6 @@ const CountdownsPage = safeLazy(() => import("./pages/CountdownsPage"));
 const ProductionThemeSettingsPage = safeLazy(() => import("./pages/ProductionThemeSettingsPage"));
 const BroadcastGraphicsPage = safeLazy(() => import("./pages/BroadcastGraphicsPage"));
 const OnboardingPage = safeLazy(() => import("./pages/OnboardingPage"));
-const PresentationSetupPage = safeLazy(() => import("./pages/PresentationSetupPage"));
 const ServicePlannerPage = safeLazy(() => import("./pages/ServicePlannerPage"));
 const SpeechToScripturePage = safeLazy(() => import("./pages/SpeechToScripturePage"));
 const TranscriptLibraryPage = safeLazy(() => import("./pages/TranscriptLibraryPage"));
@@ -1554,25 +1553,6 @@ function App() {
                 element={
                   <AuthGate>
                     <Routes>
-                      <Route
-                        path="presentation/*"
-                        element={
-                          <VerificationGate>
-                            <LicenseGuard>
-                              <LowerThirdProvider>
-                                <Routes>
-                                  <Route index element={<PresentationSetupPage />} />
-                                  <Route path="link" element={<PresentationSetupPage initialView="link" />} />
-                                  <Route path="console" element={<Navigate to="/presentation/link" replace />} />
-                                  <Route path="remote-obs" element={<PresentationSetupPage initialView="remote-obs" />} />
-                                  <Route path="setup" element={<Navigate to="/presentation/remote-obs" replace />} />
-                                  <Route path="*" element={<Navigate to="/presentation" replace />} />
-                                </Routes>
-                              </LowerThirdProvider>
-                            </LicenseGuard>
-                          </VerificationGate>
-                        }
-                      />
                       <Route
                         path="*"
                         element={

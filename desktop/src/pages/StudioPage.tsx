@@ -108,7 +108,7 @@ import {
   type StudioLayout,
   type StudioSection,
 } from "../studio/studioLayout";
-import { candidateKey, decideAutoProjection, type AutoTarget } from "../studio/studioQueue";
+import { candidateKey, decideAutoProjection, isAutoProjectable, mentionKey, type AutoTarget } from "../studio/studioQueue";
 import { planDraftForSlide, planItemMatchesSlide, resolvePlanItem, type PlanTarget } from "../studio/studioItems";
 import { appendToSchedule, markScheduleItemDone, nextScheduleItemId, readActivePlan, recordProjected } from "../studio/studioSchedule";
 import { DOCK_SCHEDULE_CHANGED_EVENT } from "../dock/dockScheduleService";
@@ -675,7 +675,7 @@ export default function StudioPage() {
   }, [refreshMonitors]);
 
   // ── The one way onto the screen ──
-  const autoRef = useRef<{ since: number; lastAt: number; handled: Set<string> }>({ since: 0, lastAt: 0, handled: new Set() });
+  const autoRef = useRef<{ since: number; lastAt: number; handled: Set<string> }>({ since: Date.now(), lastAt: 0, handled: new Set() });
 
   // The camera on the screen right now. The camera arranged in the Layers card is only in Preview
   // until Go Live sends it (like Studio Mode in OBS).
@@ -1161,7 +1161,8 @@ export default function StudioPage() {
 
   // ── Verse AI ──
   const ai = useVerseAi(true);
-  const [autoMode, setAutoModeState] = useState(false);
+  // Auto mode is on by default in the Studio (references said after it opens go on the screen).
+  const [autoMode, setAutoModeState] = useState(true);
   const [autoMessage, setAutoMessage] = useState("");
 
   /** A verse (or passage) from Verse AI as a slide, read from the operator's translation. */
@@ -1239,6 +1240,28 @@ export default function StudioPage() {
     run();
     return () => window.clearTimeout(timer);
   }, [autoMode, ai.detected, projectAuto]);
+
+
+  // "Verse found" card: while the Verse AI panel is closed, a verse that was heard (or suggested) pops up
+  // so it can be previewed or projected without opening the panel.
+  const [foundCard, setFoundCard] = useState<VoiceBibleCandidate | null>(null);
+  const foundSeenRef = useRef<Set<string>>(new Set());
+  const foundSinceRef = useRef<number>(Date.now());
+  useEffect(() => {
+    if (!layout.verseAiCollapsed) return;
+    const pool: VoiceBibleCandidate[] = [...ai.suggestions, ...ai.detected.filter((c) => !(autoMode && isAutoProjectable(c)))];
+    const fresh = pool
+      .filter((c) => (c.detectedAt ?? 0) >= foundSinceRef.current && !foundSeenRef.current.has(mentionKey(c)))
+      .sort((a, b) => (b.detectedAt ?? 0) - (a.detectedAt ?? 0))[0];
+    if (!fresh) return;
+    foundSeenRef.current.add(mentionKey(fresh));
+    setFoundCard(fresh);
+  }, [ai.suggestions, ai.detected, layout.verseAiCollapsed, autoMode]);
+  useEffect(() => {
+    if (!foundCard) return undefined;
+    const id = window.setTimeout(() => setFoundCard(null), 15000);
+    return () => window.clearTimeout(id);
+  }, [foundCard]);
 
   // ── Worship / Media / Docs ──
   const pickIndex = useCallback((slides: StudioSlide[], index: number, setIdx: (i: number) => void) => {
@@ -2149,6 +2172,20 @@ export default function StudioPage() {
         <div className={`studio-message st-message${message.tone === "error" ? " is-error" : ""}`} role={message.tone === "error" ? "alert" : "status"}>
           {message.text}
           <button type="button" className="studio-message__close" onClick={() => setMessage(null)} aria-label="Dismiss"><X size={13} /></button>
+        </div>
+      )}
+
+      {foundCard && (layout.verseAiCollapsed || columns.verseAiRail) && (
+        <div className="st-found" role="status">
+          <div className="st-found__txt">
+            <strong>Verse found: {foundCard.label}</strong>
+            {foundCard.snippet ? <span>{foundCard.snippet}</span> : null}
+          </div>
+          <div className="st-found__btns">
+            <button type="button" className="st-found__go" onClick={() => { const c = foundCard; setFoundCard(null); void projectCandidate(c); }}>Project</button>
+            <button type="button" onClick={() => { const c = foundCard; setFoundCard(null); void slideForReference(c).then((sl) => { if (sl) setPreviewSlide(sl); }); }}>Preview</button>
+            <button type="button" className="st-found__x" onClick={() => setFoundCard(null)} aria-label="Dismiss"><X size={13} /></button>
+          </div>
         </div>
       )}
 
