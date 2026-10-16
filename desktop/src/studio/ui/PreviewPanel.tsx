@@ -254,7 +254,7 @@ export default function PreviewPanel(props: PreviewPanelProps) {
       <div className="st-lo__actions st-lo__actions--simple">
         <div className="st-lo__send st-lo__send--color">
           <button type="button" className="st-lo__sendmain" onClick={props.onGoLive} disabled={!props.canGoLive} title={props.previewFirst ? "Show Preview on the screen (Space)" : "Send to the screen (Space)"}>
-            <Monitor size={16} /> <span>Send to Screen</span> <kbd>Space</kbd>
+            <Monitor size={16} /> <span>Send</span> <kbd>Space</kbd>
           </button>
           <button type="button" className="st-lo__sendmenu" onClick={openSendMenu} aria-haspopup="menu" aria-label="Send options" title={props.previewFirst ? "Preview first is on. Change it here." : "Straight to screen is on. Change it here."}>
             <ChevronDown size={15} />

@@ -266,7 +266,7 @@ export interface StudioBrand {
 }
 
 /** Bumped when public/studio-output.html changes in a way an already-open projector window must reload for. */
-export const OUTPUT_PAGE_REV = 4;
+export const OUTPUT_PAGE_REV = 5;
 
 export interface StudioProgramState {
   revision: number;
@@ -304,6 +304,8 @@ export interface StudioPreviewState {
   active: StudioModule | null;
   packets: Partial<Record<StudioTextModule, Record<string, unknown>>>;
   media: StudioMedia | null;
+  /** Playback for preview media (separate from the live screen). */
+  mediaControl?: StudioMediaControl;
 }
 
 let lastRevision = 0;
@@ -459,6 +461,16 @@ export function setProgramMediaControl(change: Partial<StudioMediaControl>, targ
   return commit({ ...program, mediaControl: { ...current, ...change } });
 }
 
+/** Play or pause the video in Preview without changing what is on the live screen. */
+export function setPreviewMediaControl(change: Partial<StudioMediaControl>): Promise<boolean> {
+  if (!program.preview?.media || program.preview.media.kind !== "video") return Promise.resolve(false);
+  const current = program.preview.mediaControl ?? DEFAULT_MEDIA_CONTROL;
+  return commit({
+    ...program,
+    preview: { ...program.preview, mediaControl: { ...current, ...change } },
+  });
+}
+
 /** Stop the sound that is playing. */
 export function stopProgramAudio(): Promise<boolean> {
   return commit({ ...program, audio: null });
@@ -501,6 +513,7 @@ export function clearProgram(mode: StudioMode, options: ClearProgramOptions = {}
 
 /** Show a slide on Preview projectors (null = empty Preview). */
 export function setPreviewState(slide: StudioSlide | null, themes: StudioThemes | null, mode: StudioMode): Promise<boolean> {
+  const previousPreview = program.preview;
   const packets = { ...(program.preview?.packets ?? {}) };
   let media: StudioMedia | null = null;
   if (slide?.module === "media" && slide.media?.kind !== "audio") {
@@ -509,7 +522,18 @@ export function setPreviewState(slide: StudioSlide | null, themes: StudioThemes 
     packets[slide.module] = buildStudioPacket(slide.module, slide, themes, mode, "cut").data;
   }
   const active = slide ? (slide.module === "media" && !media ? null : slide.module) : null;
-  return commit({ ...program, preview: { active, packets, media } });
+  const sameMedia = Boolean(media && previousPreview?.media
+    && media.kind === previousPreview.media.kind && media.url === previousPreview.media.url);
+  const mediaControl = media
+    ? {
+      ...(sameMedia ? previousPreview?.mediaControl ?? DEFAULT_MEDIA_CONTROL : DEFAULT_MEDIA_CONTROL),
+      loop: media.loop,
+      muted: media.muted,
+      fit: media.fit,
+      ...(sameMedia ? {} : { paused: false, seekTo: 0, seekRev: Date.now() }),
+    }
+    : undefined;
+  return commit({ ...program, preview: { active, packets, media, ...(mediaControl ? { mediaControl } : {}) } });
 }
 
 // ── Frames ─────────────────────────────────────────────────────────────────

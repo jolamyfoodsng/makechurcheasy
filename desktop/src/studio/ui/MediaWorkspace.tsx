@@ -2,13 +2,17 @@
  * MediaWorkspace.tsx — pictures, videos and sound in the Studio.
  *
  *  Library   Import, search, All · Pictures · Videos · Sound, where they came from, grid or list.
- *            Click = Preview, double-click = Project, right-click = more.
+ *            Click and double-click follow the Studio's Preview first / Straight to screen setting.
+ *  Slideshow tick several pictures (or several videos) — tick circle, Ctrl/Shift+click or Select —
+ *            then Start slideshow. The slideshow's controls appear in the centre under Preview.
  *  Playback  for the video or sound on the screen: play / pause, stop, seek, loop, volume,
  *            mute, Fit / Fill. Only shown while one is playing.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarPlus,
+  Check,
+  CheckSquare,
   Eye,
   Film,
   Grid3x3,
@@ -18,7 +22,9 @@ import {
   Music2,
   Pause,
   Play,
+  Presentation,
   Repeat,
+  RotateCcw,
   Search,
   Square,
   Upload,
@@ -40,6 +46,7 @@ interface MediaWorkspaceProps {
   base: string;
   selectedId: string;
   liveId: string;
+  previewFirst: boolean;
   onPick: (id: string) => void;
   onProject: (id: string) => void;
   onSchedule: (id: string) => void;
@@ -47,6 +54,12 @@ interface MediaWorkspaceProps {
   importing: string;
   /** Kept so the page can still pass it; the Overlays tab was removed, so it is not shown. */
   overlays?: React.ReactNode;
+  /** Start a slideshow of these items (in the order they were ticked), from startIndex. */
+  onSlideshow?: (ids: string[], kind: "image" | "video", startIndex?: number) => void;
+  /** Where a stopped slideshow of exactly these items can resume (index), or null. */
+  resumeIndexFor?: (ids: string[]) => number | null;
+  /** Items of the slideshow that is running now (marked in the grid). */
+  slideshowIds?: string[];
 }
 
 function thumbOf(item: MediaItem, base: string): string {
@@ -71,6 +84,36 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
   const [view, setView] = useState<"grid" | "list">("grid");
   const [menu, setMenu] = useState<StudioMenuState | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Ticked items for a slideshow, in the order they were ticked. Only pictures or only videos.
+  const [ticked, setTicked] = useState<string[]>([]);
+  const [selectMode, setSelectMode] = useState(false);
+  const [tickNote, setTickNote] = useState("");
+  const byId = useMemo(() => new Map(media.map((m) => [m.id, m])), [media]);
+  const tickedKind: "image" | "video" | null = ticked.length ? ((byId.get(ticked[0])?.type as "image" | "video") ?? null) : null;
+
+  // Forget ticks for items that were deleted.
+  useEffect(() => {
+    setTicked((cur) => {
+      const next = cur.filter((id) => byId.has(id));
+      return next.length === cur.length ? cur : next;
+    });
+  }, [byId]);
+
+  const toggleTick = (item: MediaItem) => {
+    if (item.type !== "image" && item.type !== "video") return;
+    setTickNote("");
+    setTicked((cur) => {
+      if (cur.includes(item.id)) return cur.filter((id) => id !== item.id);
+      const kindNow = cur.length ? byId.get(cur[0])?.type : null;
+      if (kindNow && kindNow !== item.type) {
+        setTickNote(item.type === "video"
+          ? "A slideshow is only pictures or only videos — started a new video selection."
+          : "A slideshow is only pictures or only videos — started a new picture selection.");
+        return [item.id];
+      }
+      return [...cur, item.id];
+    });
+  };
 
   const list = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -79,6 +122,15 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
       && (origin === "all" || (origin === "templates" ? m.source === "template-cloudflare" : m.source !== "template-cloudflare"))
       && (!needle || m.name.toLowerCase().includes(needle)));
   }, [media, query, kind, origin]);
+
+  const selectAllOfKind = () => {
+    const k = tickedKind ?? (kind === "video" ? "video" : "image");
+    setTicked(list.filter((m) => m.type === k).map((m) => m.id));
+    setTickNote("");
+  };
+  const showChecks = selectMode || ticked.length > 0;
+  const resumeAt = ticked.length > 1 ? props.resumeIndexFor?.(ticked) ?? null : null;
+  const running = new Set(props.slideshowIds ?? []);
 
   return (
     <section className="st-media" aria-label="Media">
@@ -106,6 +158,17 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
               <button type="button" className={view === "grid" ? "is-on" : ""} onClick={() => setView("grid")} aria-label="Grid"><Grid3x3 size={14} /></button>
               <button type="button" className={view === "list" ? "is-on" : ""} onClick={() => setView("list")} aria-label="List"><List size={14} /></button>
             </div>
+            {props.onSlideshow && (
+              <button
+                type="button"
+                className={`studio-btn${showChecks ? " is-on" : ""}`}
+                onClick={() => { if (showChecks) { setSelectMode(false); setTicked([]); setTickNote(""); } else setSelectMode(true); }}
+                aria-pressed={showChecks}
+                title="Tick several pictures or videos to make a slideshow"
+              >
+                <CheckSquare size={14} /> {showChecks ? "Done" : "Select"}
+              </button>
+            )}
             <button type="button" className="studio-btn studio-btn--primary" onClick={() => fileRef.current?.click()} disabled={Boolean(props.importing)}>
               {props.importing ? <Loader2 size={14} className="st-spin" /> : <Upload size={14} />} Import Media
             </button>
@@ -122,6 +185,36 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
       </div>
       {props.importing && <div className="st-banner" role="status">{props.importing}</div>}
 
+      {props.onSlideshow && showChecks && (
+        <div className="st-mselect" role="region" aria-label="Slideshow selection">
+          <span className="st-mselect__count">
+            {ticked.length === 0
+              ? "Tick pictures or videos for a slideshow"
+              : `${ticked.length} ${tickedKind === "video" ? "video" : "picture"}${ticked.length === 1 ? "" : "s"} selected`}
+          </span>
+          {ticked.length === 1 && <span className="st-mselect__hint">Tick one more to make a slideshow</span>}
+          {tickNote && <span className="st-mselect__hint">{tickNote}</span>}
+          <span className="st-mselect__spacer" />
+          <button type="button" className="studio-btn" onClick={selectAllOfKind}>
+            Select all {(tickedKind ?? (kind === "video" ? "video" : "image")) === "video" ? "videos" : "pictures"}
+          </button>
+          {ticked.length > 0 && <button type="button" className="studio-btn" onClick={() => { setTicked([]); setTickNote(""); }}>Clear</button>}
+          {resumeAt !== null && (
+            <button type="button" className="studio-btn" onClick={() => props.onSlideshow?.(ticked, tickedKind ?? "image", resumeAt)} title="Carry on from where the slideshow stopped">
+              <RotateCcw size={14} /> Resume at {resumeAt + 1}
+            </button>
+          )}
+          <button
+            type="button"
+            className="studio-btn studio-btn--primary"
+            disabled={ticked.length < 2}
+            onClick={() => props.onSlideshow?.(ticked, tickedKind ?? "image", 0)}
+          >
+            <Presentation size={14} /> {resumeAt !== null ? "Start over" : "Start slideshow"}
+          </button>
+        </div>
+      )}
+
       {(
         <div className={`st-media__items st-media__items--${view}`}>
           {list.length === 0 && (
@@ -132,21 +225,31 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
             const Icon = item.type === "video" ? Film : item.type === "audio" ? Music2 : ImageIcon;
             const isSel = item.id === selectedId;
             const isLive = item.id === liveId;
+            const tickAt = ticked.indexOf(item.id);
+            const canTick = Boolean(props.onSlideshow) && (item.type === "image" || item.type === "video");
             return (
               <div
                 key={item.id}
                 role="button"
                 tabIndex={0}
-                className={`st-mitem${isSel ? " is-selected" : ""}${isLive ? " is-live" : ""}`}
-                onClick={() => props.onPick(item.id)}
-                onDoubleClick={() => props.onProject(item.id)}
+                className={`st-mitem${isSel ? " is-selected" : ""}${isLive ? " is-live" : ""}${tickAt >= 0 ? " is-ticked" : ""}${showChecks ? " st-mitem--select" : ""}`}
+                onClick={(e) => {
+                  // In Select mode (or with Ctrl / Cmd / Shift) a click ticks instead of previewing.
+                  if (canTick && (showChecks || e.ctrlKey || e.metaKey || e.shiftKey)) { toggleTick(item); return; }
+                  props.onPick(item.id);
+                }}
+                onDoubleClick={() => {
+                  if (showChecks) return;
+                  (props.previewFirst ? props.onPick : props.onProject)(item.id);
+                }}
                 onKeyDown={(e) => { if (e.key === "Enter") props.onPick(item.id); }}
                 onContextMenu={(e) => {
                   e.preventDefault();
                   setMenu(menuAt(e, [
                     { label: "Preview", icon: <Eye size={14} />, onSelect: () => props.onPick(item.id) },
-                    { label: "Project", icon: <Play size={14} />, hint: "Double-click", onSelect: () => props.onProject(item.id) },
+                    { label: "Project", icon: <Play size={14} />, onSelect: () => props.onProject(item.id) },
                     { label: "Add to Schedule", icon: <CalendarPlus size={14} />, divider: true, onSelect: () => props.onSchedule(item.id) },
+                    ...(canTick ? [{ label: tickAt >= 0 ? "Untick (slideshow)" : "Tick for a slideshow", icon: <CheckSquare size={14} />, onSelect: () => toggleTick(item) }] : []),
                   ]));
                 }}
                 title={item.name}
@@ -155,6 +258,20 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
                   {thumb ? <img src={thumb} alt="" loading="lazy" /> : <Icon size={22} />}
                   {item.type !== "image" && <span className="st-mitem__kind"><Icon size={11} /> {duration(item.durationSec)}</span>}
                   {isLive && <span className="st-tag st-tag--live">LIVE</span>}
+                  {running.has(item.id) && !isLive && <span className="st-tag st-mitem__inshow">In slideshow</span>}
+                  {canTick && (
+                    <button
+                      type="button"
+                      className={`st-mitem__check${tickAt >= 0 ? " is-on" : ""}`}
+                      onClick={(e) => { e.stopPropagation(); toggleTick(item); }}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                      aria-pressed={tickAt >= 0}
+                      aria-label={tickAt >= 0 ? `Untick ${item.name}` : `Tick ${item.name} for a slideshow`}
+                      title={tickAt >= 0 ? `Number ${tickAt + 1} in the slideshow` : "Tick for a slideshow"}
+                    >
+                      {tickAt >= 0 ? <span>{tickAt + 1}</span> : <Check size={12} />}
+                    </button>
+                  )}
                 </span>
                 <span className="st-mitem__name">{item.name}</span>
               </div>
@@ -174,10 +291,12 @@ interface MediaControlsProps {
   control: StudioMediaControl;
   onChange: (change: Partial<StudioMediaControl>) => void;
   onStopSound?: () => void;
+  /** In a video slideshow, transport and loop controls already live on the slideshow bar. */
+  compact?: boolean;
 }
 
 /** Playback bar for the video / sound that is on the screen. */
-export function MediaControls({ slide, durationSec, control, onChange, onStopSound }: MediaControlsProps) {
+export function MediaControls({ slide, durationSec, control, onChange, onStopSound, compact = false }: MediaControlsProps) {
   // The output doesn't report its position back, so the bar keeps its own clock.
   const [anchor, setAnchor] = useState({ at: Date.now(), pos: 0 });
   const [, tick] = useState(0);
@@ -222,22 +341,26 @@ export function MediaControls({ slide, durationSec, control, onChange, onStopSou
 
   return (
     <div className="st-playbar" aria-label="Playback">
-      <span className="st-playbar__name">{isAudio ? <Music2 size={13} /> : <Film size={13} />} {slide.itemTitle}</span>
-      <button type="button" className="st-iconbtn" onClick={togglePause} aria-label={control.paused ? "Play" : "Pause"} title={control.paused ? "Play" : "Pause"}>
-        {control.paused ? <Play size={15} /> : <Pause size={15} />}
-      </button>
-      <button
-        type="button"
-        className="st-iconbtn"
-        onClick={() => {
-          if (isAudio && onStopSound) onStopSound();
-          else onChange({ paused: true, seekTo: 0, seekRev: Date.now() });
-        }}
-        aria-label="Stop"
-        title={isAudio ? "Stop the sound" : "Stop (back to the start)"}
-      >
-        <Square size={13} />
-      </button>
+      {!compact && <span className="st-playbar__name">{isAudio ? <Music2 size={13} /> : <Film size={13} />} {slide.itemTitle}</span>}
+      {!compact && (
+        <button type="button" className="st-iconbtn" onClick={togglePause} aria-label={control.paused ? "Play" : "Pause"} title={control.paused ? "Play" : "Pause"}>
+          {control.paused ? <Play size={15} /> : <Pause size={15} />}
+        </button>
+      )}
+      {!compact && (
+        <button
+          type="button"
+          className="st-iconbtn"
+          onClick={() => {
+            if (isAudio && onStopSound) onStopSound();
+            else onChange({ paused: true, seekTo: 0, seekRev: Date.now() });
+          }}
+          aria-label="Stop"
+          title={isAudio ? "Stop the sound" : "Stop (back to the start)"}
+        >
+          <Square size={13} />
+        </button>
+      )}
       <span className="st-playbar__time">{duration(position) || "0:00"}</span>
       <input
         type="range"
@@ -251,9 +374,11 @@ export function MediaControls({ slide, durationSec, control, onChange, onStopSou
         className="st-playbar__seek"
       />
       <span className="st-playbar__time">{duration(length) || "–"}</span>
-      <button type="button" className={`st-iconbtn${control.loop ? " is-on" : ""}`} onClick={() => onChange({ loop: !control.loop })} aria-pressed={control.loop} aria-label="Loop" title="Loop">
-        <Repeat size={14} />
-      </button>
+      {!compact && (
+        <button type="button" className={`st-iconbtn${control.loop ? " is-on" : ""}`} onClick={() => onChange({ loop: !control.loop })} aria-pressed={control.loop} aria-label="Loop" title="Loop">
+          <Repeat size={14} />
+        </button>
+      )}
       <button type="button" className="st-iconbtn" onClick={() => onChange({ muted: !control.muted })} aria-label={control.muted ? "Unmute" : "Mute"} title={control.muted ? "Unmute" : "Mute"}>
         {control.muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
       </button>

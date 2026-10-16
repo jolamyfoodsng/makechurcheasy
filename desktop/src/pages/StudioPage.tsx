@@ -59,6 +59,7 @@ import type { ServicePlanItem } from "../service-planner/types";
 import { getChapter } from "../bible/bibleData";
 import { formatBiblePassageReference, parseBiblePassageReference } from "../dock/bibleMultiPassage";
 import { useAuth } from "../contexts/AuthContext";
+import { obsService, type ConnectionStatus } from "../services/obsService";
 import { getEffectivePlan } from "../services/licenseService";
 import {
   DEFAULT_MEDIA_CONTROL,
@@ -73,6 +74,7 @@ import {
   setPreviewState,
   setProgramBrand,
   setProgramCamera,
+  setPreviewMediaControl,
   type StudioCamera,
   type StudioCompareColumn,
   setProgramMediaControl,
@@ -124,6 +126,8 @@ import ScenePicker, { type StudioScene } from "../studio/ui/ScenePicker";
 import BibleWorkspace from "../studio/ui/BibleWorkspace";
 import WorshipWorkspace, { markSongRecent } from "../studio/ui/WorshipWorkspace";
 import MediaWorkspace, { MediaControls } from "../studio/ui/MediaWorkspace";
+import SlideshowControls from "../studio/ui/SlideshowControls";
+import { probeVideoDuration, useSlideshow } from "../studio/useSlideshow";
 import DocsWorkspace, { groupDocuments, type DocsSelection } from "../studio/ui/DocsWorkspace";
 import MixPanel from "../studio/ui/MixPanel";
 import SettingsModal, { type LogoBg, type SettingsTab } from "../studio/ui/SettingsModal";
@@ -387,6 +391,18 @@ const WorshipSongModal = lazy(() => import("../worship/WorshipSongModal"));
 export default function StudioPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [obsConnectionStatus, setObsConnectionStatus] = useState<ConnectionStatus>(obsService.status);
+  const [integrationBannerDismissed, setIntegrationBannerDismissed] = useState(() => {
+    try { return localStorage.getItem("mce-studio-integration-banner-dismissed") === "true"; } catch { return false; }
+  });
+  useEffect(() => obsService.onStatusChange((status) => setObsConnectionStatus(status)), []);
+  const openObsConnection = useCallback(() => {
+    window.dispatchEvent(new Event("showOBSConnectPanel"));
+  }, []);
+  const dismissIntegrationBanner = useCallback(() => {
+    setIntegrationBannerDismissed(true);
+    try { localStorage.setItem("mce-studio-integration-banner-dismissed", "true"); } catch { /* banner can still be dismissed for this session */ }
+  }, []);
   const [layout, setLayout] = useState<StudioLayout>(readLayout);
   const section = layout.section;
   // Text has two tabs: Worship (songs) and Notes. `view` is what is really open.
@@ -657,6 +673,14 @@ export default function StudioPage() {
   const [copied, setCopied] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; feed: ProjectorFeed } | null>(null);
   const [outputPop, setOutputPop] = useState<{ x: number; y: number } | null>(null);
+  // New users get a pointer to "Start output" until they open the output once (or dismiss it).
+  const [outputHintSeen, setOutputHintSeen] = useState(() => {
+    try { return localStorage.getItem("mce-studio-output-hint-seen") === "1"; } catch { return false; }
+  });
+  const markOutputHintSeen = useCallback(() => {
+    setOutputHintSeen(true);
+    try { localStorage.setItem("mce-studio-output-hint-seen", "1"); } catch { /* ignore */ }
+  }, []);
   /** The screen chosen in the Output menu's drop-down ("window" = a new window). */
   const [outPick, setOutPick] = useState("");
   const outputOpen = projectorList.some((p) => p.feed === "program");
@@ -664,12 +688,17 @@ export default function StudioPage() {
   const hadOutputRef = useRef(outputOpen);
 
   useEffect(() => onProjectorsChange(setProjectorList), []);
+  useEffect(() => {
+    if (outputOpen && !outputHintSeen) markOutputHintSeen();
+  }, [outputOpen, outputHintSeen, markOutputHintSeen]);
 
-  // The projector window closing by itself (unplugged screen, crash) is worth a warning.
+  // The projector window closing by itself (unplugged screen, crash): a short note.
   useEffect(() => {
     if (hadOutputRef.current && !outputOpen && !closingOutputRef.current) {
+      // Keep the technical reason for the console only; the operator just needs to know.
       const why = takeSurpriseCloseNote();
-      say(`The output screen closed. ${why} Your Preview and schedule are kept — open the output again under Outputs.`.replace("  ", " "), "error");
+      if (why) console.info("[Studio] Output closed:", why);
+      say("The output screen was closed.", "info");
     }
     if (!outputOpen) closingOutputRef.current = false;
     hadOutputRef.current = outputOpen;
@@ -1164,6 +1193,57 @@ export default function StudioPage() {
     setAudioSlide(null);
   }, []);
 
+  // ── Picture / video slideshow (Media tab: tick several, Start slideshow) ──
+  const mediaById = useMemo(() => new Map(media.map((m) => [m.id, m])), [media]);
+  const slideshowIsLiveRef = useRef(false);
+  const slideshow = useSlideshow({
+    project: (id, kind) => {
+      const slide = mediaDeck.find((s) => s.origin?.id === id);
+      if (!slide) return;
+      setMediaId(id);
+      // In a video slideshow each video plays once, then the next one starts.
+      const shown = kind === "video" && slide.media ? { ...slide, media: { ...slide.media, loop: false } } : slide;
+      if (layoutRef.current.previewFirst && !slideshowIsLiveRef.current) {
+        setPreviewSlide(shown);
+        return;
+      }
+      return project(shown);
+    },
+    durationOf: async (id) => {
+      const known = mediaById.get(id)?.durationSec;
+      if (known && known > 0) return known;
+      const url = mediaDeck.find((s) => s.origin?.id === id)?.media?.url;
+      return url ? probeVideoDuration(/^(https?:|blob:|data:)/i.test(url) ? url : `${base}${url}`) : undefined;
+    },
+    onVideoPaused: (paused) => {
+      if (layoutRef.current.previewFirst && !slideshowIsLiveRef.current) void setPreviewMediaControl({ paused });
+      else changeMedia({ paused });
+    },
+  });
+  const startSlideshow = useCallback((ids: string[], kind: "image" | "video", startIndex = 0) => {
+    slideshowIsLiveRef.current = !layoutRef.current.previewFirst;
+    slideshow.start(ids, kind, startIndex);
+  }, [slideshow.start]);
+  const setPreviewFirst = useCallback((value: boolean) => {
+    if (value) slideshowIsLiveRef.current = false;
+    patchLayout({ previewFirst: value });
+  }, [patchLayout]);
+  useEffect(() => {
+    if (!slideshow.show) slideshowIsLiveRef.current = false;
+  }, [slideshow.show]);
+  // Showing anything else on the screen ends the slideshow (its place is kept for "Resume").
+  // It only counts once one of the slideshow's own items has been on the screen (the first
+  // item is projected a moment after Start, while the old item is still live).
+  const slideshowIds = slideshow.show?.ids;
+  const slideshowWasLive = useRef(false);
+  useEffect(() => { slideshowWasLive.current = false; }, [slideshowIds]);
+  useEffect(() => {
+    if (!slideshowIds || !liveSlide) return;
+    const id = liveSlide.module === "media" ? liveSlide.origin?.id : undefined;
+    if (id && slideshowIds.includes(id)) { slideshowWasLive.current = true; return; }
+    if (slideshowWasLive.current) slideshow.stop();
+  }, [liveSlide, slideshowIds, slideshow.stop]);
+
   // ── Choosing a section ──
   // The Schedule / History panel stays exactly as it is when you move between sections.
   const chooseSection = useCallback((next: StudioSection, _keepDock = false) => {
@@ -1381,6 +1461,12 @@ export default function StudioPage() {
     if (previewFirst || slide.media?.kind === "audio") setPreviewSlide(slide);
     else void project(slide);
   }, [mediaDeck, previewFirst, project]);
+
+  const projectMedia = useCallback((id: string) => {
+    setMediaId(id);
+    const slide = mediaDeck.find((s) => s.origin?.id === id) ?? null;
+    if (slide) void project(slide);
+  }, [mediaDeck, project]);
 
   const runImport = useCallback(async (files: FileList, what: "media" | "document") => {
     setImporting(what === "document" ? "Reading the document…" : "Importing…");
@@ -1791,6 +1877,12 @@ export default function StudioPage() {
   // ── Send Preview to Screen (the Send to Screen button, Enter) ──
   const goLiveNow = () => {
     setPreviewTab((t) => (t === "compare" ? t : "output"));
+    if (slideshow.show) {
+      // Sending the current Preview item also moves the running slideshow onto Program.
+      slideshowIsLiveRef.current = true;
+      slideshow.goTo(slideshow.show.pos);
+      return;
+    }
     const cam = cameraRef.current;
     const target = previewSlide ?? selectedSlide;
     if (!layoutRef.current.wordsOn && !cam.enabled) {
@@ -2000,6 +2092,14 @@ export default function StudioPage() {
   const dragStart = useRef(0);
 
   const liveVideo = liveSlide?.media?.kind === "video" ? liveSlide : null;
+  const liveMediaId = liveVideo?.origin?.id;
+  const activeSlideshow = slideshow.show;
+  const slideshowOwnsLiveVideo = Boolean(
+    activeSlideshow?.kind === "video"
+    && slideshowIsLiveRef.current
+    && liveMediaId
+    && activeSlideshow.ids.includes(liveMediaId),
+  );
 
   // Room the Preview panel needs besides the screen itself (so the screen shrinks, not the buttons).
   const shortScreen = typeof window !== "undefined" && window.innerHeight <= 820;
@@ -2141,14 +2241,15 @@ export default function StudioPage() {
         base={base}
         selectedId={mediaId}
         liveId={liveSlide?.origin?.kind === "media" ? liveSlide.origin.id ?? "" : audioSlide?.origin?.id ?? ""}
+        previewFirst={previewFirst}
         onPick={pickMedia}
-        onProject={(id) => {
-          setMediaId(id);
-          void project(mediaDeck.find((s) => s.origin?.id === id) ?? null);
-        }}
+        onProject={projectMedia}
         onSchedule={(id) => schedule(mediaDeck.find((s) => s.origin?.id === id) ?? null)}
         onImport={(files) => void runImport(files, "media")}
         importing={importing}
+        onSlideshow={startSlideshow}
+        resumeIndexFor={slideshow.resumeIndexFor}
+        slideshowIds={slideshow.show?.ids}
         overlays={(
           <MixPanel
             layers={mix}
@@ -2204,9 +2305,32 @@ export default function StudioPage() {
     );
   }
 
-  const playbar = liveVideo || audioSlide ? (
+  const playbar = slideshow.show || liveVideo || audioSlide ? (
     <div className="st-playbars">
-      {liveVideo && (
+      {slideshow.show && (
+        <SlideshowControls
+          show={slideshow.show}
+          items={mediaById}
+          base={base}
+          itemMs={slideshow.itemMs}
+          timeLeft={slideshow.timeLeft}
+          progressKey={slideshow.progressKey}
+          onPlay={slideshow.play}
+          onPause={slideshow.pause}
+          onNext={slideshow.next}
+          onPrev={slideshow.prev}
+          onRestart={slideshow.restart}
+          onGoTo={slideshow.goTo}
+          onInterval={slideshow.setIntervalSec}
+          onLoop={slideshow.setLoop}
+          onShuffle={slideshow.setShuffle}
+          onStop={slideshow.stop}
+          videoControls={slideshowOwnsLiveVideo && liveVideo ? (
+            <MediaControls slide={liveVideo} durationSec={liveMediaItem?.durationSec} control={mediaCtl} onChange={changeMedia} compact />
+          ) : undefined}
+        />
+      )}
+      {liveVideo && !slideshowOwnsLiveVideo && (
         <MediaControls slide={liveVideo} durationSec={liveMediaItem?.durationSec} control={mediaCtl} onChange={changeMedia} />
       )}
       {audioSlide && (
@@ -2222,9 +2346,8 @@ export default function StudioPage() {
           <button type="button" className="st-back" onClick={goBack} title="Back to the app" aria-label="Back to the app">
             <ArrowLeft size={16} />
           </button>
-          <div className="st-brand">
-            <span className="st-brand__logo">M</span>
-            <span className="st-brand__name">MakeChurchEazy</span>
+          <div className="st-brand" title="MakeChurchEazy">
+            <span className="st-brand__logo" aria-label="MakeChurchEazy">M</span>
           </div>
         </div>
 
@@ -2243,7 +2366,7 @@ export default function StudioPage() {
               className={`st-headbtn st-headbtn--output st-outsplit__main${outputOpen ? " is-out" : ""}`}
               disabled={busy}
               onClick={(e) => {
-                if (!outputOpen) { void startOutput(); return; }
+                if (!outputOpen) { markOutputHintSeen(); void startOutput(); return; }
                 const r = e.currentTarget.getBoundingClientRect();
                 setOutputPop((cur) => (cur ? null : { x: Math.max(8, Math.min(window.innerWidth - 348, r.right - 340)), y: r.bottom + 6 }));
               }}
@@ -2265,6 +2388,13 @@ export default function StudioPage() {
             >
               <ChevronDown size={14} />
             </button>
+            {!outputHintSeen && !outputOpen && (
+              <div className="st-outhint" role="note">
+                <span className="st-outhint__arrow" aria-hidden="true" />
+                <span className="st-outhint__text"><strong>Click to project</strong> Show the Studio on your projector or TV</span>
+                <button type="button" className="st-outhint__close" onClick={markOutputHintSeen} aria-label="Got it"><X size={13} /></button>
+              </div>
+            )}
           </div>
           <button
             type="button"
@@ -2283,6 +2413,26 @@ export default function StudioPage() {
           </button>
         </div>
       </header>
+
+      {!integrationBannerDismissed && (
+        <aside className="st-integration-banner" aria-label="Production tool connections">
+          <div className="st-integration-banner__status">
+            <span className={`st-integration-banner__dot${obsConnectionStatus === "connected" ? " is-connected" : ""}`} />
+            <span>Studio <strong>Ready</strong></span>
+          </div>
+          <div className="st-integration-banner__copy">
+            <strong>{obsConnectionStatus === "connected" ? "OBS is connected" : "Want to connect a production tool?"}</strong>
+            <span>{obsConnectionStatus === "connected" ? "Your Studio and OBS features are ready." : "Studio works on its own. Connect OBS for additional production capabilities."}</span>
+          </div>
+          <div className="st-integration-banner__actions">
+            <button type="button" className="st-integration-banner__setup" onClick={openObsConnection}>
+              {obsConnectionStatus === "connected" ? "OBS settings" : "Set up OBS"}
+            </button>
+            <button type="button" className="st-integration-banner__soon" disabled title="vMix integration is coming soon">vMix · Soon</button>
+          </div>
+          <button type="button" className="st-integration-banner__close" onClick={dismissIntegrationBanner} aria-label="Dismiss integration information" title="Dismiss"><X size={16} /></button>
+        </aside>
+      )}
 
       {message && (
         <div className={`studio-message st-message${message.tone === "error" ? " is-error" : ""}`} role={message.tone === "error" ? "alert" : "status"}>
@@ -2383,11 +2533,11 @@ export default function StudioPage() {
                 onWords={setWordsOn}
                 wordsLabel="Show Content"
                 onGoLive={goLiveNow}
-                onClear={() => void handleClear()}
+                onClear={() => { slideshow.stop(); void handleClear(); }}
                 onPrev={goLivePrev}
                 onNext={goLiveNext}
                 previewFirst={previewFirst}
-                onPreviewFirst={(value) => patchLayout({ previewFirst: value })}
+                onPreviewFirst={setPreviewFirst}
                 logoOn={screen === "logo"}
                 onLogo={() => toggleScreen("logo")}
                 canSchedule={Boolean(previewSlide ?? selectedSlide)}
@@ -2605,8 +2755,10 @@ export default function StudioPage() {
       {settingsPanel && (
         <SettingsModal
           initialTab={settingsTab}
+          obsConnected={obsConnectionStatus === "connected"}
+          onSetupObs={openObsConnection}
           previewFirst={previewFirst}
-          onPreviewFirst={(value) => patchLayout({ previewFirst: value })}
+          onPreviewFirst={setPreviewFirst}
           transition={transition}
           onTransition={(value) => patchLayout({ transition: value })}
           textScale={textScale}
@@ -2734,38 +2886,3 @@ export default function StudioPage() {
     </div>
   );
 }
-import { obsService, type ConnectionStatus } from "../services/obsService";
-  const [obsConnectionStatus, setObsConnectionStatus] = useState<ConnectionStatus>(obsService.status);
-  const [integrationBannerDismissed, setIntegrationBannerDismissed] = useState(() => {
-    try { return localStorage.getItem("mce-studio-integration-banner-dismissed") === "true"; } catch { return false; }
-  });
-  useEffect(() => obsService.onStatusChange((status) => setObsConnectionStatus(status)), []);
-  const openObsConnection = useCallback(() => {
-    window.dispatchEvent(new Event("showOBSConnectPanel"));
-  }, []);
-  const dismissIntegrationBanner = useCallback(() => {
-    setIntegrationBannerDismissed(true);
-    try { localStorage.setItem("mce-studio-integration-banner-dismissed", "true"); } catch { /* banner can still be dismissed for this session */ }
-  }, []);
-      {!integrationBannerDismissed && (
-        <aside className="st-integration-banner" aria-label="Production tool connections">
-          <div className="st-integration-banner__status">
-            <span className={`st-integration-banner__dot${obsConnectionStatus === "connected" ? " is-connected" : ""}`} />
-            <span>Studio <strong>Ready</strong></span>
-          </div>
-          <div className="st-integration-banner__copy">
-            <strong>{obsConnectionStatus === "connected" ? "OBS is connected" : "Want to connect a production tool?"}</strong>
-            <span>{obsConnectionStatus === "connected" ? "Your Studio and OBS features are ready." : "Studio works on its own. Connect OBS for additional production capabilities."}</span>
-          </div>
-          <div className="st-integration-banner__actions">
-            <button type="button" className="st-integration-banner__setup" onClick={openObsConnection}>
-              {obsConnectionStatus === "connected" ? "OBS settings" : "Set up OBS"}
-            </button>
-            <button type="button" className="st-integration-banner__soon" disabled title="vMix integration is coming soon">vMix · Soon</button>
-          </div>
-          <button type="button" className="st-integration-banner__close" onClick={dismissIntegrationBanner} aria-label="Dismiss integration information" title="Dismiss"><X size={16} /></button>
-        </aside>
-      )}
-
-          obsConnected={obsConnectionStatus === "connected"}
-          onSetupObs={openObsConnection}

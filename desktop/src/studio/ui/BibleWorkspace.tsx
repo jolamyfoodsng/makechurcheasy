@@ -376,7 +376,7 @@ export default function BibleWorkspace(props: BibleWorkspaceProps) {
     const ref = verses.length > 1 ? `${bible.book} ${bible.chapter}:${verses[0]}-${verses[verses.length - 1]}` : `${bible.book} ${bible.chapter}:${verse}`;
     return [
       { label: "Preview", icon: <Eye size={14} />, onSelect: () => props.onPick(verse, false) },
-      { label: "Send to screen", icon: <Play size={14} />, hint: "Double-click", onSelect: () => props.onProject(verses) },
+      { label: "Project", icon: <Play size={14} />, onSelect: () => props.onProject(verses) },
       { label: "Compare…", icon: <Columns2 size={14} />, hint: "Two translations", onSelect: () => { setCmpVerses(verses); seedDrafts(verses); setCmpTab("translations"); setCmpModal(true); } },
       { label: "Add to Queue", icon: <ListPlus size={14} />, divider: true, onSelect: () => props.onQueue(verses) },
       { label: "Add to Schedule", icon: <CalendarPlus size={14} />, onSelect: () => props.onSchedule(verses) },
@@ -551,7 +551,7 @@ export default function BibleWorkspace(props: BibleWorkspaceProps) {
                 <div className={`st-verse__acts${compact ? " is-compact" : ""}`} onClick={(e) => e.stopPropagation()} onDoubleClick={(e) => e.stopPropagation()}>
                   {!compact && (
                     <button type="button" className={`st-verse__send${isSelected || isPreview ? " is-primary" : ""}`} onClick={() => props.onProject(versesFor(v.verse))} title="Show this on the screen (double-click)">
-                      <Monitor size={13} /> {isSelected || isPreview ? "Send to screen" : "Send"}
+                      <Monitor size={13} /> Send
                     </button>
                   )}
                   <span className="st-verse__icons">
