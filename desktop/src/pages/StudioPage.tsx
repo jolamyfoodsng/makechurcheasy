@@ -885,9 +885,9 @@ export default function StudioPage() {
       return false;
     }
     // Everything passes through Preview: what goes on the screen is shown in Preview first.
-    if (slide.media?.kind !== "audio") setPreviewSlide(slide);
+    if (slide.media?.kind !== "audio") setPreviewSlide(readySlide);
     // Side by side: load the second translation if it is not ready yet, then show both.
-    let outgoing: StudioSlide = slide;
+    let outgoing: StudioSlide = readySlide;
     const secondTranslation = bibleOptsRef.current.compareWith;
     const origin = slide.origin;
     if (slide.module === "bible" && slide.compareMode !== "passages" && secondTranslation && origin?.book && origin.chapter && origin.verse) {

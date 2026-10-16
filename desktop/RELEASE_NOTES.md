@@ -1,4 +1,4 @@
-# MakeChurchEazy Release Highlights (v4.3.2)
+# MakeChurchEazy Release Highlights (v4.3.3)
 
 ## 1. Cleaner Studio Screen
 - **Lead:** Removed the Live Output heading, air-status badge, connection dot, and elapsed timer from the Studio panel. The screen preview and its controls remain available.
