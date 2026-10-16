@@ -1,4 +1,4 @@
-# MakeChurchEazy Release Highlights (v4.3.4)
+# MakeChurchEazy Release Highlights (v4.3.5)
 
 ## 1. Studio Video Preparation Stays in the Background
 - **Lead:** On Windows, preparing a video for Studio no longer opens a separate command window.
