@@ -164,6 +164,8 @@ const STORAGE_KEY = "dock-ticker-messages";
 const SETTINGS_KEY = "dock-ticker-settings";
 const BIBLE_LT_COLOR_OVERRIDES_KEY = "dock-bible-lt-color-overrides";
 const MINISTRY_LT_SIZE_STORAGE_KEY = "dock-ministry-lower-third-size";
+const MINISTRY_LT_THEME_STORAGE_KEY = "dock-ministry-lower-third-theme";
+const ltEntryKey = (entry: MixedLTThemeEntry) => `${entry.kind}:${entry.theme.id}:${entry.label}`;
 const MAX_CHARS = 140;
 const TICKER_HEIGHT = 80;
 const TICKER_MESSAGE_SPACING_MAX = 100;
@@ -648,6 +650,12 @@ export default function DockMinistryTab({
       // Plan limit (Free = 3 by default, set in Admin → Plan Config). A church that
       // has more from a trial or earlier plan keeps only the first ones in the Dock.
       const ltLimit = getDockEntitlementLimit("lowerThirds");
+      // Nothing has been added to OBS yet: offer the first few themes so the THEME list is a real,
+      // working choice instead of a greyed-out box.
+      if (entries.length === 0) {
+        const starterCount = ltLimit >= 0 && Number.isFinite(ltLimit) ? Math.max(ltLimit, 1) : 12;
+        for (const t of pool.slice(0, starterCount)) entries.push({ kind: "lt", theme: t, label: t.name });
+      }
       setLtFavorites(ltLimit >= 0 && Number.isFinite(ltLimit) ? entries.slice(0, ltLimit) : entries);
     } catch (err) {
       console.warn("[DockMinistry] Failed to load LT favorites:", err);
@@ -818,10 +826,18 @@ export default function DockMinistryTab({
     : 800;
 
   // Reset selected index when favorites change
-  useEffect(() => { setLtSelectedIdx(0); }, [ltFavorites]);
+  // The chosen theme is remembered, so it is still selected after a reload.
+  useEffect(() => {
+    const saved = readNativeDockSetting<string>(MINISTRY_LT_THEME_STORAGE_KEY);
+    const savedIdx = typeof saved === "string" ? ltFavorites.findIndex((entry) => ltEntryKey(entry) === saved) : -1;
+    setLtSelectedIdx(savedIdx >= 0 ? savedIdx : 0);
+  }, [ltFavorites]);
 
   const handleSelectLtTheme = useCallback((entryIdx: number) => {
-    if (entryIdx >= 0 && entryIdx < ltFavorites.length) setLtSelectedIdx(entryIdx);
+    if (entryIdx >= 0 && entryIdx < ltFavorites.length) {
+      setLtSelectedIdx(entryIdx);
+      void writeNativeDockSetting(MINISTRY_LT_THEME_STORAGE_KEY, ltEntryKey(ltFavorites[entryIdx]));
+    }
   }, [ltFavorites]);
 
   const setTickerColorOverride = useCallback((key: TickerColorKey, value: string) => {

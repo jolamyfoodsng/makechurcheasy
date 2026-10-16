@@ -194,8 +194,16 @@ function collectLegacyKeys(): string[] {
   return [...keys];
 }
 
-async function loadFromDesktop(scope: string): Promise<SettingsMap> {
-  if (canUseLocalHttpApi()) {
+/**
+ * Read the saved settings from the desktop app's local server. The server can
+ * still be starting when OBS loads the Dock, so a failed read is tried again a
+ * few times first. Falling back at once handed the Dock an empty set, and every
+ * saved choice looked lost after a reload.
+ */
+async function fetchDockSettingsWithRetry(scope: string): Promise<SettingsMap | null> {
+  const delays = [0, 300, 800, 1600];
+  for (const delay of delays) {
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
     try {
       const response = await fetch(`/api/dock-settings?scope=${encodeURIComponent(scope)}`, {
         cache: "no-store",
@@ -206,9 +214,19 @@ async function loadFromDesktop(scope: string): Promise<SettingsMap> {
           ? payload.values as SettingsMap
           : {};
       }
+      if (response.status < 500) return null;
     } catch {
-      // Fall back to the browser database when the optional local API is down.
+      // Server not answering yet: try again.
     }
+  }
+  return null;
+}
+
+async function loadFromDesktop(scope: string): Promise<SettingsMap> {
+  if (canUseLocalHttpApi()) {
+    const values = await fetchDockSettingsWithRetry(scope);
+    if (values) return values;
+    // Fall back to the browser database when the optional local API is down.
   }
 
   if (hasTauriInvoke()) {
@@ -396,7 +414,17 @@ async function migrateLegacyValue(key: string, loaded: SettingsMap): Promise<voi
 export async function hydrateNativeDockSettings(): Promise<void> {
   const requestedScope = getNativeDockSettingsScope();
   if (hydrated && hydratedScope === requestedScope) return;
-  if (hydrationPromise) return hydrationPromise;
+  if (hydrationPromise) {
+    // The signed-in account can become known while an earlier load is still
+    // running (the Dock reads its user id from the desktop app). That load used
+    // the old scope, so once it ends, load again for the right one. Otherwise
+    // new changes were saved under the device scope while the next reload read
+    // an older copy from the account scope.
+    const inFlightScope = currentScope;
+    return hydrationPromise.then(() => (
+      inFlightScope !== requestedScope ? hydrateNativeDockSettings() : undefined
+    ));
+  }
 
   // Writes from a previously hydrated user/device scope must never be merged
   // into the next user's first paint. Those writes already target their old

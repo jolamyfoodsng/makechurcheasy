@@ -574,6 +574,8 @@ html.st-resizing iframe { pointer-events: none !important; }
 /* ── Media ──────────────────────────────────────────────────────────────── */
 .st-media__bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px; border-bottom: 1px solid var(--st-line); }
 .st-media__bar .st-searchbox { flex: 1 1 140px; }
+.st-media__hint { flex: none; padding: 7px 10px; border-bottom: 1px solid var(--st-line); color: var(--st-text-2); font-size: 11.5px; line-height: 1.35; }
+.st-media__hint strong { color: var(--st-text); font-weight: 650; }
 .st-media__overlays { flex: 1; min-height: 0; overflow: auto; padding: 8px; }
 .st-media__items { flex: 1; min-height: 0; overflow-y: auto; padding: 10px; align-content: start; }
 .st-media__items--grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
@@ -586,9 +588,14 @@ html.st-resizing iframe { pointer-events: none !important; }
 .st-mitem__thumb img { width: 100%; height: 100%; object-fit: cover; }
 .st-mitem__thumb .st-tag--live { position: absolute; top: 5px; right: 5px; }
 .st-mitem__kind { position: absolute; left: 5px; bottom: 5px; display: inline-flex; align-items: center; gap: 3px; padding: 1px 5px; border-radius: 4px; background: rgba(0, 0, 0, 0.7); color: #fff; font-size: 10.5px; }
-.st-mitem__name { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-mitem__details { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; }
+.st-mitem__name { flex: 1; min-width: 0; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-mitem__project { display: inline-flex; align-items: center; justify-content: center; flex: none; gap: 4px; padding: 4px 6px; border: 1px solid var(--st-blue-2); border-radius: 3px; background: var(--st-blue-soft); color: var(--st-text); font-size: 10.5px; font-weight: 650; line-height: 1.1; cursor: pointer; }
+.st-mitem__project:hover { background: var(--st-blue-2); color: #fff; }
+.st-mitem__project:focus-visible { outline: 2px solid var(--st-blue-2); outline-offset: 2px; }
 .st-media__items--list .st-mitem { flex-direction: row; align-items: center; }
 .st-media__items--list .st-mitem__thumb { width: 96px; flex: none; }
+.st-media__items--list .st-mitem__details { flex: 1; }
 
 /* ── Shared bottom controls (one slim row) ──────────────────────────────── */
 .st-controls {
@@ -655,10 +662,11 @@ html.st-resizing iframe { pointer-events: none !important; }
 
 /* "Live: John 3:16 ↑" in the reader */
 .st-livebar {
-  display: flex; align-items: center; gap: 8px; margin: 6px 10px 0; padding: 6px 10px; border-radius: 8px;
+  display: flex; align-items: center; gap: 8px; margin: 6px 10px 0; padding: 4px 10px; border-radius: 8px;
+  width: fit-content; max-width: calc(100% - 20px); font-size: 12.5px;
   border: 1px solid rgba(239, 68, 68, 0.55); background: var(--st-red-soft); color: #fecaca; cursor: pointer; text-align: left;
 }
-.st-livebar__ref { flex: 1; min-width: 0; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-livebar__ref { flex: 0 1 auto; min-width: 0; max-width: 260px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .st-livebar__go { flex: none; font-size: 12px; font-weight: 700; }
 
 /* Verse AI: counts row and the folded rail */
@@ -712,8 +720,7 @@ html.st-resizing iframe { pointer-events: none !important; }
   .st-tile { padding: 0; }
 }
 @media (max-width: 980px) {
-  .st-nav__btn span { display: none; }
-  .st-nav__btn { padding: 0 14px; }
+  .st-nav__btn { padding: 0 10px; gap: 6px; font-size: 13px !important; }
   .st-action span { display: none; }
   .st-lib { width: 170px; }
 }
@@ -853,7 +860,8 @@ html.st-resizing iframe { pointer-events: none !important; }
 .st-bible__read { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 /* The scroll area (and its scrollbar) spans the whole reader; the text stays a readable width, centred. */
 .st-bible__read .st-verses { max-width: none; }
-.st-bible__read .st-verse, .st-bible__read .st-bible__title, .st-bible__read .st-livebar { width: 100%; box-sizing: border-box; }
+.st-bible__read .st-verse, .st-bible__read .st-bible__title { width: 100%; box-sizing: border-box; }
+.st-bible__read .st-livebar { box-sizing: border-box; }
 
 .st-monitor__hint { display: none; }
 @container (min-width: 500px) { .st-monitor__hint { display: block; } }
@@ -1921,3 +1929,193 @@ html.st-resizing iframe { pointer-events: none !important; }
 .st-show__thumb.is-now { border-color: var(--st-red); opacity: 1; }
 .st-show__num { position: absolute; left: 2px; bottom: 1px; padding: 0 3px; border-radius: 3px; background: rgba(0, 0, 0, 0.7); color: #fff; font-size: 9.5px; }
 .st-media__bar .studio-btn.is-on { border-color: var(--st-blue-2); background: var(--st-blue-soft); color: var(--st-text); }
+
+/* ── Broadcast graphics editor: takes the whole width over the list, one field per line, tidy footer ── */
+.st-bg__body.is-split .st-bg__grid { display: none; }
+.st-bg__body.is-split .st-bg__edit { flex: 1 1 100%; }
+.st-bg__edit { position: relative; container-type: inline-size; }
+.st-bg__edit .st-bg__group { display: flex; flex-direction: column; gap: 10px; }
+.st-bg__edit .st-bg__field { grid-template-columns: minmax(110px, 170px) minmax(0, 1fr); gap: 10px; align-items: center; }
+.st-bg__edit .st-bg__field:has(textarea), .st-bg__edit .st-bg__field:has(.st-bg__image) { align-items: start; }
+.st-bg__edit .st-bg__field > span { font-size: 12px; color: var(--st-text-2); }
+.st-bg__editfoot { flex-wrap: nowrap; justify-content: flex-end; }
+.st-bg__editmore { position: relative; margin-right: auto; }
+.st-bg__editmore .st-bg__more { width: 36px; height: 36px; padding: 0; justify-content: center; }
+.st-bg__editmore .st-bg__menu { left: 0; right: auto; min-width: 210px; }
+.st-bg__editfoot .st-bg__go, .st-bg__editfoot .st-bg__out, .st-bg__edithead .st-chip { white-space: nowrap; }
+@container (max-width: 460px) {
+  .st-bg__edit .st-bg__field { grid-template-columns: minmax(0, 1fr); gap: 4px; align-items: start; }
+}
+/* Small editor: Project, Close and Preview keep only their icon. */
+@container (max-width: 380px) {
+  .st-bg__edit .st-bg__lbl { display: none; }
+  .st-bg__editfoot .st-bg__go, .st-bg__editfoot .st-bg__out { width: 40px; padding: 0; justify-content: center; }
+  .st-bg__edithead .st-chip { padding: 0 8px; }
+}
+.st-bg__confirm { position: absolute; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center; padding: 12px; border-radius: inherit; background: rgba(4, 8, 18, 0.72); backdrop-filter: blur(2px); }
+.st-bg__confirmbox { width: min(360px, 100%); display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; border: 1px solid var(--st-line-strong); background: var(--st-raised, #121c33); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5); }
+.st-bg__confirmbox strong { font-size: 14px; }
+.st-bg__confirmbox p { margin: 0; color: var(--st-text-2); font-size: 12.5px; line-height: 1.4; }
+.st-bg__confirmbtns { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.st-bg__confirmbtns .studio-btn { width: 100%; justify-content: center; }
+
+/* Small footer buttons (Schedule: Reset / Add, Docs: Import): short words, one line, smaller text */
+.st-dock__foot .studio-btn, .st-lib__foot .studio-btn { height: 28px; padding: 0 9px; gap: 5px; font-size: 11.5px; font-weight: 650; white-space: nowrap; min-width: 0; }
+.st-dock__foot .studio-btn svg, .st-lib__foot .studio-btn svg { flex: none; }
+
+/* Logo + its Edit button */
+.st-lo__logogrp { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+.st-lo__logogrp .st-lo__logo { margin-left: 0; }
+.st-lo__logoedit svg { flex: none; }
+
+/* Scrollbar over the monitor for a tall document page */
+.st-pagescroll { position: absolute; z-index: 6; top: 8px; right: 5px; bottom: 44px; width: 14px; border-radius: 8px; background: rgba(8, 14, 28, 0.55); border: 1px solid rgba(255, 255, 255, 0.14); cursor: ns-resize; touch-action: none; }
+.st-pagescroll:hover, .st-pagescroll:focus-visible { background: rgba(8, 14, 28, 0.8); border-color: var(--st-blue); outline: none; }
+.st-pagescroll__thumb { position: absolute; left: 1px; right: 1px; height: 22%; border-radius: 6px; background: rgba(255, 255, 255, 0.78); pointer-events: none; }
+
+/* Editor footer: the three dots, then Project (and Close while live), all on the left */
+.st-bg__editfoot { justify-content: flex-start; }
+.st-bg__editmore { margin-right: 0; }
+
+/* Rotating tips (change every minute) */
+.st-tip { display: flex; align-items: flex-start; gap: 6px; margin: 6px 2px 0; padding: 6px 9px; border-radius: 9px; background: rgba(255, 255, 255, 0.03); border: 1px dashed var(--st-line); color: var(--st-text-3); font-size: 11.5px; line-height: 1.4; }
+.st-tip__icon { flex: none; margin-top: 2px; color: var(--st-orange, #f59e0b); }
+.st-tip__text { animation: st-tip-in 420ms ease-out; min-width: 0; overflow-wrap: anywhere; }
+@keyframes st-tip-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .st-tip__text { animation: none; } }
+.st-tip--gs { margin: 0; border-radius: 0; border-width: 1px 0 0; border-style: solid; padding: 7px 14px; background: transparent; }
+.st-lib__foot .st-tip { margin: 0 0 8px; }
+
+/* ───── Less crowded preview panel ─────
+   The controls go BELOW the screen unless the panel is really wide, and when the panel is narrow
+   the words on buttons give way to icons (the tooltip still says what they do). */
+.st-col--preview { container-name: stpv; }
+.st-work.is-stacked .st-col--preview { container-type: inline-size; }
+.st-work.is-stacked .st-preview { display: flex; }
+.st-work.is-stacked .st-preview > .st-preview__stage { grid-column: auto; grid-row: auto; width: 100%; max-width: min(100%, 420px); margin: 0 auto; }
+@container stpv (min-width: 860px) {
+  .st-work.is-stacked .st-preview { display: grid; }
+  .st-work.is-stacked .st-preview > .st-preview__stage { grid-column: 1; grid-row: 1 / span 7; max-width: none; margin: 0; }
+}
+/* A little room: "What's on the screen" and "Camera" sit side by side instead of one under the other. */
+@container stpv (min-width: 600px) {
+  .st-lo__stack { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+}
+.st-lo__t2icons { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+
+/* Narrow: Logo / Edit / Send / Clear keep only their icon */
+@container stpv (max-width: 320px) {
+  .st-lo__logogrp .st-lo__logo span { display: none; }
+  .st-lo__logogrp .st-lo__logo { padding: 5px 8px; }
+  .st-lo__sendmain span, .st-lo__sendmain kbd { display: none; }
+  .st-lo__clear span { display: none; }
+  .st-lo__clear { padding: 0 12px; }
+  .st-tp__head .st-chip__lbl { display: none; }
+  .st-tip { display: none; }
+}
+/* Very narrow: the four "What's on the screen" choices become four icons in a row */
+@container stpv (max-width: 270px) {
+  .st-lo__tiles2.st-lo__tiles3 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .st-lo__words .st-lo__tiles3 .st-lo__t { justify-content: center; padding: 4px 0; min-height: 36px; }
+  .st-lo__words .st-lo__tiles3 .st-lo__t > span:not(.st-lo__t2icons) { display: none; }
+  .st-lo__t2icons svg { width: 12px; height: 12px; }
+}
+
+/* Quieter tip: just a line of small text */
+.st-tip { border: 0; background: transparent; padding: 2px 4px; margin: 4px 0 0; }
+.st-tip__icon { opacity: 0.8; }
+
+/* ───── Small window ─────
+   1) Side by side but slim: Bible / Worship / Media on the left, a narrow Preview on the right.
+   2) The Schedule is a dropdown under the header button (it never squeezes the middle).
+   3) Stacked (the very narrowest windows): the screen is smaller, and smaller still when the window is short. */
+.st-dockback { position: fixed; inset: 0; z-index: 39; background: transparent; }
+.st-col--dock.is-overlay {
+  left: auto; right: 8px; top: 4px; bottom: auto;
+  height: min(540px, calc(100% - 12px)); max-width: min(360px, calc(100% - 16px));
+  border: 1px solid var(--st-line-strong); border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+}
+.st-work.is-compact .st-preview > .st-preview__stage { max-width: 100%; margin: 0; }
+.st-work.is-compact .st-col--preview { padding-left: 0; }
+.st-work.is-stacked .st-preview > .st-preview__stage { max-width: min(100%, 340px); }
+@media (max-height: 760px) {
+  .st-work.is-stacked .st-preview > .st-preview__stage { max-width: min(100%, 250px); }
+}
+
+/* Half-width or smaller window: the header has no section tabs. Bible, Worship, Notes, Media and Docs are one row of
+   named tabs at the left of the workspace (.st-subtabs--sections), never bare icons. */
+.st-head.is-small { grid-template-columns: auto minmax(0, 1fr); }
+.st-head.is-small .st-brand__name { display: none; }
+.st-head.is-small .st-headbtn__label { display: none; }
+.st-head.is-small .st-headbtn { padding: 0 9px; }
+.st-workspace__body { flex: 1; min-height: 0; min-width: 0; display: flex; flex-direction: column; }
+.st-workspace__body > * { flex: 1; min-height: 0; }
+
+.st-subtabs--sections { margin-bottom: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.st-subtabs--sections button { flex: none; white-space: nowrap; }
+
+/* Small dropdown with a label ("Lines per slide", "Verses per slide"). */
+.st-minisel { display: inline-flex; align-items: center; gap: 7px; flex: none; }
+.st-minisel > span { font-size: 12px; font-weight: 600; color: var(--st-text-2); white-space: nowrap; }
+.st-minisel select {
+  height: 28px; padding: 0 22px 0 9px; border-radius: 8px; border: 1px solid var(--st-line-strong);
+  background: var(--st-raised); color: var(--st-text); font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer;
+}
+.st-minisel select:hover { border-color: var(--st-blue-2); }
+
+/* Verse AI: the bar between Queue and Suggestions (drag up or down). */
+.st-qsplit { cursor: row-resize; position: relative; touch-action: none; }
+.st-qsplit::after { content: ""; position: absolute; left: 30%; right: 30%; top: 4px; height: 3px; border-radius: 2px; background: var(--st-line-strong); }
+.st-qsplit:hover::after, html.st-resizing .st-qsplit::after { background: var(--st-blue-2); }
+
+/* Songs / notes workspace in a narrow space: less crowded. */
+.st-sections__stats { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-sections__title { min-width: 0; }
+.st-minisel .st-minisel__short { display: none; }
+/* narrow */ .st-split2.is-narrow .st-lib__top { padding: 8px; gap: 6px; }
+/* narrow */ .st-split2.is-narrow .st-lib__top .st-searchbox--big { height: 36px; }
+/* narrow */ .st-split2.is-narrow .st-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+/* narrow */ .st-split2.is-narrow .st-chips button { flex: none; height: 24px; padding: 0 9px; font-size: 11.5px; }
+/* narrow */ .st-split2.is-narrow .st-sections__head { padding: 8px 10px; gap: 6px; }
+/* narrow */ .st-split2.is-narrow .st-sections__title { flex-basis: 100%; }
+/* narrow */ .st-split2.is-narrow .st-sections__title h2 { font-size: 16px; }
+/* narrow */ .st-split2.is-narrow .st-sections__head .st-btnlabel--wide { display: none; }
+/* narrow */ .st-split2.is-narrow .st-texttools { padding: 6px 10px; gap: 6px 8px; }
+/* narrow */ .st-split2.is-narrow .st-minisel .st-minisel__long { display: none; }
+/* narrow */ .st-split2.is-narrow .st-minisel .st-minisel__short { display: inline;
+}
+
+/* Edit note dialog */
+.st-noteedit { display: flex; flex-direction: column; gap: 10px; min-width: min(560px, 80vw); }
+.st-noteedit label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 600; color: var(--st-text-2); }
+.st-noteedit input, .st-noteedit textarea {
+  padding: 8px 10px; border-radius: 8px; border: 1px solid var(--st-line-strong); background: var(--st-raised);
+  color: var(--st-text); font: inherit; font-size: 14px; font-weight: 400; resize: vertical;
+}
+.st-noteedit textarea { min-height: 220px; line-height: 1.5; }
+.st-noteedit__actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Quick text: smaller / bigger, bold, italic, back to the theme */
+.st-quicktext { display: inline-flex; align-items: center; height: 28px; border: 1px solid var(--st-line-strong); border-radius: 8px; overflow: hidden; color: var(--st-text-2); font-size: 12px; font-variant-numeric: tabular-nums; flex: none; }
+.st-quicktext button { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 100%; border: 0; border-left: 1px solid var(--st-line); background: var(--st-raised); color: var(--st-text-2); cursor: pointer; }
+.st-quicktext button:first-child { border-left: 0; }
+.st-quicktext button:hover:not(:disabled) { background: var(--st-hover); color: var(--st-text); }
+.st-quicktext button.is-on { background: var(--st-blue); color: #fff; }
+.st-quicktext button:disabled { opacity: .4; cursor: default; }
+.st-quicktext__pct { min-width: 38px; text-align: center; background: var(--st-panel); height: 100%; display: inline-flex; align-items: center; justify-content: center; }
+/* The preview panel is narrow: the quick row moves into the options pop-up (the sliders button). */
+@container stpv (max-width: 400px) { .st-quicktext--inline { display: none; } }
+
+/* Never show the browser's own big play button on a video in the Studio (Preview, thumbnails, backgrounds). */
+.st video::-webkit-media-controls,
+.st video::-webkit-media-controls-enclosure,
+.st video::-webkit-media-controls-panel,
+.st video::-webkit-media-controls-overlay-play-button,
+.st video::-webkit-media-controls-start-playback-button,
+.st video::-webkit-media-controls-play-button { display: none !important; opacity: 0 !important; visibility: hidden !important; -webkit-appearance: none !important; pointer-events: none !important; }
+
+/* First frame of a video tile that has no saved picture */
+.st-mitem__vframe { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.st-mitem__vframe video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; pointer-events: none; }
+.st-mitem__vframe video.is-ready { opacity: 1; }

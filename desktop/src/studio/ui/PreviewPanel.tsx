@@ -10,7 +10,8 @@
  *  Compare   (Bible) the previewed verse in every installed translation (button in the Bible bar).
  */
 import { useEffect, useRef, useState } from "react";
-import { CalendarPlus, Check, ChevronDown, ChevronLeft, ChevronRight, Eye, Zap, Expand, Image as ImageIcon, Minus, Monitor, MonitorOff, PanelBottom, Plus, SlidersHorizontal, X } from "lucide-react";
+import QuickText from "./QuickText";
+import { CalendarPlus, Check, ChevronDown, ChevronLeft, ChevronRight, Eye, Zap, Expand, Image as ImageIcon, Monitor, MonitorOff, PanelBottom, Pencil, SlidersHorizontal, X } from "lucide-react";
 import StudioModal from "./StudioModal";
 import StudioMenu, { menuAt, type StudioMenuState } from "./StudioMenu";
 import type { BibleTheme } from "../../bible/types";
@@ -34,7 +35,7 @@ function CamVideo({ cam }: { cam: CamOverlay }) {
   }, [cam.stream]);
   return (
     <div className={`st-frame__cam st-frame__cam--${cam.layout}`} aria-hidden="true">
-      {cam.stream ? <video ref={ref} autoPlay muted playsInline /> : <span>CAMERA</span>}
+      {cam.stream ? <video ref={ref} muted playsInline /> : <span>CAMERA</span>}
     </div>
   );
 }
@@ -94,6 +95,10 @@ interface PreviewPanelProps {
   onTransition: (value: StudioTransition) => void;
   textScale: number;
   onTextScale: (percent: number) => void;
+  textBold: boolean;
+  textItalic: boolean;
+  onTextBold: (on: boolean) => void;
+  onTextItalic: (on: boolean) => void;
   onMonitorMenu: (feed: "preview" | "program", event: React.MouseEvent<HTMLDivElement>) => void;
   /** Playback bars for the video / sound on the screen (shown under the screen). */
   playback?: React.ReactNode;
@@ -126,6 +131,8 @@ interface PreviewPanelProps {
   cameraCard?: React.ReactNode;
   /** "What's on the screen" (Bible / Camera / Camera + lower third). Replaces the words switch and look tiles. */
   scenePicker?: React.ReactNode;
+  /** Media and Docs fill the screen on their own: no "What's on the screen" card there. */
+  hideWordsCard?: boolean;
   /** A broadcast graphic is on the screen: shown above the picker with a button to take it off. */
   graphicLive?: { name: string } | null;
   onCloseGraphic?: () => void;
@@ -139,6 +146,43 @@ interface PreviewPanelProps {
   children?: React.ReactNode;
   /** A document page is showing: the mouse wheel over the monitor scrolls it (deltaY in pixels). */
   onWheelScroll?: (deltaY: number) => void;
+  /** A tall page fills the screen: a scrollbar on the monitor moves it on the Preview and on the Output together (0 top, 100 bottom). */
+  pageScroll?: { value: number; onChange: (percent: number) => void } | null;
+  /** Opens the logo settings (choose, size, background). */
+  onEditLogo?: () => void;
+}
+
+/** A slim vertical scrollbar drawn over the monitor. Drag the thumb or click the track. */
+function PageScroller({ value, onChange }: { value: number; onChange: (percent: number) => void }) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const move = (clientY: number) => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect || rect.height <= 0) return;
+    onChange(Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100)));
+  };
+  return (
+    <div
+      className="st-pagescroll"
+      role="scrollbar"
+      aria-orientation="vertical"
+      aria-label="Scroll the page on the Preview and the Output"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(value)}
+      tabIndex={0}
+      title="Scroll the page (also: mouse wheel over the screen)"
+      ref={trackRef}
+      onWheel={(e) => e.stopPropagation()}
+      onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); move(e.clientY); }}
+      onPointerMove={(e) => { if (e.buttons === 1) move(e.clientY); }}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowDown") { e.preventDefault(); onChange(Math.min(100, value + 5)); }
+        if (e.key === "ArrowUp") { e.preventDefault(); onChange(Math.max(0, value - 5)); }
+      }}
+    >
+      <span className="st-pagescroll__thumb" style={{ top: `${value * 0.78}%` }} />
+    </div>
+  );
 }
 
 function slideName(slide: StudioSlide | null): string {
@@ -184,15 +228,23 @@ export default function PreviewPanel(props: PreviewPanelProps) {
   return (
     <section className="st-preview st-lo" aria-label="Studio screen">
       <div className="st-lo__head">
-        <button type="button" className={`st-lo__logo${props.logoOn ? " is-on" : ""}`} onClick={props.onLogo} aria-pressed={props.logoOn} title={props.logoOn ? "Hide the church logo" : "Show the church logo on the screen"}>
-          <ImageIcon size={13} /> <span>Logo</span>
-        </button>
+        <div className="st-lo__logogrp">
+          <button type="button" className={`st-lo__logo${props.logoOn ? " is-on" : ""}`} onClick={props.onLogo} aria-pressed={props.logoOn} title={props.logoOn ? "Hide the church logo" : "Show the church logo on the screen"}>
+            <ImageIcon size={13} /> <span>Logo</span>
+          </button>
+          {props.onEditLogo && (
+            <button type="button" className="st-lo__logo st-lo__logoedit" onClick={props.onEditLogo} title="Edit the logo: choose a picture, size and background" aria-label="Edit the logo">
+              <Pencil size={12} /> <span>Edit</span>
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="st-preview__stage">
         {showFrame && (
           <div className={`st-monitor${tab === "output" ? " is-output" : ""}`} onWheel={props.onWheelScroll ? (e) => props.onWheelScroll?.(e.deltaY) : undefined} onContextMenu={(e) => props.onMonitorMenu(tab === "output" ? "program" : "preview", e)}>
             <ScaledFrame title={tab === "output" ? "Output" : "Preview"} src={tab === "output" ? props.outputUrl : props.previewUrl} cam={tab === "output" ? props.liveCam : props.previewCam} />
+            {props.pageScroll && <PageScroller value={props.pageScroll.value} onChange={props.pageScroll.onChange} />}
             {tab === "output" && !hasLive && !props.liveCam?.enabled && (
               <span className="st-livemini__empty" aria-label="Nothing live yet"><MonitorOff size={22} /></span>
             )}
@@ -270,10 +322,22 @@ export default function PreviewPanel(props: PreviewPanelProps) {
       {props.playback}
 
       <div className="st-lo__stack">
+        {props.hideWordsCard ? (props.graphicLive && props.onCloseGraphic && (
+          <section className="st-lo__mini">
+            <div className="st-lo__gfx" role="status">
+              <span className="st-lo__gfxdot" aria-hidden="true" />
+              <span className="st-lo__gfxname" title={props.graphicLive.name}><small>Graphic on the screen</small>{props.graphicLive.name}</span>
+              <button type="button" className="st-lo__gfxclose" onClick={props.onCloseGraphic} title="Take the graphic off the screen (Alt+G)">
+                <X size={14} /> Remove
+              </button>
+            </div>
+          </section>
+        )) : (
         <section className="st-lo__mini st-lo__words" aria-label={props.scenePicker ? "What's on the screen" : props.wordsLabel}>
           <div className="st-lo__minihead">
             <strong>{props.scenePicker ? "What's on the screen" : props.wordsLabel}</strong>
             <div className="st-lo__headright">
+              {hasLook && <QuickText className="st-quicktext--inline" textScale={props.textScale} bold={props.textBold} italic={props.textItalic} onTextScale={props.onTextScale} onBold={props.onTextBold} onItalic={props.onTextItalic} />}
               {hasLook && (
                 <div className="st-lookopts" ref={optsRef}>
                   <button type="button" className={`st-lo__ib st-lo__ib--plain${opts ? " is-on" : ""}`} disabled={wordsOff} onClick={() => setOpts((v) => !v)} aria-expanded={opts} aria-label="Fade or cut, and text size" title="Fade or cut, and text size">
@@ -290,11 +354,7 @@ export default function PreviewPanel(props: PreviewPanelProps) {
                       </div>
                       <div className="st-lookopts__row">
                         <span>Text size</span>
-                        <div className="st-sizer" role="group" aria-label="Text size">
-                          <button type="button" onClick={() => props.onTextScale(Math.max(70, props.textScale - 5))} aria-label="Smaller text"><Minus size={13} /></button>
-                          <span>{props.textScale}%</span>
-                          <button type="button" onClick={() => props.onTextScale(Math.min(160, props.textScale + 5))} aria-label="Bigger text"><Plus size={13} /></button>
-                        </div>
+                        <QuickText textScale={props.textScale} bold={props.textBold} italic={props.textItalic} onTextScale={props.onTextScale} onBold={props.onTextBold} onItalic={props.onTextItalic} />
                       </div>
                     </div>
                   )}
@@ -328,6 +388,7 @@ export default function PreviewPanel(props: PreviewPanelProps) {
             </div>
           )}
         </section>
+        )}
         {props.cameraCard}
       </div>
 

@@ -14,6 +14,7 @@
  * Preview (what's next) is the same overlay page in an iframe that ignores the relay
  * (`mceRelay=0`, its own `mceSource`) and gets its packet through the URL hash.
  */
+import { chunkLines } from "./studioTextLayout";
 import type { BibleTheme, BibleThemeSettings } from "../bible/types";
 import { buildDockProductionSettingsPayload } from "../services/productionSettings";
 import { dockObsClient } from "../dock/dockObsClient";
@@ -186,7 +187,7 @@ function resolveSettings(
   const theme = mode === "lower-third" ? set.lowerThird ?? set.fullscreen : set.fullscreen ?? set.lowerThird;
   const settings = themeSettingsForMode(theme, mode);
   if (!settings) return null;
-  const scaled = withTextScale(settings, textScale);
+  const scaled = withTextStyle(withTextScale(settings, textScale), textBold, textItalic);
   return (transition === "cut" ? withoutAnimation(scaled) : scaled) as unknown as Record<string, unknown>;
 }
 
@@ -194,6 +195,41 @@ function resolveSettings(
 let textScale = 100;
 export function setStudioTextScale(percent: number): void {
   textScale = Number.isFinite(percent) ? Math.max(50, Math.min(200, Math.round(percent))) : 100;
+}
+
+/** Quick Bold / Italic the operator picked; they sit on top of whatever the theme says. */
+let textBold = false;
+let textItalic = false;
+export function setStudioTextStyle(bold: boolean, italic: boolean): void {
+  textBold = bold === true;
+  textItalic = italic === true;
+}
+
+/** The theme made bolder and/or italic (classic font weight and style, and every layer-theme text layer). */
+export function withTextStyle(settings: BibleThemeSettings, bold: boolean, italic: boolean): BibleThemeSettings {
+  if (!bold && !italic) return settings;
+  const next: BibleThemeSettings = { ...settings };
+  if (bold) next.fontWeight = settings.fontWeight === "bold" || settings.fontWeight === "extrabold" || settings.fontWeight === "black" ? "black" : "bold";
+  if (italic) next.fontStyle = "italic";
+  const layout = settings.layout;
+  if (layout && Array.isArray(layout.layers)) {
+    next.layout = {
+      ...layout,
+      layers: layout.layers.map((layer) => {
+        const style = layer.style;
+        if (!style || typeof style.fontSize !== "number") return layer;
+        return {
+          ...layer,
+          style: {
+            ...style,
+            ...(bold ? { fontWeight: (style.fontWeight ?? 400) >= 700 ? 900 : 700 } : {}),
+            ...(italic ? { italic: true } : {}),
+          },
+        };
+      }),
+    };
+  }
+  return next;
 }
 
 /** The theme with its text sizes multiplied (classic font size and every layer-theme text size). */
@@ -266,7 +302,7 @@ export interface StudioBrand {
 }
 
 /** Bumped when public/studio-output.html changes in a way an already-open projector window must reload for. */
-export const OUTPUT_PAGE_REV = 5;
+export const OUTPUT_PAGE_REV = 8;
 
 export interface StudioProgramState {
   revision: number;
@@ -626,18 +662,26 @@ export function bibleRangeSlide(
 }
 
 /** Split note text into slides on blank lines. */
-export function noteSlides(noteId: string, title: string, content: string): StudioSlide[] {
-  return content
+export function noteSlides(noteId: string, title: string, content: string, linesPerSlide = 0): StudioSlide[] {
+  const out: StudioSlide[] = [];
+  content
     .split(/\n[ \t]*\n+/)
     .map((block) => block.trim())
     .filter(Boolean)
-    .map((block, i) => ({
-      key: `note:${noteId}:${i}`,
-      module: "notes" as const,
-      label: `Slide ${i + 1}`,
-      text: block,
-      reference: "",
-      itemTitle: title,
-      origin: { kind: "note" as const, id: noteId, index: i },
-    }));
+    .forEach((block) => {
+      // 0 = Original: one slide per block. Otherwise a long block is cut into slides of N lines.
+      for (const text of chunkLines(block, linesPerSlide)) {
+        const i = out.length;
+        out.push({
+          key: `note:${noteId}:${i}`,
+          module: "notes" as const,
+          label: `Slide ${i + 1}`,
+          text,
+          reference: "",
+          itemTitle: title,
+          origin: { kind: "note" as const, id: noteId, index: i },
+        });
+      }
+    });
+  return out;
 }

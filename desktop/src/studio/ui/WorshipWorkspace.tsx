@@ -7,12 +7,13 @@
  *
  * Songs are added and edited on the Worship page (New / Edit open it).
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CalendarPlus, Eye, Music, Pencil, Play, Plus, Search, Star, X } from "lucide-react";
 import type { Song } from "../../worship/types";
 import { toneStyle, type DeckSlide } from "../studioSlides";
 import { lineStats, songLineStats } from "../../worship/lyricTools";
 import StudioMenu, { menuAt, type StudioMenuState } from "./StudioMenu";
+import { useNarrow } from "./useNarrow";
 import "./WorshipWorkspace.css";
 
 const FAV_KEY = "mce-studio-song-favorites";
@@ -58,6 +59,8 @@ interface WorshipWorkspaceProps {
   onScheduleSong: () => void;
   onNewSong: () => void;
   onEditSong: (id: string) => void;
+  /** Lines per slide + Translate row, shown above the sections. */
+  tools?: ReactNode;
 }
 
 export default function WorshipWorkspace(props: WorshipWorkspaceProps) {
@@ -68,6 +71,8 @@ export default function WorshipWorkspace(props: WorshipWorkspaceProps) {
   const [recent, setRecent] = useState<string[]>(() => readIds(RECENT_KEY));
   const [menu, setMenu] = useState<StudioMenuState | null>(null);
   const sectionsRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLElement>(null);
+  const narrow = useNarrow(rootRef, 560);
   const [active, setActive] = useState(0);
 
   // Recent changes when a song is shown; re-read when the list is opened.
@@ -102,7 +107,7 @@ export default function WorshipWorkspace(props: WorshipWorkspaceProps) {
   };
 
   return (
-    <section className="st-split2" aria-label="Worship">
+    <section ref={rootRef} className={`st-split2${narrow ? " is-narrow" : ""}`} aria-label="Worship">
       <div className="st-lib">
         <div className="st-lib__top">
           <div className="st-searchbox st-searchbox--big">
@@ -168,8 +173,9 @@ export default function WorshipWorkspace(props: WorshipWorkspaceProps) {
                 {song.slides?.length > 0 && <span className="st-sections__stats" title="Measured from this song's slides">{lineStats(song.slides).slides} slides · {lineStats(song.slides).lines} lines · {lineStats(song.slides).label}</span>}
               </div>
               <button type="button" className="studio-btn" onClick={() => props.onEditSong(song.id)} title="Edit on the Worship page"><Pencil size={13} /> Edit</button>
-              <button type="button" className="studio-btn" onClick={props.onScheduleSong}><CalendarPlus size={13} /> Add song to Schedule</button>
+              <button type="button" className="studio-btn" onClick={props.onScheduleSong} title="Add song to Schedule" aria-label="Add song to Schedule"><CalendarPlus size={13} /> <span className="st-btnlabel--wide">Add song to Schedule</span></button>
             </div>
+            {props.tools}
             <div className="st-sections__list" ref={sectionsRef}>
               {slides.length === 0 && <div className="st-empty">This song has no slides yet. Open it on the Worship page to split the lyrics.</div>}
               {slides.map((slide, i) => {

@@ -11,6 +11,7 @@ import type { DockNote } from "../dock/dockNotesStorage";
 import type { MediaItem } from "../library/libraryTypes";
 import { bibleRangeSlide, noteSlides, type StudioMode, type StudioSlide } from "./studioEngine";
 import { mediaPath, mediaSlide, songSlides } from "./studioSlides";
+import { noteLinesOf } from "./studioTextLayout";
 import type { StudioSection } from "./studioLayout";
 
 export interface PlanItemDraft {
@@ -208,7 +209,7 @@ export async function resolvePlanItem(item: ServicePlanItem, ctx: PlanContext): 
     const index = Math.max(0, Number(p.slideIndex) || 0);
     const note = ctx.notes.find((n) => n.id === noteId);
     if (note) {
-      const slides = noteSlides(note.id, note.title || "Note", note.content);
+      const slides = noteSlides(note.id, note.title || "Note", note.content, noteLinesOf(note));
       return { slide: slides[Math.min(index, slides.length - 1)] ?? null, target: { section: "docs", noteId: note.id, index }, section: "docs" };
     }
     const text = String(p.slideText || p.text || "").split(/\n[ \t]*\n+/)[0]?.trim() ?? "";

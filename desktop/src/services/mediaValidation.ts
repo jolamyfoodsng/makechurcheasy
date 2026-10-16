@@ -22,7 +22,10 @@ export const COMMON_AUDIO_EXTENSIONS = [
 ];
 
 export const COMMON_DOCUMENT_EXTENSIONS = [
-  "pdf", "docx", "pptx", "doc", "ppt",
+  "pdf", "docx", "pptx", "odt", "odp", "rtf", "txt", "md", "html", "htm",
+  // Old binary Office files stay in the list so the file dialog shows them; the importer then
+  // explains how to save them as .docx / .pptx / PDF.
+  "doc", "ppt",
 ];
 
 /**

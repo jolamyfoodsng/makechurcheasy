@@ -23,8 +23,9 @@ describe("DockBroadcastTab UI & Visual Leading", () => {
     
     // Step 1: Profile section
     expect(html).toContain("Profile");
-    expect(html).toContain("New Profile");
-    expect(html).toContain("Senior Pastor");
+    // Profiles are added on the Broadcast page of the app, not in the dock.
+    expect(html).not.toContain("New Profile");
+    expect(html).toContain("Sunday");
 
     // Step 2: Channels section
     expect(html).toContain("Channels");

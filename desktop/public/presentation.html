@@ -416,6 +416,16 @@
       }
     }
   </style>
+<style id="mce-no-video-ui">
+/* Never show the browser's own play button or video controls (the overlay plays its videos itself). */
+video::-webkit-media-controls,
+video::-webkit-media-controls-enclosure,
+video::-webkit-media-controls-panel,
+video::-webkit-media-controls-overlay-play-button,
+video::-webkit-media-controls-start-playback-button,
+video::-webkit-media-controls-play-button { display: none !important; opacity: 0 !important; visibility: hidden !important; -webkit-appearance: none !important; pointer-events: none !important; }
+video { outline: none; }
+</style>
 </head>
 
 <body>
@@ -823,7 +833,7 @@
           <div class="stage-bg" style="background:${escapeHtml(getStageBackground(style))};">
             ${bgPattern ? `<img class="stage-pattern" src="${escapeHtml(bgPattern)}" alt="" style="object-fit:cover;opacity:${backgroundOpacity};" />` : ""}
             ${bgImage ? `<img src="${escapeHtml(bgImage)}" alt="" style="object-fit:cover;opacity:${backgroundOpacity};" />` : ""}
-            ${bgVideo ? `<video src="${escapeHtml(bgVideo)}" autoplay muted loop playsinline style="object-fit:cover;opacity:${backgroundOpacity};"></video>` : ""}
+            ${bgVideo ? `<video src="${escapeHtml(bgVideo)}" muted loop playsinline preload="auto" onloadeddata="try{this.play().catch(function(){})}catch(e){}" style="object-fit:cover;opacity:${backgroundOpacity};"></video>` : ""}
           </div>
           <div class="stage-overlay" style="background:${escapeHtml(overlayColor)};opacity:${overlayOpacity};"></div>
           `}
@@ -901,7 +911,7 @@
         return `
           <div class="media-layer" style="background:${escapeHtml(background)};">
             ${isVideo
-              ? `<video id="stageVideo" src="${escapeHtml(src)}" autoplay muted loop playsinline style="object-fit:${fit};${mediaZoomStyle}"></video>`
+              ? `<video id="stageVideo" src="${escapeHtml(src)}" muted loop playsinline preload="auto" onloadeddata="try{this.play().catch(function(){})}catch(e){}" style="object-fit:${fit};${mediaZoomStyle}"></video>`
               : `<img src="${escapeHtml(src)}" alt="${escapeHtml(item.title || "Presentation media")}" style="object-fit:${fit};${mediaZoomStyle}" />`}
           </div>
         `;
@@ -967,7 +977,7 @@
           <div class="stage-bg" style="background:${escapeHtml(getStageBackground(style))};">
             ${bgPattern ? `<img class="stage-pattern" src="${escapeHtml(bgPattern)}" alt="" style="object-fit:cover;opacity:${backgroundOpacity};" />` : ""}
             ${bgImage ? `<img src="${escapeHtml(bgImage)}" alt="" style="object-fit:cover;opacity:${backgroundOpacity};" />` : ""}
-            ${bgVideo ? `<video src="${escapeHtml(bgVideo)}" autoplay muted loop playsinline style="object-fit:cover;opacity:${backgroundOpacity};"></video>` : ""}
+            ${bgVideo ? `<video src="${escapeHtml(bgVideo)}" muted loop playsinline preload="auto" onloadeddata="try{this.play().catch(function(){})}catch(e){}" style="object-fit:cover;opacity:${backgroundOpacity};"></video>` : ""}
           </div>
           <div class="stage-overlay" style="background:${escapeHtml(overlayColor)};opacity:${overlayOpacity};"></div>
           <div class="stage-content">

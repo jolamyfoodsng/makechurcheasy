@@ -112,7 +112,7 @@ vi.mock("../dock/dockNotesStorage", () => ({
 vi.mock("../multiview/mvStore", () => ({
   getSettings: vi.fn(() => ({
     churchName: "Grace Faith Church",
-    mainPastorName: "Pastor Akosile",
+    mainPastorName: "Pastor Jane Doe",
     brandColor: "#4f46e5",
     obsUrl: "ws://127.0.0.1:4455",
   })),

@@ -6,7 +6,8 @@
  * multi-stream hours are left this month.
  */
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { Send } from "lucide-react";
 import type { BroadcastPersonProfile } from "../services/broadcastSettingsService";
 import type { MultistreamUsageInfo } from "../services/broadcastUsageService";
 import {
@@ -47,6 +48,9 @@ export interface MultistreamStatusPanelProps {
   onApply: () => void;
   onUpgrade?: () => void;
   compact?: boolean;
+  /** Integrated channel editor; the page renders the destination rows. */
+  workspace?: boolean;
+  icon?: ReactNode;
 }
 
 export function MultistreamStatusPanel({
@@ -58,6 +62,8 @@ export function MultistreamStatusPanel({
   onApply,
   onUpgrade,
   compact = false,
+  workspace = false,
+  icon,
 }: MultistreamStatusPanelProps) {
   const target = useMultistreamTarget();
   const delivery = profile.channels.filter((ch) => ch.enabled !== false && ch.streamKey.trim());
@@ -65,7 +71,7 @@ export function MultistreamStatusPanel({
   const forThisProfile = target && target.profileId === profile.id ? target : null;
   const wantsMulti = delivery.length > 1;
 
-  if (delivery.length === 0) return null;
+  if (delivery.length === 0 && !workspace) return null;
 
   const statusFor = (id: string) => forThisProfile?.destinations.find((d) => d.id === id);
 
@@ -107,7 +113,18 @@ export function MultistreamStatusPanel({
   };
 
   return (
-    <section style={box} aria-label="Where your stream goes" data-testid="multistream-status">
+    <section className={workspace ? "broadcast-destinations-summary" : undefined} style={workspace ? undefined : box} aria-label="Where your stream goes" data-testid="multistream-status">
+      {workspace ? (
+        <div className="broadcast-destinations-heading">
+          <div className="broadcast-destinations-heading-copy">
+            {icon}
+            <div><h2>Where your stream goes</h2><p>These platforms will be streamed when you go live in OBS.</p></div>
+          </div>
+          <button type="button" className="broadcast-send-obs" onClick={onApply} disabled={applying || delivery.length === 0}>
+            <Send size={19} />{applying ? "Applying…" : "Send to OBS"}
+          </button>
+        </div>
+      ) : (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
           <span style={{ fontWeight: 700 }}>Where your stream goes</span>
@@ -119,6 +136,8 @@ export function MultistreamStatusPanel({
           </button>
         )}
       </div>
+      )}
+      {workspace && delivery.length > 0 && <span className="broadcast-destinations-headline" style={{ color: headlineColor }}>{headline}</span>}
 
       {freshness === "changed" && (
         <div style={{ color: AMBER, lineHeight: 1.4 }}>
@@ -130,7 +149,7 @@ export function MultistreamStatusPanel({
         </div>
       )}
 
-      <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+      {!workspace && <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
         {delivery.map((ch) => {
           const st = freshness === "applied" ? statusFor(ch.id) : undefined;
           const color = !st ? MUTED : st.ok ? GREEN : RED;
@@ -147,7 +166,7 @@ export function MultistreamStatusPanel({
             </li>
           );
         })}
-      </ul>
+      </ul>}
 
       {forThisProfile?.note && freshness === "applied" && (
         <div style={{ color: AMBER, lineHeight: 1.4 }}>{forThisProfile.note}</div>

@@ -8,7 +8,7 @@
  *  Playback  for the video or sound on the screen: play / pause, stop, seek, loop, volume,
  *            mute, Fit / Fill. Only shown while one is playing.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   CalendarPlus,
   Check,
@@ -60,6 +60,46 @@ interface MediaWorkspaceProps {
   resumeIndexFor?: (ids: string[]) => number | null;
   /** Items of the slideshow that is running now (marked in the grid). */
   slideshowIds?: string[];
+}
+
+/** A video with no saved picture: show its first frame (loaded only when the tile scrolls into view). */
+function VideoFrame({ src, fallback }: { src: string; fallback: ReactNode }) {
+  const box = useRef<HTMLSpanElement>(null);
+  const [near, setNear] = useState(false);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || typeof IntersectionObserver === "undefined") { setNear(true); return undefined; }
+    const watcher = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) { setNear(true); watcher.disconnect(); }
+    }, { rootMargin: "200px" });
+    watcher.observe(el);
+    return () => watcher.disconnect();
+  }, []);
+  return (
+    <span ref={box} className="st-mitem__vframe">
+      {!ready && fallback}
+      {near && (
+        <video
+          src={`${src}#t=0.1`}
+          preload="metadata"
+          muted
+          playsInline
+          tabIndex={-1}
+          aria-hidden="true"
+          disablePictureInPicture
+          className={ready ? "is-ready" : ""}
+          onLoadedMetadata={(e) => { try { e.currentTarget.currentTime = Math.min(0.1, (e.currentTarget.duration || 0.1) / 2); } catch { /* the frame still shows */ } }}
+          onLoadedData={() => setReady(true)}
+        />
+      )}
+    </span>
+  );
+}
+
+function videoUrlOf(item: MediaItem, base: string): string {
+  const url = mediaPath(item);
+  return /^(data:|https?:|blob:)/i.test(url) ? url : `${base}${url}`;
 }
 
 function thumbOf(item: MediaItem, base: string): string {
@@ -185,6 +225,12 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
       </div>
       {props.importing && <div className="st-banner" role="status">{props.importing}</div>}
 
+      {props.previewFirst && list.some((item) => item.type === "video") && !showChecks && (
+        <div className="st-media__hint" role="status">
+          Preview first is on. Click a video to preview it, or use <strong>Send to Screen</strong> on its card to project it.
+        </div>
+      )}
+
       {props.onSlideshow && showChecks && (
         <div className="st-mselect" role="region" aria-label="Slideshow selection">
           <span className="st-mselect__count">
@@ -255,7 +301,7 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
                 title={item.name}
               >
                 <span className="st-mitem__thumb">
-                  {thumb ? <img src={thumb} alt="" loading="lazy" /> : <Icon size={22} />}
+                  {thumb ? <img src={thumb} alt="" loading="lazy" /> : item.type === "video" && mediaPath(item) ? <VideoFrame src={videoUrlOf(item, base)} fallback={<Icon size={22} />} /> : <Icon size={22} />}
                   {item.type !== "image" && <span className="st-mitem__kind"><Icon size={11} /> {duration(item.durationSec)}</span>}
                   {isLive && <span className="st-tag st-tag--live">LIVE</span>}
                   {running.has(item.id) && !isLive && <span className="st-tag st-mitem__inshow">In slideshow</span>}
@@ -273,7 +319,22 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
                     </button>
                   )}
                 </span>
-                <span className="st-mitem__name">{item.name}</span>
+                <span className="st-mitem__details">
+                  <span className="st-mitem__name">{item.name}</span>
+                  {props.previewFirst && item.type === "video" && !showChecks && (
+                    <button
+                      type="button"
+                      className="st-mitem__project"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); props.onProject(item.id); }}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") e.stopPropagation(); }}
+                      aria-label={`Send ${item.name} to screen`}
+                      title={`Send ${item.name} to screen`}
+                    >
+                      <Play size={12} /> <span>Send</span>
+                    </button>
+                  )}
+                </span>
               </div>
             );
           })}

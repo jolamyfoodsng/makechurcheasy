@@ -25,7 +25,7 @@ const SCENES: { id: StudioScene; label: string; title: string; icon: React.React
   { id: "fullscreen", label: "Full screen", title: "The words (Bible, songs, notes) fill the screen, no camera", icon: <Monitor size={16} /> },
   { id: "lower-third", label: "Lower third", title: "The words as a bar across the bottom, no camera", icon: <PanelBottom size={16} /> },
   { id: "camera", label: "Camera", title: "Just the camera, no words", icon: <Video size={16} /> },
-  { id: "camera-lt", label: "Camera + lower third", title: "The camera with the words as a bar across the bottom", icon: <Video size={16} /> },
+  { id: "camera-lt", label: "Camera + lower third", title: "The camera with the words as a bar across the bottom", icon: <span className="st-lo__t2icons"><Video size={14} /><PanelBottom size={14} /></span> },
 ];
 
 interface ScenePickerProps {

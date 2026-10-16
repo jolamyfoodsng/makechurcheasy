@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { bibleSlides, noteSlides, previewFrameUrl, programFrameUrl, themeSettingsForMode, withoutAnimation } from "./studioEngine";
-import { DEFAULT_THEME_SETTINGS, type BibleTheme } from "../bible/types";
+import { bibleSlides, noteSlides, previewFrameUrl, programFrameUrl, themeSettingsForMode, withoutAnimation, withTextStyle } from "./studioEngine";
+import { DEFAULT_THEME_SETTINGS, type BibleTheme, type BibleThemeSettings } from "../bible/types";
 
 describe("studio slides", () => {
   it("makes one Bible slide per verse with a full reference", () => {
@@ -49,5 +49,25 @@ describe("studio themes", () => {
     const theme = { id: "t", name: "t", templateType: "fullscreen", settings: fs, variants: { fullscreen: { settings: fs }, lowerThird: { settings: lt } } } as unknown as BibleTheme;
     expect(themeSettingsForMode(theme, "lower-third")?.fontSize).toBe(30);
     expect(themeSettingsForMode(theme, "fullscreen")?.fontSize).toBe(70);
+  });
+
+  it("noteSlides with lines per slide: Original splits on blank lines, a number splits long blocks", () => {
+    const text = "one\ntwo\nthree\n\nfour";
+    expect(noteSlides("n", "N", text).map((s) => s.text)).toEqual(["one\ntwo\nthree", "four"]);
+    const split = noteSlides("n", "N", text, 2);
+    expect(split.map((s) => s.text)).toEqual(["one\ntwo", "three", "four"]);
+    expect(split.map((s) => s.origin?.index)).toEqual([0, 1, 2]);
+  });
+
+  it("withTextStyle: bold goes one step heavier, italic is added, nothing changes when both are off", () => {
+    const plain = { fontWeight: "normal", fontStyle: "normal" } as unknown as BibleThemeSettings;
+    expect(withTextStyle(plain, false, false)).toBe(plain);
+    expect(withTextStyle(plain, true, false).fontWeight).toBe("bold");
+    expect(withTextStyle({ ...plain, fontWeight: "bold" } as unknown as BibleThemeSettings, true, false).fontWeight).toBe("black");
+    expect(withTextStyle(plain, false, true).fontStyle).toBe("italic");
+    const layered = { layout: { layers: [{ style: { fontSize: 40, fontWeight: 400 } }, { style: { fill: "#000" } }] } } as unknown as BibleThemeSettings;
+    const out = withTextStyle(layered, true, true).layout!.layers as unknown as Array<{ style: Record<string, unknown> }>;
+    expect(out[0].style).toMatchObject({ fontWeight: 700, italic: true });
+    expect(out[1].style).toEqual({ fill: "#000" });
   });
 });

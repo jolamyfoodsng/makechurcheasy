@@ -1,5 +1,6 @@
 import type { CSSProperties, HTMLAttributes, PropsWithChildren } from "react";
 import { resolveOverlayAssetUrl } from "../services/overlayUrl";
+import { playMutedVideo } from "../utils/playMutedVideo";
 
 interface ThemePreviewSurfaceProps extends PropsWithChildren, HTMLAttributes<HTMLDivElement> {
   className?: string;
@@ -38,7 +39,7 @@ export default function ThemePreviewSurface({
       {resolvedVideoSrc && (
         <video
           aria-hidden="true"
-          autoPlay
+          ref={playMutedVideo}
           loop
           muted
           playsInline

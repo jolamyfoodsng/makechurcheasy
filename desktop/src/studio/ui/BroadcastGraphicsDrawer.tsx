@@ -39,6 +39,7 @@ import {
   remoteThemeToLowerThird,
 } from "../../services/remoteProductionThemes";
 import StudioModal from "./StudioModal";
+import StudioTip, { GRAPHICS_TIPS } from "./StudioTip";
 
 export interface ProjectedGraphic {
   id: string;
@@ -162,6 +163,8 @@ export default function BroadcastGraphicsDrawer({ mode: initialMode = "all", liv
   const [menuKey, setMenuKey] = useState<string | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  /** The "save before you close?" question in the editor. */
+  const [confirmClose, setConfirmClose] = useState(false);
   const [note, setNote] = useState("");
   const say = (text: string) => {
     setNote(text);
@@ -240,18 +243,18 @@ export default function BroadcastGraphicsDrawer({ mode: initialMode = "all", liv
   const nameFor = (entry: Entry) => names[entry.key] ?? (isSaved(entry) ? entry.name : `${entry.name} (mine)`);
 
   /** Keeps the edited graphic in My graphics: updates it if it already is one, otherwise adds a new one. */
-  const save = (entry: Entry) => {
+  const save = (entry: Entry): boolean => {
     const values = valuesFor(entry);
     const name = nameFor(entry).trim() || entry.name;
     if (isSaved(entry)) {
       updateBroadcastGraphic(entry.key.slice("saved-".length), { name, variables: values });
       setEdits((all) => ({ ...all, [entry.key]: {} }));
       say("Saved.");
-      return;
+      return true;
     }
     if (isFreeStudio() && loadSavedBroadcastGraphics().length >= FREE_LIMITS.saved) {
       say(freeLimitMessage("saved"));
-      return;
+      return false;
     }
     saveBroadcastGraphic({
       name,
@@ -262,7 +265,35 @@ export default function BroadcastGraphicsDrawer({ mode: initialMode = "all", liv
       isAddedToObs: false,
     });
     say("Saved to My graphics.");
+    return true;
   };
+
+  /** True when the open editor has words, colours or a name that were changed and not saved. */
+  const isDirty = (entry: Entry) => Object.keys(edits[entry.key] ?? {}).length > 0
+    || (names[entry.key] !== undefined && names[entry.key] !== (isSaved(entry) ? entry.name : ""));
+
+  const forget = (entry: Entry) => {
+    setEdits((all) => ({ ...all, [entry.key]: {} }));
+    setNames((all) => {
+      const next = { ...all };
+      delete next[entry.key];
+      return next;
+    });
+  };
+
+  /** The editor's X: closes at once, or asks first when there is something unsaved. */
+  const requestClose = (entry: Entry) => {
+    setMenuKey(null);
+    if (isDirty(entry)) setConfirmClose(true);
+    else setEditKey(null);
+  };
+  const closeNow = () => { setConfirmClose(false); setMenuKey(null); setEditKey(null); };
+  const saveAndClose = (entry: Entry) => {
+    if (!save(entry)) { setConfirmClose(false); return; }
+    forget(entry);
+    closeNow();
+  };
+  const discardAndClose = (entry: Entry) => { forget(entry); closeNow(); };
 
   const remove = (entry: Entry) => {
     if (confirmDelete !== entry.key) {
@@ -272,7 +303,7 @@ export default function BroadcastGraphicsDrawer({ mode: initialMode = "all", liv
     deleteBroadcastGraphic(entry.key.slice("saved-".length));
     setConfirmDelete(null);
     setMenuKey(null);
-    if (editKey === entry.key) setEditKey(null);
+    if (editKey === entry.key) { setEditKey(null); setConfirmClose(false); }
   };
 
   const project = (entry: Entry) => {
@@ -445,15 +476,14 @@ export default function BroadcastGraphicsDrawer({ mode: initialMode = "all", liv
                 aria-label="Name of this graphic"
                 title="The name it is saved under in My graphics"
               />
-              <button type="button" className="st-chip" onClick={() => openPreview(editing.key)}><Eye size={13} /> Preview</button>
-              <button type="button" className="st-iconbtn" onClick={() => setEditKey(null)} aria-label="Close the editor" title="Close the editor"><X size={16} /></button>
+              <button type="button" className="st-iconbtn" onClick={() => requestClose(editing)} aria-label="Close the editor" title="Close the editor"><X size={16} /></button>
             </header>
             <div className="st-bg__form">
               {groups.map(([name, vars]) => (
                 <fieldset key={name} className="st-bg__group">
                   <legend>{name}</legend>
                   {vars.map((v) => (
-                    <label key={v.key} className={`st-bg__field${v.multiline || v.type === "image" || v.type === "color" && false ? " is-wide" : ""}`} htmlFor={`bg-${v.key}`}>
+                    <label key={v.key} className="st-bg__field" htmlFor={`bg-${v.key}`}>
                       <span>{v.label}</span>
                       {field(editing, editValues, v)}
                     </label>
@@ -462,17 +492,17 @@ export default function BroadcastGraphicsDrawer({ mode: initialMode = "all", liv
               ))}
               <fieldset className="st-bg__group">
                 <legend>On screen</legend>
-                <label className="st-bg__field is-wide">
+                <label className="st-bg__field">
                   <span>Position</span>
                   <select className="st-sel" value={show.position} onChange={(e) => setShowOpt({ position: e.target.value })} aria-label="Position on the screen">
                     {POSITIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                   </select>
                 </label>
-                <label className="st-bg__field is-wide">
+                <label className="st-bg__field">
                   <span>Size · {show.size}%</span>
                   <input type="range" min={40} max={160} step={5} value={show.size} onChange={(e) => setShowOpt({ size: Number(e.target.value) })} />
                 </label>
-                <label className="st-bg__field is-wide">
+                <label className="st-bg__field">
                   <span>Stays for</span>
                   <select className="st-sel" value={show.duration} onChange={(e) => setShowOpt({ duration: e.target.value })}>
                     {DURATIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -481,18 +511,71 @@ export default function BroadcastGraphicsDrawer({ mode: initialMode = "all", liv
               </fieldset>
             </div>
             <footer className="st-bg__editfoot">
-              <button type="button" className="st-linkbtn" onClick={() => setEdits((all) => ({ ...all, [editing.key]: {} }))}>Reset</button>
-              {live?.id === editing.key && <button type="button" className="studio-btn st-bg__out" onClick={onClose}><Square size={12} /> Close</button>}
-              <button type="button" className="studio-btn" onClick={() => save(editing)} title="Keep this version in My graphics">
-                <Bookmark size={14} /> {isSaved(editing) ? "Save changes" : "Save to My graphics"}
-              </button>
-              <button type="button" className="studio-btn studio-btn--primary" onClick={() => project(editing)}>
-                <Send size={14} /> {live?.id === editing.key ? "Project again" : "Project"}
+              <div className="st-bg__editmore">
+                <button
+                  type="button"
+                  className="studio-btn st-bg__more"
+                  aria-label="More: save to My graphics, reset"
+                  title="More"
+                  aria-expanded={menuKey === `edit:${editing.key}`}
+                  onClick={() => setMenuKey(menuKey === `edit:${editing.key}` ? null : `edit:${editing.key}`)}
+                >
+                  <MoreHorizontal size={16} />
+                </button>
+                {menuKey === `edit:${editing.key}` && (
+                  <div className="st-bg__menu" role="menu">
+                    <button type="button" role="menuitem" onClick={() => { setMenuKey(null); openPreview(editing.key); }}>
+                      <Eye size={13} /> Preview
+                    </button>
+                    <button type="button" role="menuitem" onClick={() => { setMenuKey(null); save(editing); }}>
+                      <Bookmark size={13} /> {isSaved(editing) ? "Save changes" : "Save to My graphics"}
+                    </button>
+                    <button type="button" role="menuitem" disabled={!isDirty(editing)} onClick={() => { setMenuKey(null); forget(editing); }}>
+                      <RotateCcw size={13} /> Reset to original
+                    </button>
+                    {isSaved(editing) && (
+                      <button type="button" role="menuitem" className="is-danger" onClick={() => remove(editing)}>
+                        <Trash2 size={13} /> {confirmDelete === editing.key ? "Click again to delete" : "Delete"}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              {live?.id === editing.key && (
+                <button type="button" className="studio-btn st-bg__out" onClick={onClose} title="Play the out animation and take it off the screen" aria-label="Close the graphic on the screen">
+                  <Square size={12} /> <span className="st-bg__lbl">Close</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className="studio-btn studio-btn--primary st-bg__go"
+                onClick={() => project(editing)}
+                title={live?.id === editing.key ? "Project again" : "Project: show it on the screen now"}
+                aria-label={live?.id === editing.key ? "Project again" : "Project"}
+              >
+                <Send size={14} /> <span className="st-bg__lbl">{live?.id === editing.key ? "Project again" : "Project"}</span>
               </button>
             </footer>
+            {confirmClose && (
+              <div className="st-bg__confirm" role="alertdialog" aria-label="Close the editor?">
+                <div className="st-bg__confirmbox">
+                  <strong>Close the editor?</strong>
+                  <p>You changed this graphic and have not saved it.</p>
+                  <div className="st-bg__confirmbtns">
+                    <button type="button" className="studio-btn studio-btn--primary" onClick={() => saveAndClose(editing)}>
+                      <Bookmark size={14} /> {isSaved(editing) ? "Save changes and close" : "Save to My graphics and close"}
+                    </button>
+                    <button type="button" className="studio-btn" onClick={() => discardAndClose(editing)}>Close without saving</button>
+                    <button type="button" className="studio-btn" onClick={() => setConfirmClose(false)}>Keep editing</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </aside>
         )}
       </div>
+
+      {!editing && <StudioTip tips={GRAPHICS_TIPS()} />}
 
       {previewing && createPortal(
         <StudioModal title={previewing.name} wide onClose={() => setPreviewKey(null)}>

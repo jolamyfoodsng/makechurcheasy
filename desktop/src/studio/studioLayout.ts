@@ -30,6 +30,9 @@ export interface StudioLayout {
   micId: string;
   /** Quick text size for words on the screen, percent of the theme's own size. */
   textScale: number;
+  /** Quick Bold / Italic on top of any theme. */
+  textBold: boolean;
+  textItalic: boolean;
   /** Logo size on the screen, percent of its normal size. */
   logoScale: number;
 }
@@ -43,6 +46,11 @@ export const LAYOUT_LIMITS = {
   workspaceMin: 400,
   /** Even stacked, the middle never gets narrower than this (the dock floats / Verse AI folds first). */
   centerMin: 460,
+  /**
+   * Small window, still side by side: a slimmer Preview (controls shown as icons) and a slimmer
+   * workspace, instead of stacking the Preview on top of the workspace.
+   */
+  compact: { preview: 200, previewWanted: 260, workspace: 320 },
   /** Padding and gaps between the columns. */
   chrome: 16 + 3 * 8,
 } as const;
@@ -70,6 +78,8 @@ export const DEFAULT_LAYOUT: StudioLayout = {
   wordsOn: true,
   micId: "",
   textScale: 100,
+  textBold: false,
+  textItalic: false,
   logoScale: 100,
 };
 
@@ -118,6 +128,8 @@ export function normalizeLayout(raw: unknown): StudioLayout {
     wordsOn: typeof r.wordsOn === "boolean" ? r.wordsOn : camera.layout !== "camera-only",
     micId: typeof r.micId === "string" ? r.micId : "",
     textScale: clamp(Number(r.textScale ?? d.textScale), 70, 160),
+    textBold: r.textBold === true,
+    textItalic: r.textItalic === true,
     logoScale: clamp(Number(r.logoScale ?? d.logoScale), 30, 250),
   };
 }
@@ -153,6 +165,8 @@ export interface ColumnPlan {
   workspace: number;
   /** Too narrow for side by side: the Preview goes above the workspace. */
   stacked: boolean;
+  /** Small window, but still side by side: the Preview column is slim and its controls are icons. */
+  compact: boolean;
   /** Too narrow to share the row: the Schedule / History floats over the right edge instead. */
   dockOverlay: boolean;
   /** Too narrow for the full Verse AI sidebar: show its slim rail. */
@@ -169,8 +183,24 @@ export function planColumns(
   opts: { verseAi: number | null; dock: number | null; preview: number },
 ): ColumnPlan {
   const plan = planColumnsFlat(total, opts);
-  if (!plan.stacked || plan.workspace >= LAYOUT_LIMITS.centerMin) return plan;
+  if (!plan.stacked) return plan;
   const width = Math.max(0, total - LAYOUT_LIMITS.chrome);
+  // A) Small window: keep Bible / Worship / Media on the left and a slim Preview on the right. The
+  //    Schedule becomes a dropdown over the edge, and Verse AI folds to its rail if it has to.
+  const dropdownDock = opts.dock === null ? 0 : clamp(opts.dock, LAYOUT_LIMITS.dock.min, Math.max(LAYOUT_LIMITS.dock.min, width - 24));
+  const withoutDock = { ...opts, dock: null };
+  let slim = planColumnsFlat(total, withoutDock, true);
+  if (!slim.stacked) {
+    return { ...slim, dock: dropdownDock, dockOverlay: opts.dock !== null, compact: true };
+  }
+  if (opts.verseAi !== null && opts.verseAi > VERSE_AI_RAIL) {
+    slim = planColumnsFlat(total, { ...withoutDock, verseAi: VERSE_AI_RAIL }, true);
+    if (!slim.stacked) {
+      return { ...slim, dock: dropdownDock, dockOverlay: opts.dock !== null, verseAiRail: true, compact: true };
+    }
+  }
+  // B) Not even that fits: the Preview goes above the workspace.
+  if (plan.workspace >= LAYOUT_LIMITS.centerMin) return plan;
   // 1) The dock stops sharing the row: it floats over the right edge, the middle keeps its room.
   let next = plan;
   let dockOverlay = false;
@@ -192,11 +222,14 @@ export function planColumns(
 function planColumnsFlat(
   total: number,
   opts: { verseAi: number | null; dock: number | null; preview: number },
+  compact = false,
 ): ColumnPlan {
   const width = Math.max(0, total - LAYOUT_LIMITS.chrome);
+  const previewMin = compact ? LAYOUT_LIMITS.compact.preview : LAYOUT_LIMITS.preview.min;
+  const workspaceMin = compact ? LAYOUT_LIMITS.compact.workspace : LAYOUT_LIMITS.workspaceMin;
   let verseAi = opts.verseAi === null ? 0 : opts.verseAi;
   let dock = opts.dock === null ? 0 : opts.dock;
-  const minCenter = LAYOUT_LIMITS.workspaceMin + LAYOUT_LIMITS.preview.min;
+  const minCenter = workspaceMin + previewMin;
   // Shrink the side panels (down to their minimums) before squeezing the centre.
   let center = width - verseAi - dock;
   if (center < minCenter) {
@@ -213,8 +246,10 @@ function planColumnsFlat(
     center = width - verseAi - dock;
   }
   if (center < minCenter) {
-    return { verseAi, dock, preview: Math.max(0, center), workspace: Math.max(0, center), stacked: true, dockOverlay: false, verseAiRail: false };
+    return { verseAi, dock, preview: Math.max(0, center), workspace: Math.max(0, center), stacked: true, compact: false, dockOverlay: false, verseAiRail: false };
   }
-  const preview = clamp(opts.preview, LAYOUT_LIMITS.preview.min, Math.min(LAYOUT_LIMITS.preview.max, center - LAYOUT_LIMITS.workspaceMin));
-  return { verseAi, dock, preview, workspace: center - preview, stacked: false, dockOverlay: false, verseAiRail: false };
+  // Small window: the Preview gives way, the workspace keeps the room.
+  const wantedPreview = compact ? Math.min(opts.preview, LAYOUT_LIMITS.compact.previewWanted) : opts.preview;
+  const preview = clamp(wantedPreview, previewMin, Math.min(LAYOUT_LIMITS.preview.max, center - workspaceMin));
+  return { verseAi, dock, preview, workspace: center - preview, stacked: false, compact: false, dockOverlay: false, verseAiRail: false };
 }

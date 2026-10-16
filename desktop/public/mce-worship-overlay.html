@@ -940,6 +940,16 @@
     }
   </style>
   <script src="/theme-renderer.js"></script>
+<style id="mce-no-video-ui">
+/* Never show the browser's own play button or video controls (the overlay plays its videos itself). */
+video::-webkit-media-controls,
+video::-webkit-media-controls-enclosure,
+video::-webkit-media-controls-panel,
+video::-webkit-media-controls-overlay-play-button,
+video::-webkit-media-controls-start-playback-button,
+video::-webkit-media-controls-play-button { display: none !important; opacity: 0 !important; visibility: hidden !important; -webkit-appearance: none !important; pointer-events: none !important; }
+video { outline: none; }
+</style>
 </head>
 
 <body data-mode="fullscreen">

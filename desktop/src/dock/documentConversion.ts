@@ -1,6 +1,7 @@
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 import JSZip from "jszip";
 import mammoth from "mammoth";
+import { DOCUMENT_EXTENSIONS, checkImportFile } from "../services/importSafety";
 
 export interface DocumentPageFile {
   file: File;
@@ -17,7 +18,7 @@ const MAX_DOCX_CHARS_PER_PAGE = 1500;
 
 export function isSupportedDocumentFile(file: File): boolean {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  return ext === "pdf" || ext === "docx" || ext === "pptx";
+  return (DOCUMENT_EXTENSIONS as readonly string[]).includes(ext);
 }
 
 export function getDocumentTypeLabel(file: File): "PDF" | "DOCX" | "PPTX" | "Document" {
@@ -190,9 +191,117 @@ async function renderDocxToPageFiles(
   onProgress?.(`Reading ${baseName(file.name)}…`);
   const arrayBuffer = await file.arrayBuffer();
   const result = await mammoth.extractRawText({ arrayBuffer });
-  const sourceName = file.name;
+  return renderTextPagesToFiles(file.name, paginateText(result.value), onProgress);
+}
+
+/** Plain text, Markdown, RTF, web pages and OpenDocument files: the words are read out and laid on pages. */
+function markdownToText(md: string): string {
+  return md
+    .replace(/^```.*$/gm, "")
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/(\*\*|__|`)/g, "")
+    .replace(/^>\s?/gm, "");
+}
+
+function htmlToText(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll("script,style,noscript,template").forEach((node) => node.remove());
+  doc.querySelectorAll("br").forEach((node) => node.replaceWith("\n"));
+  doc.querySelectorAll("p,div,li,h1,h2,h3,h4,h5,h6,tr,section,article,blockquote").forEach((node) => node.append("\n\n"));
+  return doc.body?.textContent ?? "";
+}
+
+function rtfToText(rtf: string): string {
+  let out = "";
+  let depth = 0;
+  let skipDepth = -1;
+  for (let i = 0; i < rtf.length; i += 1) {
+    const c = rtf[i];
+    if (c === "{") {
+      depth += 1;
+      if (skipDepth < 0 && /^\\(\*|fonttbl|colortbl|stylesheet|info|pict|header|footer)/.test(rtf.slice(i + 1, i + 14))) skipDepth = depth;
+    } else if (c === "}") {
+      if (depth === skipDepth) skipDepth = -1;
+      depth -= 1;
+    } else if (c === "\\") {
+      const match = /^\\([a-zA-Z]+)(-?\d+)? ?/.exec(rtf.slice(i, i + 40));
+      if (match) {
+        const word = match[1];
+        if (skipDepth < 0) {
+          if (word === "par" || word === "line") out += "\n";
+          else if (word === "tab") out += "\t";
+          else if (word === "u" && match[2]) {
+            const code = Number(match[2]);
+            out += String.fromCharCode(code < 0 ? code + 65536 : code);
+          }
+        }
+        i += match[0].length - 1;
+        if (word === "u") i += 1; // the stand-in character after \uN
+      } else {
+        const next = rtf[i + 1];
+        if (next === "'") {
+          if (skipDepth < 0) out += String.fromCharCode(parseInt(rtf.slice(i + 2, i + 4), 16) || 63);
+          i += 3;
+        } else {
+          if (skipDepth < 0 && (next === "\\" || next === "{" || next === "}")) out += next;
+          i += 1;
+        }
+      }
+    } else if (skipDepth < 0 && c !== "\r" && c !== "\n") {
+      out += c;
+    }
+  }
+  return out;
+}
+
+async function readZipXml(file: File, path: string): Promise<Document> {
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const entry = zip.file(path);
+  if (!entry) throw new Error(`“${file.name}” is not a valid file (it has no ${path}).`);
+  const doc = new DOMParser().parseFromString(await entry.async("string"), "application/xml");
+  if (doc.getElementsByTagName("parsererror").length > 0) throw new Error(`“${file.name}” could not be read.`);
+  return doc;
+}
+
+function odfParagraphs(root: Document | Element): string[] {
+  return Array.from(root.getElementsByTagName("*"))
+    .filter((el) => el.tagName === "text:p" || el.tagName === "text:h")
+    .map((el) => (el.textContent ?? "").trim())
+    .filter(Boolean);
+}
+
+async function renderTextLikeToPageFiles(
+  file: File,
+  ext: string,
+  onProgress?: (status: string) => void,
+): Promise<DocumentPageFile[]> {
+  onProgress?.(`Reading ${baseName(file.name)}…`);
+  if (ext === "odp") {
+    const content = await readZipXml(file, "content.xml");
+    const slides = Array.from(content.getElementsByTagName("draw:page"));
+    const pages = slides.flatMap((slide, index) => {
+      const text = odfParagraphs(slide).join("\n");
+      return text ? paginateText(text) : [`(No text on slide ${index + 1})`];
+    });
+    return renderTextPagesToFiles(file.name, pages.length ? pages : ["No readable text found in this document."], onProgress);
+  }
+  let text = "";
+  if (ext === "odt") text = odfParagraphs(await readZipXml(file, "content.xml")).join("\n\n");
+  else if (ext === "rtf") text = rtfToText(await file.text());
+  else if (ext === "html" || ext === "htm") text = htmlToText(await file.text());
+  else if (ext === "md" || ext === "markdown") text = markdownToText(await file.text());
+  else text = await file.text();
+  return renderTextPagesToFiles(file.name, paginateText(text), onProgress);
+}
+
+async function renderTextPagesToFiles(
+  sourceName: string,
+  textPages: string[],
+  onProgress?: (status: string) => void,
+): Promise<DocumentPageFile[]> {
   const documentId = createDocumentId();
-  const textPages = paginateText(result.value);
   const pageCount = textPages.length;
   const pages: DocumentPageFile[] = [];
 
@@ -645,8 +754,12 @@ export async function convertDocumentToPageFiles(
   onProgress?: (status: string) => void,
 ): Promise<DocumentPageFile[]> {
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  // Never trust the name alone: a program renamed "notes.pdf" stops here.
+  const check = await checkImportFile(file, "document");
+  if (!check.ok) throw new Error(check.reason ?? "This file cannot be imported.");
   if (ext === "pdf") return renderPdfToPageFiles(file, onProgress);
   if (ext === "docx") return renderDocxToPageFiles(file, onProgress);
   if (ext === "pptx") return renderPptxToPageFiles(file, onProgress);
+  if (isSupportedDocumentFile(file)) return renderTextLikeToPageFiles(file, ext, onProgress);
   throw new Error("Unsupported document type.");
 }

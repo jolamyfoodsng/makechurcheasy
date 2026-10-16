@@ -356,12 +356,12 @@ export default function BibleWorkspace(props: BibleWorkspaceProps) {
   const versesFor = (verse: number) => (selectedSet.has(verse) && selected.length > 1 ? selected : [verse]);
 
   const versesCount = (
-    <div className="st-seg st-versescount" role="group" aria-label="Verses on the screen" title="How many verses one click puts on the screen">
-      {[1, 2, 3, 4].map((n) => (
-        <button key={n} type="button" className={props.versesPerSlide === n ? "is-on" : ""} onClick={() => props.onVersesPerSlide(n)} aria-pressed={props.versesPerSlide === n} title={n === 1 ? "One verse at a time" : `${n} verses together`}>{n}</button>
-      ))}
-      <span className="st-versescount__label">verse{props.versesPerSlide === 1 ? "" : "s"}</span>
-    </div>
+    <label className="st-minisel" title="How many verses one click puts on the screen. The arrow keys follow it too.">
+      <span>Verses per slide</span>
+      <select value={props.versesPerSlide} onChange={(e) => props.onVersesPerSlide(Number(e.target.value))} aria-label="Verses per slide">
+        {[1, 2, 3, 4].map((n) => <option key={n} value={n}>{n === 1 ? "1 verse" : `${n} verses`}</option>)}
+      </select>
+    </label>
   );
   const stepper = (
     <div className="st-stepper">

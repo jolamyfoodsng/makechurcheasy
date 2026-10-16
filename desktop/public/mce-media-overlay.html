@@ -78,6 +78,16 @@
     .media-layer__page-label--center { left: 50%; transform: translateX(-50%); }
     .media-layer__page-label--right { right: 24px; }
   </style>
+<style id="mce-no-video-ui">
+/* Never show the browser's own play button or video controls (the overlay plays its videos itself). */
+video::-webkit-media-controls,
+video::-webkit-media-controls-enclosure,
+video::-webkit-media-controls-panel,
+video::-webkit-media-controls-overlay-play-button,
+video::-webkit-media-controls-start-playback-button,
+video::-webkit-media-controls-play-button { display: none !important; opacity: 0 !important; visibility: hidden !important; -webkit-appearance: none !important; pointer-events: none !important; }
+video { outline: none; }
+</style>
 </head>
 <body>
   <main id="stage" aria-label="MakeChurchEazy media overlay"></main>
@@ -309,7 +319,8 @@
       if (isImage) {
         node.alt = payload.title || "Media";
       } else {
-        node.autoplay = true;
+        node.autoplay = false;
+        node.preload = "auto";
         node.playsInline = true;
         node.loop = payload.looping !== false;
         node.muted = payload.muted !== false;

@@ -565,6 +565,11 @@ export default function DockNotesTab({
   const [searchQuery, setSearchQuery] = useState("");
   const debouncedSearchQuery = useDebouncedValue(searchQuery, 160);
   const [selectedNote, setSelectedNote] = useState<DockNote | null>(null);
+  // Always-current copies, so quick-setting commits never work from a stale note.
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
+  const selectedNoteRef = useRef(selectedNote);
+  selectedNoteRef.current = selectedNote;
   const [notesTranslation, setNotesTranslation] = useState<DockTranslationValue | null>(null);
   const [noteSlidesSearchQuery, setNoteSlidesSearchQuery] = useState("");
   const debouncedNoteSlidesSearchQuery = useDebouncedValue(noteSlidesSearchQuery, 160);
@@ -1428,17 +1433,14 @@ export default function DockNotesTab({
       ) as unknown as Record<string, unknown>;
     }
 
+    // Mode and count arrive together ("count" + 3). Build ONE note update so the second half can
+    // never overwrite the first (the old code spread the same stale note twice, so the saved note
+    // lost autoSplit and fell back to "original" = one block per slide).
+    const notePatch: Partial<DockNote> = {};
     if (nextLineMode !== undefined) {
       const nextAutoSplit = nextLineMode !== "original";
       setNotesAutoSplit(nextAutoSplit);
-      setSelectedSlideIdx(0);
-      setVisibleSlideIdx(null);
-      if (selectedNote) {
-        const updated = { ...selectedNote, autoSplit: nextAutoSplit };
-        setSelectedNote(updated);
-        setNotes((current) => current.map((n) => n.id === updated.id ? updated : n));
-        saveDockNotes(notes.map((n) => n.id === updated.id ? updated : n));
-      }
+      notePatch.autoSplit = nextAutoSplit;
     }
     if (nextLineCount !== undefined) {
       const clamped = clampNoteLinesPerSlide(nextLineCount);
@@ -1448,13 +1450,20 @@ export default function DockNotesTab({
       } else {
         setLowerThirdLinesPerSlide(clamped);
       }
+      notePatch.linesPerSlide = clamped;
+    }
+    if (nextLineMode !== undefined || nextLineCount !== undefined) {
       setSelectedSlideIdx(0);
       setVisibleSlideIdx(null);
-      if (selectedNote) {
-        const updated = { ...selectedNote, linesPerSlide: clamped };
+      const current = selectedNoteRef.current;
+      if (current) {
+        const updated = { ...current, ...notePatch };
+        selectedNoteRef.current = updated;
         setSelectedNote(updated);
-        setNotes((current) => current.map((n) => n.id === updated.id ? updated : n));
-        saveDockNotes(notes.map((n) => n.id === updated.id ? updated : n));
+        const nextNotes = notesRef.current.map((n) => (n.id === updated.id ? updated : n));
+        notesRef.current = nextNotes;
+        setNotes(nextNotes);
+        saveDockNotes(nextNotes);
       }
     }
     const lineLayoutChanged = nextLineCount !== undefined || nextLineMode !== undefined;

@@ -1,0 +1,18 @@
+/* Lines per slide + Translate row (songs and notes). The Dock's translation panel is drawn with the
+   Dock's colour names, so they are pointed at the Studio's colours here. */
+.st-texttools {
+  --dock-text: var(--st-text);
+  --dock-text-dim: var(--st-text-3);
+  --dock-text-secondary: var(--st-text-2);
+  --dock-border: var(--st-line-strong);
+  --dock-border-active: var(--st-blue-2);
+  --dock-accent: var(--st-blue-2);
+  --dock-accent-soft: var(--st-blue-soft);
+  --dock-surface: var(--st-panel);
+  --dock-surface-alt: var(--st-raised);
+  --dock-surface-hover: var(--st-hover);
+  --dock-green: var(--st-green);
+  --dock-red-text: #fca5a5;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px;
+  padding: 8px 14px; border-bottom: 1px solid var(--st-line); flex: none;
+}

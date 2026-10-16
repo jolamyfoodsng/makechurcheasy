@@ -176,6 +176,16 @@
       }
     }
   </style>
+<style id="mce-no-video-ui">
+/* Never show the browser's own play button or video controls (the overlay plays its videos itself). */
+video::-webkit-media-controls,
+video::-webkit-media-controls-enclosure,
+video::-webkit-media-controls-panel,
+video::-webkit-media-controls-overlay-play-button,
+video::-webkit-media-controls-start-playback-button,
+video::-webkit-media-controls-play-button { display: none !important; opacity: 0 !important; visibility: hidden !important; -webkit-appearance: none !important; pointer-events: none !important; }
+video { outline: none; }
+</style>
 </head>
 
 <body>
@@ -259,10 +269,12 @@
       const node = document.createElement(isVideo ? "video" : "img");
       node.className = isVideo ? "live-tool__video" : "live-tool__media";
       if (isVideo) {
-        node.autoplay = true;
+        node.autoplay = false;
+        node.preload = "auto";
         node.loop = true;
         node.muted = true;
         node.playsInline = true;
+        node.addEventListener("loadeddata", function () { node.play().catch(function () {}); });
       }
       node.src = mediaUrl;
       root.prepend(node);

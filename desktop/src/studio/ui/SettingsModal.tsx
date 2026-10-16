@@ -2,7 +2,7 @@
  * SettingsModal.tsx — Studio settings in one dialog: quick controls (what a click does, the
  * change between slides, text size) and the Output (projector / TV, Wi-Fi link, NDI).
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Copy, Image as ImageIcon, Minus, Monitor, MonitorOff, Plus, Radio, RotateCcw, Wifi } from "lucide-react";
 import type { StudioTransition } from "../studioEngine";
 import { monitorLabel, type StudioMonitor } from "../studioOutputWindow";
@@ -78,12 +78,19 @@ interface SettingsModalProps {
   output: SettingsOutputProps;
   /** Which tab opens first (Ctrl/Cmd+/ opens the shortcuts one). */
   initialTab?: SettingsTab;
+  /** Scroll to this part when the window opens ("logo" from the Logo button's Edit). */
+  focus?: "logo";
   onClose: () => void;
 }
 
 export default function SettingsModal(props: SettingsModalProps) {
   const { output } = props;
   const [tab, setTab] = useState<SettingsTab>(props.initialTab ?? "general");
+  useEffect(() => {
+    if (props.focus !== "logo") return undefined;
+    const timer = window.setTimeout(() => document.getElementById("st-set-logo")?.scrollIntoView({ block: "start", behavior: "smooth" }), 80);
+    return () => window.clearTimeout(timer);
+  }, [props.focus]);
   const size = (delta: number) => props.onTextScale(Math.max(70, Math.min(160, props.textScale + delta)));
   return (
     <StudioModal title="Studio settings" onClose={props.onClose} wide>
@@ -139,7 +146,7 @@ export default function SettingsModal(props: SettingsModalProps) {
         </p>
       </section>
 
-      <section className="st-set">
+      <section className="st-set" id="st-set-logo">
         <h3><ImageIcon size={14} /> Logo on the screen</h3>
         <div className="st-logoset">
           <div className={`st-logoset__img${props.logo.bg.kind === "default" ? "" : " has-bg"}`} style={bgStyle(props.logo.bg)}>{props.logo.url ? <img src={props.logo.url} alt="Logo" /> : <span>MakeChurchEazy</span>}</div>

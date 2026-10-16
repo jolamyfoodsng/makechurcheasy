@@ -50,6 +50,27 @@ import {
 import { getMultistreamTarget, isCloudTargetFor } from "../../services/multistreamState";
 import { MultistreamStatusPanel } from "../../components/MultistreamStatusPanel";
 
+const SKIP_SWITCH_CONFIRM_KEY = "mce-dock-broadcast-skip-switch-confirm";
+
+/** "Remember my choice" on the Switch profile question. */
+function readSkipSwitchConfirm(): boolean {
+  try {
+    return typeof localStorage !== "undefined" && localStorage.getItem(SKIP_SWITCH_CONFIRM_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeSkipSwitchConfirm(on: boolean): void {
+  try {
+    if (typeof localStorage === "undefined") return;
+    if (on) localStorage.setItem(SKIP_SWITCH_CONFIRM_KEY, "1");
+    else localStorage.removeItem(SKIP_SWITCH_CONFIRM_KEY);
+  } catch {
+    /* keep going without it */
+  }
+}
+
 function PlatformBadgeIcon({ platform, size = 20 }: { platform: BroadcastPlatform; size?: number }) {
   switch (platform) {
     case "youtube":
@@ -206,6 +227,27 @@ export default function DockBroadcastTab() {
 
   const [visibleKeyIds, setVisibleKeyIds] = useState<Record<string, boolean>>({});
 
+  // The ⋮ menu on a channel, and the "Switch to …?" question when another profile is picked.
+  const [menuChannelId, setMenuChannelId] = useState<string | null>(null);
+  const [pendingSwitchId, setPendingSwitchId] = useState<string | null>(null);
+  const [rememberSwitch, setRememberSwitch] = useState(false);
+
+  useEffect(() => {
+    if (!menuChannelId) return undefined;
+    const onDown = (e: PointerEvent) => {
+      if (!(e.target as HTMLElement | null)?.closest?.("[data-channel-menu]")) setMenuChannelId(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuChannelId(null);
+    };
+    document.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [menuChannelId]);
+
   const streamKeyInputRef = useRef<HTMLInputElement>(null);
 
   // Sync store & instant cross-process updates
@@ -326,6 +368,24 @@ export default function DockBroadcastTab() {
     }
   }, [showToast]);
 
+  // Picking another profile asks first ("Switch to …?"), unless the person ticked "Remember my choice".
+  const requestSelectPerson = useCallback((profileId: string) => {
+    if (profileId === store.activeProfileId) return;
+    if (readSkipSwitchConfirm()) {
+      handleSelectPerson(profileId);
+      return;
+    }
+    setRememberSwitch(false);
+    setPendingSwitchId(profileId);
+  }, [handleSelectPerson, store.activeProfileId]);
+
+  const confirmSwitchPerson = useCallback(() => {
+    if (!pendingSwitchId) return;
+    if (rememberSwitch) writeSkipSwitchConfirm(true);
+    handleSelectPerson(pendingSwitchId);
+    setPendingSwitchId(null);
+  }, [handleSelectPerson, pendingSwitchId, rememberSwitch]);
+
   // Apply a channel's key to OBS (connects first then syncs)
   const handleApplyChannelToObs = useCallback(async (channel: BroadcastChannel, personName: string) => {
     if (!channel.streamKey.trim()) {
@@ -431,14 +491,6 @@ export default function DockBroadcastTab() {
   }, [activeProfile, isStreaming, showToast, store]);
 
   // Person Modal handlers
-  const openNewPersonModal = () => {
-    setEditingPerson(null);
-    setPersonNameInput("");
-    setPersonNicknameInput("");
-    setPersonColorInput("#F59E0B");
-    setShowPersonModal(true);
-  };
-
   const openEditPersonModal = (p: BroadcastPersonProfile) => {
     setEditingPerson(p);
     setPersonNameInput(p.name);
@@ -581,7 +633,7 @@ export default function DockBroadcastTab() {
                 ? "rgba(16, 185, 129, 0.15)"
                 : statusMessage.type === "error"
                 ? "rgba(239, 68, 68, 0.15)"
-                : "rgba(99, 102, 241, 0.15)",
+                : "var(--dock-accent-soft, rgba(99, 102, 241, 0.15))",
             border: `1px solid ${
               statusMessage.type === "success"
                 ? "var(--dock-green, #10B981)"
@@ -594,7 +646,7 @@ export default function DockBroadcastTab() {
                 ? "#34D399"
                 : statusMessage.type === "error"
                 ? "#F87171"
-                : "#818CF8",
+                : "var(--dock-accent, #818CF8)",
           }}
         >
           <Icon
@@ -631,19 +683,19 @@ export default function DockBroadcastTab() {
                     ? "rgba(239, 68, 68, 0.15)"
                     : isStreaming && enabledChannels.length > 1
                     ? "rgba(16, 185, 129, 0.15)"
-                    : "rgba(99, 102, 241, 0.15)",
+                    : "var(--dock-accent-soft, rgba(99, 102, 241, 0.15))",
                   border: `1px solid ${
                     usageInfo.isExhausted
                       ? "rgba(239, 68, 68, 0.35)"
                       : isStreaming && enabledChannels.length > 1
                       ? "rgba(16, 185, 129, 0.35)"
-                      : "rgba(99, 102, 241, 0.3)"
+                      : "var(--dock-accent-soft-border, rgba(99, 102, 241, 0.3))"
                   }`,
                   color: usageInfo.isExhausted
                     ? "#f87171"
                     : isStreaming && enabledChannels.length > 1
                     ? "#34d399"
-                    : "#a5b4fc",
+                    : "var(--dock-accent, #a5b4fc)",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: "4px",
@@ -687,29 +739,6 @@ export default function DockBroadcastTab() {
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={openNewPersonModal}
-            disabled={isStreaming}
-            title={isStreaming ? "Cannot add profiles while streaming live" : "Add a new speaker profile"}
-            style={{
-              padding: "4px 10px",
-              fontSize: "12px",
-              fontWeight: 600,
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              background: "transparent",
-              color: isStreaming ? "var(--dock-text-dim, #64748b)" : "var(--dock-accent, #6366F1)",
-              border: "none",
-              borderRadius: "4px",
-              cursor: isStreaming ? "not-allowed" : "pointer",
-              opacity: isStreaming ? 0.4 : 1,
-            }}
-          >
-            <Icon name="add" size={13} />
-            <span>New Profile</span>
-          </button>
         </div>
 
         {/* Clean Profile Pills Bar */}
@@ -728,7 +757,7 @@ export default function DockBroadcastTab() {
               <button
                 key={p.id}
                 type="button"
-                onClick={() => !isStreaming && handleSelectPerson(p.id)}
+                onClick={() => !isStreaming && requestSelectPerson(p.id)}
                 disabled={isStreaming}
                 title={isStreaming ? "Cannot switch profiles while streaming live" : undefined}
                 style={{
@@ -739,7 +768,7 @@ export default function DockBroadcastTab() {
                   borderRadius: "18px",
                   fontSize: "13px",
                   fontWeight: isActive ? 700 : 500,
-                  background: isActive ? "rgba(99, 102, 241, 0.18)" : "var(--dock-surface-alt, #202026)",
+                  background: isActive ? "var(--dock-accent-soft, rgba(99, 102, 241, 0.18))" : "var(--dock-surface-alt, #202026)",
                   border: `1px solid ${
                     isActive ? "var(--dock-accent, #6366F1)" : "var(--dock-border, rgba(255,255,255,0.08))"
                   }`,
@@ -965,7 +994,7 @@ export default function DockBroadcastTab() {
                         </div>
                       </div>
 
-                      {/* Right: Toggle Switch */}
+                      {/* Right: Toggle Switch and the ⋮ menu */}
                       <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
                         <button
                           type="button"
@@ -984,7 +1013,7 @@ export default function DockBroadcastTab() {
                             width: "36px",
                             height: "20px",
                             borderRadius: "10px",
-                            background: ch.enabled ? "var(--dock-green, #10B981)" : "rgba(255, 255, 255, 0.15)",
+                            background: ch.enabled ? "var(--dock-accent, #6366F1)" : "rgba(255, 255, 255, 0.15)",
                             border: "none",
                             padding: "2px",
                             cursor: isStreaming ? "not-allowed" : "pointer",
@@ -1007,6 +1036,93 @@ export default function DockBroadcastTab() {
                             }}
                           />
                         </button>
+
+                        <div data-channel-menu style={{ position: "relative" }}>
+                          <button
+                            type="button"
+                            disabled={isStreaming}
+                            onClick={() => setMenuChannelId(menuChannelId === ch.id ? null : ch.id)}
+                            aria-haspopup="menu"
+                            aria-expanded={menuChannelId === ch.id}
+                            title={isStreaming ? "Cannot change channels while streaming live" : "More"}
+                            style={{
+                              background: menuChannelId === ch.id ? "rgba(255,255,255,0.08)" : "transparent",
+                              border: "none",
+                              color: "var(--dock-text-secondary, #cbd5e1)",
+                              cursor: isStreaming ? "not-allowed" : "pointer",
+                              opacity: isStreaming ? 0.35 : 1,
+                              padding: "3px 2px",
+                              borderRadius: "6px",
+                              display: "flex",
+                              alignItems: "center",
+                            }}
+                          >
+                            <Icon name="more_vert" size={18} />
+                          </button>
+                          {menuChannelId === ch.id && (
+                            <div
+                              role="menu"
+                              style={{
+                                position: "absolute",
+                                right: 0,
+                                ...(activeProfile.channels.length > 1 && activeProfile.channels[activeProfile.channels.length - 1].id === ch.id
+                                  ? { bottom: "28px" }
+                                  : { top: "28px" }),
+                                zIndex: 60,
+                                minWidth: "188px",
+                                padding: "5px",
+                                borderRadius: "10px",
+                                background: "var(--dock-surface, #1b1b22)",
+                                border: "1px solid var(--dock-border, rgba(255,255,255,0.14))",
+                                boxShadow: "0 12px 28px rgba(0,0,0,0.55)",
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "1px",
+                              }}
+                            >
+                              {[
+                                { key: "key", label: "Add / Update Key", icon: "lock", danger: false, run: () => openEditChannelModal(activeProfile.id, ch, true) },
+                                { key: "edit", label: "Edit Channel", icon: "edit", danger: false, run: () => openEditChannelModal(activeProfile.id, ch) },
+                                { key: "delete", label: "Delete Channel", icon: "delete", danger: true, run: () => handleDeleteChannel(activeProfile.id, ch) },
+                              ].map((item, i) => (
+                                <div key={item.key} style={{ display: "contents" }}>
+                                  {item.danger && (
+                                    <div style={{ height: "1px", margin: "4px 4px", background: "rgba(255,255,255,0.08)" }} />
+                                  )}
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    onClick={() => {
+                                      setMenuChannelId(null);
+                                      item.run();
+                                    }}
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "10px",
+                                      width: "100%",
+                                      padding: "8px 10px",
+                                      border: "none",
+                                      borderRadius: "7px",
+                                      background: "transparent",
+                                      color: item.danger ? "var(--dock-red, #ef4444)" : "var(--dock-text, #ffffff)",
+                                      fontSize: "12.5px",
+                                      fontWeight: 500,
+                                      textAlign: "left",
+                                      cursor: "pointer",
+                                    }}
+                                    onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; }}
+                                    onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                                    data-menu-index={i}
+                                  >
+                                    <Icon name={item.icon} size={15} />
+                                    <span>{item.label}</span>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -1121,44 +1237,6 @@ export default function DockBroadcastTab() {
                         >
                           <Icon name={syncingChannelId === ch.id ? "sync" : "send"} size={13} />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => !isStreaming && openEditChannelModal(activeProfile.id, ch)}
-                          disabled={isStreaming}
-                          title={isStreaming ? "Cannot edit channel while streaming live" : "Edit Channel Settings"}
-                          style={{
-                            background: "transparent",
-                            border: "none",
-                            color: "var(--dock-text-dim, #94a3b8)",
-                            cursor: isStreaming ? "not-allowed" : "pointer",
-                            opacity: isStreaming ? 0.35 : 1,
-                            padding: "3px 4px",
-                            borderRadius: "4px",
-                            display: "flex",
-                            alignItems: "center",
-                          }}
-                        >
-                          <Icon name="edit" size={13} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => !isStreaming && handleDeleteChannel(activeProfile.id, ch)}
-                          disabled={isStreaming}
-                          title={isStreaming ? "Cannot remove channel while streaming live" : "Remove Channel"}
-                          style={{
-                            background: "transparent",
-                            border: "none",
-                            color: "var(--dock-red, #ef4444)",
-                            cursor: isStreaming ? "not-allowed" : "pointer",
-                            opacity: isStreaming ? 0.35 : 1,
-                            padding: "3px 4px",
-                            borderRadius: "4px",
-                            display: "flex",
-                            alignItems: "center",
-                          }}
-                        >
-                          <Icon name="delete" size={13} />
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -1235,22 +1313,9 @@ export default function DockBroadcastTab() {
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               <button
                 type="button"
+                className="dock-btn dock-btn--danger"
                 onClick={handleToggleStream}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "8px",
-                  padding: "11px",
-                  borderRadius: "8px",
-                  fontSize: "13px",
-                  fontWeight: 700,
-                  background: "var(--dock-red, #EF4444)",
-                  color: "#FFFFFF",
-                  border: "none",
-                  cursor: "pointer",
-                  boxShadow: "0 4px 12px rgba(239, 68, 68, 0.35)",
-                }}
+                style={{ flex: "none", minHeight: "42px", width: "100%", fontSize: "13px", fontWeight: 700 }}
               >
                 <Icon name="stop" size={18} />
                 <span>Stop Live Stream ({streamTimecode})</span>
@@ -1263,22 +1328,9 @@ export default function DockBroadcastTab() {
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
               <button
                 type="button"
+                className="dock-btn dock-btn--primary"
                 onClick={handleToggleStream}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "8px",
-                  padding: "11px",
-                  borderRadius: "8px",
-                  fontSize: "13px",
-                  fontWeight: 700,
-                  background: "var(--dock-green, #10B981)",
-                  color: "#FFFFFF",
-                  border: "none",
-                  cursor: "pointer",
-                  boxShadow: "0 4px 12px rgba(16, 185, 129, 0.3)",
-                }}
+                style={{ flex: "none", minHeight: "42px", width: "100%", fontSize: "13px", fontWeight: 700 }}
               >
                 <Icon name="play_arrow" size={18} />
                 <span>Start Live Stream</span>
@@ -1327,20 +1379,8 @@ export default function DockBroadcastTab() {
                   openNewChannelModal(activeProfile.id);
                 }
               }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-                padding: "11px",
-                borderRadius: "8px",
-                fontSize: "12px",
-                fontWeight: 600,
-                background: !obsConnected ? "rgba(255,255,255,0.06)" : "rgba(245, 158, 11, 0.12)",
-                border: `1px solid ${!obsConnected ? "rgba(255,255,255,0.08)" : "rgba(245, 158, 11, 0.35)"}`,
-                color: !obsConnected ? "var(--dock-text-dim, #64748b)" : "var(--dock-yellow, #F59E0B)",
-                cursor: "pointer",
-              }}
+              className="dock-btn dock-btn--secondary"
+              style={{ flex: "none", minHeight: "42px", width: "100%", fontSize: "12px" }}
             >
               {!obsConnected ? (
                 <span>Connect OBS to Start</span>
@@ -1356,6 +1396,83 @@ export default function DockBroadcastTab() {
       )}
 
       {/* ═══ MODAL: ADD / EDIT PERSON PROFILE ═══ */}
+      {pendingSwitchId && (() => {
+        const target = store.profiles.find((p) => p.id === pendingSwitchId);
+        if (!target || !activeProfile) return null;
+        const dot = (color: string, name: string) => (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", minWidth: 0, maxWidth: "110px" }}>
+            <span
+              style={{
+                width: "46px",
+                height: "46px",
+                borderRadius: "50%",
+                background: color || "#6366F1",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#fff",
+                fontWeight: 800,
+                fontSize: "18px",
+              }}
+            >
+              {name.trim().charAt(0).toUpperCase() || "?"}
+            </span>
+            <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--dock-text, #fff)", textAlign: "center", overflowWrap: "anywhere" }}>{name}</span>
+          </div>
+        );
+        return (
+          <div
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}
+            onClick={() => setPendingSwitchId(null)}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={`Switch to ${target.nickname}?`}
+              style={{
+                background: "var(--dock-surface-alt, #182234)",
+                border: "1px solid var(--dock-border, rgba(255,255,255,0.12))",
+                borderRadius: "14px",
+                padding: "18px 16px 16px",
+                maxWidth: "360px",
+                width: "100%",
+                display: "flex",
+                flexDirection: "column",
+                gap: "12px",
+                boxShadow: "0 20px 25px -5px rgba(0,0,0,0.5)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "center", gap: "14px" }}>
+                {dot(activeProfile.color, activeProfile.nickname)}
+                <span style={{ marginTop: "12px", color: "var(--dock-text-dim, #94a3b8)" }}><Icon name="arrow_forward" size={20} /></span>
+                {dot(target.color, target.nickname)}
+              </div>
+              <div style={{ textAlign: "center", fontSize: "16px", fontWeight: 700, color: "#fff" }}>Switch to {target.nickname}?</div>
+              <div style={{ textAlign: "center", fontSize: "12.5px", lineHeight: 1.45, color: "var(--dock-text-secondary, #cbd5e1)" }}>
+                You are using <strong>{activeProfile.nickname}</strong>. Switching loads the channels for <strong>{target.nickname}</strong>. Your stream settings update when you start streaming.
+              </div>
+              <label style={{ display: "flex", alignItems: "flex-start", gap: "8px", cursor: "pointer", fontSize: "12px", color: "var(--dock-text-secondary, #cbd5e1)" }}>
+                <input type="checkbox" checked={rememberSwitch} onChange={(e) => setRememberSwitch(e.target.checked)} style={{ marginTop: "2px" }} />
+                <span>
+                  Remember my choice
+                  <br />
+                  <span style={{ color: "var(--dock-text-dim, #94a3b8)" }}>Don't show this again</span>
+                </span>
+              </label>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button type="button" className="dock-btn dock-btn--secondary" onClick={() => setPendingSwitchId(null)} style={{ minHeight: "38px" }}>
+                  Cancel
+                </button>
+                <button type="button" className="dock-btn dock-btn--primary" autoFocus onClick={confirmSwitchPerson} style={{ minHeight: "38px", flex: 1.3 }}>
+                  Switch Profile
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {showPersonModal && (
         <div
           style={{
@@ -1405,7 +1522,7 @@ export default function DockBroadcastTab() {
               </label>
               <input
                 type="text"
-                placeholder="e.g. Church Account or Pastor Account"
+                placeholder="e.g. Church Account or Sunday Service"
                 value={personNameInput}
                 onChange={(e) => setPersonNameInput(e.target.value)}
                 style={{
@@ -1426,7 +1543,7 @@ export default function DockBroadcastTab() {
               </label>
               <input
                 type="text"
-                placeholder="e.g. Church or Pastor"
+                placeholder="e.g. Church or Sunday"
                 value={personNicknameInput}
                 onChange={(e) => setPersonNicknameInput(e.target.value)}
                 style={{
@@ -1668,10 +1785,10 @@ export default function DockBroadcastTab() {
                         display: "inline-flex",
                         alignItems: "center",
                         gap: "4px",
-                        background: "rgba(99, 102, 241, 0.15)",
-                        border: "1px solid rgba(99, 102, 241, 0.3)",
+                        background: "var(--dock-accent-soft, rgba(99, 102, 241, 0.15))",
+                        border: "1px solid var(--dock-accent-soft-border, rgba(99, 102, 241, 0.3))",
                         borderRadius: "5px",
-                        color: "#a5b4fc",
+                        color: "var(--dock-accent, #a5b4fc)",
                         fontSize: "10.5px",
                         fontWeight: 600,
                         padding: "3px 8px",

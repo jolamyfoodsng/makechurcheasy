@@ -32,7 +32,8 @@ const DEFAULT_SCENE_ROUTE: DockSceneRoute = {
   enabled: false,
   sceneName: "",
   targets: [],
-  syncPresentation: false,
+  // "Also update MCE Presentation" is on unless the operator turns it off.
+  syncPresentation: true,
 };
 
 type StoredSceneRoutes = Partial<Record<DockSceneRouteModule, Partial<DockSceneRoute>>>;
@@ -71,7 +72,8 @@ export function normalizeDockSceneRoute(value: unknown): DockSceneRoute {
     enabled: candidate.enabled === true,
     sceneName: targets[0]?.sceneName ?? legacySceneName,
     targets,
-    syncPresentation: candidate.syncPresentation === true,
+    // Only an explicit false switches it off; a route saved before this option existed keeps it on.
+    syncPresentation: candidate.syncPresentation !== false,
   };
 }
 

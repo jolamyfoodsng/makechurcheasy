@@ -23,6 +23,7 @@ import type { DockNote } from "../../dock/dockNotesStorage";
 import type { MediaItem } from "../../library/libraryTypes";
 import type { StudioMixLayer } from "../studioMix";
 import { mediaPath } from "../studioSlides";
+import StudioTip, { SEARCH_TIPS } from "./StudioTip";
 
 export type GlobalResult =
   | { kind: "bible"; key: string; title: string; sub?: string; book: string; chapter: number; verse?: number; endVerse?: number; translation?: string }
@@ -351,6 +352,7 @@ export default function GlobalSearch(props: GlobalSearchProps) {
             );
           })}
         </div>
+        <StudioTip tips={SEARCH_TIPS()} className="st-tip--gs" />
         <div className="st-gs__foot" aria-hidden="true">
           <span><kbd>↵</kbd> {shownFirst}</span>
           <span><kbd>⌘</kbd><kbd>↵</kbd> {otherWay}</span>

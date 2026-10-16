@@ -2379,12 +2379,19 @@ export default function DockPage(props: DockPageProps = {}) {
   // early (from the fast localStorage cache) let every saved preference — like
   // the last open tab — start from its default and then overwrite the saved value.
   const [settingsReady, setSettingsReady] = useState(() => isNativeDockSettingsHydrated());
+  // Set when the Dock was opened with defaults because the saved settings were slow. When they
+  // finally arrive the Dock is built again, so what was saved shows instead of the defaults.
+  const openedBeforeSettingsRef = useRef(false);
+  const [settingsEpoch, setSettingsEpoch] = useState(0);
 
   useEffect(() => {
     if (settingsReady || !initialProductionSettings) return;
     // Safety valve: never leave the operator on a loading screen if the local
     // settings service is slow; the Dock then opens without saved shell prefs.
-    const timer = window.setTimeout(() => setSettingsReady(true), 3000);
+    const timer = window.setTimeout(() => {
+      if (!isNativeDockSettingsHydrated()) openedBeforeSettingsRef.current = true;
+      setSettingsReady(true);
+    }, 3000);
     return () => window.clearTimeout(timer);
   }, [settingsReady, initialProductionSettings]);
 
@@ -2395,6 +2402,10 @@ export default function DockPage(props: DockPageProps = {}) {
     const hydrate = async () => {
       try {
         await hydrateNativeDockSettings();
+        if (!cancelled && openedBeforeSettingsRef.current) {
+          openedBeforeSettingsRef.current = false;
+          setSettingsEpoch((value) => value + 1);
+        }
         // The saved preferences are loaded; with a cached production snapshot the
         // Dock can open now instead of waiting for the full settings load.
         if (!cancelled && initialProductionSettings) setSettingsReady(true);
@@ -2434,5 +2445,5 @@ export default function DockPage(props: DockPageProps = {}) {
 
   // The equivalent `return <DockPageContent {...props} />` is intentionally
   // held until the persisted startup snapshot is ready.
-  return <DockPageContent {...props} initialProductionSettings={effectiveSettings} />;
+  return <DockPageContent key={settingsEpoch} {...props} initialProductionSettings={effectiveSettings} />;
 }

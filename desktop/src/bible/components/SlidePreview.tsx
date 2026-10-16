@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useBible } from "../bibleStore";
 import type { BibleSlide, BibleTemplateType, BibleThemeSettings } from "../types";
 import Icon from "../../components/Icon";
+import { playMutedVideo } from "../../utils/playMutedVideo";
 
 interface SlidePreviewProps {
   onClose?: () => void;
@@ -170,7 +171,7 @@ export default function SlidePreview({
           <video
             className="preview-frame-video"
             src={settings.backgroundVideo}
-            autoPlay
+            ref={playMutedVideo}
             loop
             muted
             playsInline

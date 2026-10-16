@@ -53,28 +53,49 @@ describe("fitting the columns", () => {
     expect(plan.verseAi + plan.dock + plan.preview + plan.workspace).toBeLessThanOrEqual(1280);
   });
 
-  it("stacks the Preview over the workspace when there is no room side by side", () => {
+  it("a small window stays side by side: workspace on the left, a slim Preview on the right, Schedule as a dropdown", () => {
     const plan = planColumns(900, { verseAi: 320, dock: 300, preview: 560 });
-    expect(plan.stacked).toBe(true);
+    expect(plan.stacked).toBe(false);
+    expect(plan.compact).toBe(true);
+    expect(plan.dockOverlay).toBe(true);
+    expect(plan.preview).toBeGreaterThanOrEqual(LAYOUT_LIMITS.compact.preview);
+    expect(plan.workspace).toBeGreaterThanOrEqual(LAYOUT_LIMITS.compact.workspace);
   });
 
-  it("on a narrow window the Schedule / History floats over the edge so the middle stays usable", () => {
-    const plan = planColumns(820, { verseAi: 320, dock: 300, preview: 560 });
+  it("on a smaller window Verse AI folds to its rail so the slim Preview still fits beside the workspace", () => {
+    const plan = planColumns(760, { verseAi: 320, dock: null, preview: 560 });
+    expect(plan.stacked).toBe(false);
+    expect(plan.compact).toBe(true);
+    expect(plan.verseAiRail).toBe(true);
+    expect(plan.dockOverlay).toBe(false);
+  });
+
+  it("only when even that does not fit does the Preview stack over the workspace", () => {
+    const plan = planColumns(560, { verseAi: 320, dock: null, preview: 560 });
+    expect(plan.stacked).toBe(true);
+    expect(plan.compact).toBe(false);
+  });
+
+  it("when stacked, the Schedule floats over the edge so the middle stays usable", () => {
+    const plan = planColumns(520, { verseAi: 320, dock: 300, preview: 560 });
+    expect(plan.stacked).toBe(true);
     expect(plan.dockOverlay).toBe(true);
     expect(plan.dock).toBeGreaterThanOrEqual(LAYOUT_LIMITS.dock.min);
-    expect(plan.workspace).toBeGreaterThanOrEqual(LAYOUT_LIMITS.centerMin);
-  });
-
-  it("on a very narrow window Verse AI folds to its rail too", () => {
-    const plan = planColumns(680, { verseAi: 320, dock: 300, preview: 560 });
-    expect(plan.dockOverlay).toBe(true);
-    expect(plan.verseAiRail).toBe(true);
-    expect(plan.workspace).toBeGreaterThanOrEqual(LAYOUT_LIMITS.centerMin);
   });
 
   it("a wide window is untouched", () => {
     const plan = planColumns(1920, { verseAi: 320, dock: 300, preview: 640 });
     expect(plan.dockOverlay).toBe(false);
     expect(plan.verseAiRail).toBe(false);
+    expect(plan.compact).toBe(false);
+  });
+});
+
+describe("small window: the workspace keeps the room", () => {
+  it("at half a screen the Preview stays slim and the workspace gets the rest", () => {
+    const plan = planColumns(900, { verseAi: 320, dock: null, preview: 560 });
+    expect(plan.compact).toBe(true);
+    expect(plan.preview).toBeLessThanOrEqual(LAYOUT_LIMITS.compact.previewWanted);
+    expect(plan.workspace).toBeGreaterThan(plan.preview);
   });
 });

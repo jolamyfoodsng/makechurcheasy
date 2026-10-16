@@ -28,7 +28,7 @@ describe("broadcastSettingsService", () => {
     // Reset to defaults before each test
     saveBroadcastStore({
       profiles: DEFAULT_PROFILES,
-      activeProfileId: "profile-senior-pastor",
+      activeProfileId: "profile-sunday-service",
       multistreamMode: "direct",
       cloudflareIngestUrl: "rtmps://live.cloudflare.com:443/live/",
       cloudflareStreamKey: "",
@@ -37,30 +37,66 @@ describe("broadcastSettingsService", () => {
 
   it("loads default profiles with nickname and channels", () => {
     const store = loadBroadcastStore();
-    expect(store.profiles.length).toBeGreaterThanOrEqual(3);
+    expect(store.profiles.length).toBe(2);
 
-    const pastor = store.profiles.find((p) => p.id === "profile-senior-pastor");
-    expect(pastor).toBeDefined();
-    expect(pastor?.nickname).toBe("Senior Pastor");
-    expect(pastor?.channels.length).toBe(2);
-    expect(pastor?.channels[0].platform).toBe("youtube");
-    expect(pastor?.channels[0].serverUrl).toBe("Primary YouTube ingest server");
-    expect(pastor?.channels[1].platform).toBe("facebook");
+    const sunday = store.profiles.find((p) => p.id === "profile-sunday-service");
+    expect(sunday).toBeDefined();
+    expect(sunday?.nickname).toBe("Sunday");
+    expect(sunday?.channels.length).toBe(2);
+    expect(sunday?.channels[0].platform).toBe("youtube");
+    expect(sunday?.channels[0].serverUrl).toBe("Primary YouTube ingest server");
+    expect(sunday?.channels[1].platform).toBe("facebook");
+  });
+
+  it("starts with two generic profiles and no person names", () => {
+    expect(DEFAULT_PROFILES.map((p) => p.nickname)).toEqual(["Sunday", "Midweek"]);
+  });
+
+  it("swaps three untouched old sample profiles for the two generic ones", () => {
+    const old = (id: string, name: string, nickname: string, chId: string, chName: string) => ({
+      id, name, nickname, color: "#fff",
+      channels: [{ id: chId, name: chName, platform: "youtube" as const, streamKey: "", serverUrl: "auto", enabled: true }],
+    });
+    saveBroadcastStore({
+      profiles: [
+        old("profile-senior-pastor", "Senior Pastor (Sunday Service)", "Senior Pastor", "ch-senior-yt", "Church Main YouTube"),
+        old("profile-guest-minister", "Guest Minister", "Guest", "ch-guest-yt", "Guest Minister YouTube Channel"),
+      ],
+      activeProfileId: "profile-senior-pastor",
+      multistreamMode: "direct",
+    });
+    const store = loadBroadcastStore();
+    expect(store.profiles.map((p) => p.id)).toEqual(["profile-sunday-service", "profile-midweek-service"]);
+    expect(store.activeProfileId).toBe("profile-sunday-service");
+  });
+
+  it("keeps old-id profiles the person renamed or gave a key", () => {
+    saveBroadcastStore({
+      profiles: [
+        {
+          id: "profile-senior-pastor", name: "My Church", nickname: "My Church", color: "#fff",
+          channels: [{ id: "ch-senior-yt", name: "Church Main YouTube", platform: "youtube", streamKey: "", serverUrl: "auto", enabled: true }],
+        },
+      ],
+      activeProfileId: "profile-senior-pastor",
+      multistreamMode: "direct",
+    });
+    expect(loadBroadcastStore().profiles[0].nickname).toBe("My Church");
   });
 
   it("allows switching active profile to a different person/minister", () => {
-    const updated = setActiveProfileId("profile-guest-minister");
-    expect(updated.activeProfileId).toBe("profile-guest-minister");
+    const updated = setActiveProfileId("profile-midweek-service");
+    expect(updated.activeProfileId).toBe("profile-midweek-service");
 
     const active = getActiveProfile(updated);
-    expect(active?.nickname).toBe("Guest");
-    expect(active?.name).toBe("Guest Minister");
+    expect(active?.nickname).toBe("Midweek");
+    expect(active?.name).toBe("Midweek Service");
   });
 
   it("adds a new person profile with custom nickname and channels", () => {
-    const newPerson = addPersonProfile("Revival Guest (Bishop David)", "Bishop David", "#8B5CF6");
-    expect(newPerson.name).toBe("Revival Guest (Bishop David)");
-    expect(newPerson.nickname).toBe("Bishop David");
+    const newPerson = addPersonProfile("Revival Night (Special Guest)", "Special Guest", "#8B5CF6");
+    expect(newPerson.name).toBe("Revival Night (Special Guest)");
+    expect(newPerson.nickname).toBe("Special Guest");
     expect(newPerson.color).toBe("#8B5CF6");
 
     const store = loadBroadcastStore();
@@ -69,7 +105,7 @@ describe("broadcastSettingsService", () => {
 
     // Add channels tied to this new person
     const chYt = addChannelToProfile(newPerson.id, {
-      name: "Bishop David YouTube",
+      name: "Special Guest YouTube",
       platform: "youtube",
       streamKey: "yt-key-12345",
       serverUrl: "auto",
@@ -78,7 +114,7 @@ describe("broadcastSettingsService", () => {
     expect(chYt.id).toBeDefined();
 
     const chFb = addChannelToProfile(newPerson.id, {
-      name: "Bishop David Facebook Live",
+      name: "Special Guest Facebook Live",
       platform: "facebook",
       streamKey: "fb-key-67890",
       serverUrl: "rtmps://live-api-s.facebook.com:443/rtmp/",
@@ -89,8 +125,8 @@ describe("broadcastSettingsService", () => {
     const refreshed = loadBroadcastStore();
     const person = refreshed.profiles.find((p) => p.id === newPerson.id);
     expect(person?.channels.length).toBe(2);
-    expect(person?.channels[0].name).toBe("Bishop David YouTube");
-    expect(person?.channels[1].name).toBe("Bishop David Facebook Live");
+    expect(person?.channels[0].name).toBe("Special Guest YouTube");
+    expect(person?.channels[1].name).toBe("Special Guest Facebook Live");
 
     // Clean up created profile
     deletePersonProfile(newPerson.id);
@@ -98,33 +134,33 @@ describe("broadcastSettingsService", () => {
   });
 
   it("allows updating person profile nickname, updating channels, and deleting channels", () => {
-    updatePersonProfile("profile-guest-minister", {
-      nickname: "Dr. Isaac (Special)",
+    updatePersonProfile("profile-midweek-service", {
+      nickname: "Midweek (Special)",
     });
 
     const store = loadBroadcastStore();
-    const updated = store.profiles.find((p) => p.id === "profile-guest-minister");
-    expect(updated?.nickname).toBe("Dr. Isaac (Special)");
+    const updated = store.profiles.find((p) => p.id === "profile-midweek-service");
+    expect(updated?.nickname).toBe("Midweek (Special)");
 
     // Update channel name and key
     const channelId = updated?.channels[0].id;
     if (channelId) {
-      updateChannel("profile-guest-minister", channelId, {
-        name: "Guest Minister YouTube Updated",
+      updateChannel("profile-midweek-service", channelId, {
+        name: "Midweek YouTube Updated",
         streamKey: "new-key-999",
       });
-      const afterUpdate = loadBroadcastStore().profiles.find((p) => p.id === "profile-guest-minister");
-      expect(afterUpdate?.channels[0].name).toBe("Guest Minister YouTube Updated");
+      const afterUpdate = loadBroadcastStore().profiles.find((p) => p.id === "profile-midweek-service");
+      expect(afterUpdate?.channels[0].name).toBe("Midweek YouTube Updated");
       expect(afterUpdate?.channels[0].streamKey).toBe("new-key-999");
 
       // Toggle channel enabled status
-      toggleChannelEnabled("profile-guest-minister", channelId);
-      const afterToggle = loadBroadcastStore().profiles.find((p) => p.id === "profile-guest-minister");
+      toggleChannelEnabled("profile-midweek-service", channelId);
+      const afterToggle = loadBroadcastStore().profiles.find((p) => p.id === "profile-midweek-service");
       expect(afterToggle?.channels[0].enabled).toBe(false);
 
       // Delete channel
-      deleteChannel("profile-guest-minister", channelId);
-      const afterDelete = loadBroadcastStore().profiles.find((p) => p.id === "profile-guest-minister");
+      deleteChannel("profile-midweek-service", channelId);
+      const afterDelete = loadBroadcastStore().profiles.find((p) => p.id === "profile-midweek-service");
       expect(afterDelete?.channels.length).toBe(0);
     }
   });
@@ -274,7 +310,7 @@ describe("broadcastSettingsService", () => {
     // Simulate stale localStorage in browser with 2 channels
     const staleState = {
       profiles: DEFAULT_PROFILES,
-      activeProfileId: "profile-senior-pastor",
+      activeProfileId: "profile-sunday-service",
       multistreamMode: "direct" as const,
       cloudflareIngestUrl: "rtmps://live.cloudflare.com:443/live/",
       cloudflareStreamKey: "",
@@ -293,7 +329,7 @@ describe("broadcastSettingsService", () => {
     ];
     saveBroadcastStore({
       profiles: singleChannelProfile,
-      activeProfileId: "profile-senior-pastor",
+      activeProfileId: "profile-sunday-service",
       multistreamMode: "direct",
       cloudflareIngestUrl: "rtmps://live.cloudflare.com:443/live/",
       cloudflareStreamKey: "",
@@ -305,20 +341,20 @@ describe("broadcastSettingsService", () => {
   });
 
   it("supports moving and reordering channels within a profile", () => {
-    // Senior Pastor starts with 2 channels: ch-senior-yt, ch-senior-fb
+    // The Sunday profile starts with 2 channels: ch-sunday-yt, ch-sunday-fb
     const profile = DEFAULT_PROFILES[0];
     const initialFirst = profile.channels[0].id;
     const initialSecond = profile.channels[1].id;
 
     // Move second channel up
-    const moved = moveChannel("profile-senior-pastor", initialSecond, "up");
-    const activeProf = moved.profiles.find((p) => p.id === "profile-senior-pastor");
+    const moved = moveChannel("profile-sunday-service", initialSecond, "up");
+    const activeProf = moved.profiles.find((p) => p.id === "profile-sunday-service");
     expect(activeProf?.channels[0].id).toBe(initialSecond);
     expect(activeProf?.channels[1].id).toBe(initialFirst);
 
     // Reorder channels back
-    const reordered = reorderChannels("profile-senior-pastor", [initialFirst, initialSecond]);
-    const restoredProf = reordered.profiles.find((p) => p.id === "profile-senior-pastor");
+    const reordered = reorderChannels("profile-sunday-service", [initialFirst, initialSecond]);
+    const restoredProf = reordered.profiles.find((p) => p.id === "profile-sunday-service");
     expect(restoredProf?.channels[0].id).toBe(initialFirst);
     expect(restoredProf?.channels[1].id).toBe(initialSecond);
   });

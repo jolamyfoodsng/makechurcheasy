@@ -47,7 +47,10 @@ import { getSettings as getMvSettings } from "../multiview/mvStore";
 import { resolveOverlayAssetUrl } from "../services/overlayUrl";
 import { getAllSongs, WORSHIP_SONGS_UPDATED_EVENT } from "../worship/worshipDb";
 import type { Song } from "../worship/types";
-import { DOCK_NOTES_UPDATED_EVENT, loadDockNotes, type DockNote } from "../dock/dockNotesStorage";
+import { DOCK_NOTES_UPDATED_EVENT, loadDockNotes, saveDockNotes, type DockNote } from "../dock/dockNotesStorage";
+import type { DockTranslationValue } from "../dock/components/DockTranslationControls";
+import { applyTranslation, clampLines, noteLinesOf, reflowSlides, translationSections } from "../studio/studioTextLayout";
+import TextSlideTools from "../studio/ui/TextSlideTools";
 import { bringInDockNotes, bringInDockSongs } from "../studio/dockImport";
 import { BROADCAST_GRAPHICS_UPDATED_EVENT, loadSavedBroadcastGraphics } from "../services/broadcastGraphicsStorage";
 import { consumeFreeUse, freeLeftNote, freeLimitMessage } from "../studio/studioAccess";
@@ -81,6 +84,7 @@ import {
   setProgramScroll,
   setProgramScreen,
   setStudioTextScale,
+  setStudioTextStyle,
   stopProgramAudio,
   studioBaseUrl,
   type StudioMediaControl,
@@ -114,6 +118,7 @@ import { planDraftForSlide, planItemMatchesSlide, resolvePlanItem, type PlanTarg
 import { appendToSchedule, markScheduleItemDone, nextScheduleItemId, readActivePlan, recordProjected } from "../studio/studioSchedule";
 import { DOCK_SCHEDULE_CHANGED_EVENT } from "../dock/dockScheduleService";
 import { importToLibrary } from "../studio/studioImport";
+import StudioTip, { generalTips } from "../studio/ui/StudioTip";
 import VerseAiSidebar, { VAI_NEXT_TAB_EVENT, VerseAiRail } from "../studio/ui/VerseAiSidebar";
 import QueueDrawer from "../studio/ui/QueueDrawer";
 import BroadcastGraphicsDrawer, { type ProjectedGraphic } from "../studio/ui/BroadcastGraphicsDrawer";
@@ -260,6 +265,18 @@ function readBibleOpts(): BibleOpts {
 const TEXT_TAB_KEY = "mce.studio.textTab.v1";
 function readTextTab(): "worship" | "notes" {
   try { return localStorage.getItem(TEXT_TAB_KEY) === "notes" ? "notes" : "worship"; } catch { return "worship"; }
+}
+
+const SONG_LINES_KEY = "mce.studio.songLines.v1";
+const TRANSLATIONS_KEY = "mce.studio.translations.v1";
+function readRecord<T>(key: string): Record<string, T> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || "{}") as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, T> : {};
+  } catch { return {}; }
+}
+function writeRecord(key: string, value: unknown): void {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* storage full or blocked: the choice just is not remembered */ }
 }
 
 /** Where the reader should go, and what to do once the chapter has loaded. */
@@ -424,6 +441,9 @@ export default function StudioPage() {
   const previewFirst = layout.previewFirst;
   const textScale = layout.textScale;
   setStudioTextScale(textScale);
+  const textBold = layout.textBold;
+  const textItalic = layout.textItalic;
+  setStudioTextStyle(textBold, textItalic);
   const [base, setBase] = useState("");
   const [themeModal, setThemeModal] = useState(false);
   const themeGate = useThemeCreateGate();
@@ -525,6 +545,9 @@ export default function StudioPage() {
   const [mediaId, setMediaId] = useState("");
   const [docsSel, setDocsSel] = useState<DocsSelection>(null);
   const [docIdx, setDocIdx] = useState(0);
+  // Lines per slide for each song (0 = Original) and the translations made for songs and notes.
+  const [songLines, setSongLines] = useState<Record<string, number>>(() => readRecord<number>(SONG_LINES_KEY));
+  const [translations, setTranslations] = useState<Record<string, DockTranslationValue>>(() => readRecord<DockTranslationValue>(TRANSLATIONS_KEY));
   const [docFit, setDocFit] = useState<"contain" | "cover">("contain");
   const [screenScroll, setScreenScroll] = useState(0);
 
@@ -617,7 +640,51 @@ export default function StudioPage() {
     [bibleReady, bible.book, bible.chapter, bible.translation, bible.verses],
   );
   const song = songs.find((s) => s.id === songId);
-  const worshipDeck = useMemo<DeckSlide[]>(() => (song ? songSlides(song) : []), [song]);
+  const songLinesNow = clampLines(songLines[songId]);
+  const worshipBase = useMemo<DeckSlide[]>(() => (song ? reflowSlides(songSlides(song), songLinesNow) : []), [song, songLinesNow]);
+  const worshipTranslation = songId ? translations[`song:${songId}`] ?? null : null;
+  const worshipDeck = useMemo<DeckSlide[]>(() => applyTranslation(worshipBase, worshipTranslation), [worshipBase, worshipTranslation]);
+  // The note open in Text → Notes: its slides follow the note's own lines-per-slide (shared with the Dock).
+  const openNote = docsSel?.kind === "note" ? notes.find((n) => n.id === docsSel.id) ?? null : null;
+  const noteLinesNow = noteLinesOf(openNote);
+  const noteBase = useMemo<StudioSlide[]>(
+    () => (openNote ? noteSlides(openNote.id, openNote.title || "Note", openNote.content, noteLinesNow) : []),
+    [openNote, noteLinesNow],
+  );
+  const noteTranslation = openNote ? translations[`note:${openNote.id}`] ?? null : null;
+  const setTranslationFor = useCallback((key: string, value: DockTranslationValue | null) => {
+    setTranslations((current) => {
+      const next = { ...current };
+      if (value) next[key] = value; else delete next[key];
+      writeRecord(TRANSLATIONS_KEY, next);
+      return next;
+    });
+  }, []);
+  const changeSongLines = useCallback((lines: number) => {
+    if (!songId) return;
+    setSongLines((current) => {
+      const next = { ...current, [songId]: clampLines(lines) };
+      writeRecord(SONG_LINES_KEY, next);
+      return next;
+    });
+    setSongIdx(0);
+  }, [songId]);
+  const saveNoteEdit = useCallback((id: string, changes: { title: string; content: string }) => {
+    // Read the saved notes again first, so a note Verse AI added a moment ago is not lost.
+    const next = loadDockNotes().map((x) => (x.id === id ? { ...x, title: changes.title || x.title, content: changes.content, updatedAt: Date.now() } : x));
+    saveDockNotes(next);
+    setNotes(next);
+    setDocIdx(0);
+  }, []);
+  const changeNoteLines = useCallback((lines: number) => {
+    if (!openNote) return;
+    const n = clampLines(lines);
+    // Saved on the note itself, so the Dock's Notes tab shows the same split.
+    const next = loadDockNotes().map((x) => (x.id === openNote.id ? { ...x, autoSplit: n > 0, linesPerSlide: n > 0 ? n : x.linesPerSlide } : x));
+    saveDockNotes(next);
+    setNotes(next);
+    setDocIdx(0);
+  }, [openNote]);
   const libraryMedia = useMemo(() => media.filter((m) => !m.documentId && m.source !== "document-conversion"), [media]);
   const mediaDeck = useMemo(() => libraryMedia.map((m) => mediaSlide(m)).filter((s): s is DeckSlide => s !== null), [libraryMedia]);
   const documents = useMemo(() => groupDocuments(media), [media]);
@@ -626,12 +693,9 @@ export default function StudioPage() {
       const doc = documents.find((d) => d.id === docsSel.id);
       return doc ? doc.pages.map((p) => mediaSlide(p, docFit)).filter((s): s is DeckSlide => s !== null) : [];
     }
-    if (docsSel?.kind === "note") {
-      const note = notes.find((n) => n.id === docsSel.id);
-      return note ? noteSlides(note.id, note.title || "Note", note.content) : [];
-    }
+    if (docsSel?.kind === "note") return applyTranslation(noteBase, noteTranslation);
     return [];
-  }, [docsSel, documents, notes, docFit]);
+  }, [docsSel, documents, docFit, noteBase, noteTranslation]);
 
   const bibleSelectedSlide = useMemo(() => {
     if (!bibleReady || selectedVerses.length === 0) return null;
@@ -651,7 +715,7 @@ export default function StudioPage() {
   // Keep the Preview screen on the previewed slide (never touches the projector).
   useEffect(() => {
     void setPreviewState(compareFor(previewSlide), themes, displayMode);
-  }, [previewSlide, themes, displayMode, textScale, compareFor]);
+  }, [previewSlide, themes, displayMode, textScale, textBold, textItalic, compareFor]);
 
   // ── Outputs (projector windows) ──
   const [monitors, setMonitors] = useState<StudioMonitor[]>([]);
@@ -661,6 +725,7 @@ export default function StudioPage() {
   const [settingsPanel, setSettingsPanel] = useState(false);
   /** Which tab of the settings opens (Ctrl/Cmd+/ opens the keyboard shortcuts one). */
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
+  const [settingsFocus, setSettingsFocus] = useState<"logo" | undefined>(undefined);
   const shortcutBindings = useShortcutBindings();
   /** Search everything: null = closed, otherwise what was typed to open it. */
   const [searchAll, setSearchAll] = useState<string | null>(null);
@@ -944,7 +1009,7 @@ export default function StudioPage() {
 
   // Changing the look or the theme re-draws what is live (it is not a new item in History).
   const liveModule: StudioTextModule | null = liveSlide && liveSlide.module !== "media" ? liveSlide.module : null;
-  const lookSig = `${displayMode}|${liveModule ? themesApi.current(liveModule, displayMode)?.id ?? "" : ""}|${liveSlide?.key ?? ""}|${textScale}`;
+  const lookSig = `${displayMode}|${liveModule ? themesApi.current(liveModule, displayMode)?.id ?? "" : ""}|${liveSlide?.key ?? ""}|${textScale}|${textBold ? "b" : ""}${textItalic ? "i" : ""}`;
   const lastLookSig = useRef(lookSig);
   const switchingRef = useRef(false);
   useEffect(() => {
@@ -1499,6 +1564,7 @@ export default function StudioPage() {
       if (result.imported) parts.push(`${result.imported} ${what === "document" ? "page" : "file"}${result.imported === 1 ? "" : "s"} added`);
       if (result.overLimit) parts.push(`${result.overLimit} skipped (your plan's limit is reached)`);
       if (result.unsupported.length) parts.push(`not supported: ${result.unsupported.join(", ")}`);
+      if (result.rejected.length) parts.push(result.rejected.join(" "));
       say(parts.join(" · ") || "Nothing was imported.", result.imported ? "info" : "error");
     } catch (err) {
       say(err instanceof Error ? `Import failed: ${err.message}` : "Import failed.", "error");
@@ -1517,6 +1583,14 @@ export default function StudioPage() {
     setScreenScroll(next);
     void setProgramScroll(next);
   }, []);
+
+  // A document page that fills the screen is taller than the screen: it can be scrolled (wheel, scrollbar, slider).
+  const pageScrollable = docFit === "cover" && (previewSlide?.origin?.kind === "doc" || liveSlide?.origin?.kind === "doc");
+  // A new page on the screen starts at its top.
+  useEffect(() => {
+    if (liveSlide?.origin?.kind === "doc") changeScreenScroll(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveSlide?.key]);
 
   // ── Schedule / History ──
   const planContext = useMemo(() => ({ songs, notes, media, translation: bible.translation, loadChapter: loadChapterVerses }), [songs, notes, media, bible.translation]);
@@ -1699,20 +1773,32 @@ export default function StudioPage() {
     if (deck.length === 0) return;
     const i = clamp(index, 0, deck.length - 1);
     const slide = deck[i];
-    if (view === "bible" && slide.verse) setBibleSel({ key: chapterKey, anchor: slide.verse, verses: [slide.verse] });
-    else if (view === "worship") setSongIdx(i);
+    if (view === "bible" && slide.verse) {
+      // "Verses per slide": the arrow keys move by that many verses and show them together (as a click does).
+      const per = bibleOptsRef.current.perSlide;
+      const lastVerse = bible.verses.length ? bible.verses[bible.verses.length - 1].verse : slide.verse;
+      const verses = range(slide.verse, Math.max(slide.verse, Math.min(slide.verse + per - 1, lastVerse))).filter((n) => bible.verses.some((v) => v.verse === n));
+      setBibleSel({ key: chapterKey, anchor: slide.verse, verses });
+      const group = verses.length > 1 ? rangeSlideFor(verses) ?? slide : slide;
+      if (live) void project(group);
+      else setPreviewSlide(group);
+      return;
+    }
+    if (view === "worship") setSongIdx(i);
     else if (view === "media") setMediaId(slide.origin?.id ?? "");
     else setDocIdx(i);
     if (live) void project(slide);
     else setPreviewSlide(slide);
-  }, [currentDeck, view, chapterKey, project]);
+  }, [currentDeck, view, chapterKey, project, bible.verses, rangeSlideFor]);
 
   /** Arrow keys: move to the next/previous slide. Straight to screen, or already on air with this one: it goes on the screen too. */
   const stepSelection = useCallback((delta: 1 | -1) => {
     const from = deckIndexOf(selectedSlide, delta > 0 ? "last" : "first");
     const onAirNow = Boolean(selectedSlide && liveSlideRef.current && liveSlideRef.current.key === selectedSlide.key);
-    selectIndex(from < 0 ? 0 : from + delta, !previewFirst || onAirNow);
-  }, [deckIndexOf, selectedSlide, selectIndex, previewFirst]);
+    // Going back in the Bible jumps a whole group (2 verses per slide = back by 2).
+    const back = view === "bible" ? bibleOptsRef.current.perSlide : 1;
+    selectIndex(from < 0 ? 0 : delta > 0 ? from + 1 : from - back, !previewFirst || onAirNow);
+  }, [deckIndexOf, selectedSlide, selectIndex, previewFirst, view]);
 
   /** Space / Page Down: show Preview; if Preview is already live, show the next one. */
   const goLiveNext = useCallback(() => {
@@ -1750,8 +1836,8 @@ export default function StudioPage() {
 
   const goLivePrev = useCallback(() => {
     const at = deckIndexOf(liveSlide ?? selectedSlide, "first");
-    if (at > 0) selectIndex(at - 1, true);
-  }, [deckIndexOf, liveSlide, selectedSlide, selectIndex]);
+    if (at > 0) selectIndex(at - (view === "bible" ? bibleOptsRef.current.perSlide : 1), true);
+  }, [deckIndexOf, liveSlide, selectedSlide, selectIndex, view]);
 
   // ── Schedule: the next item ("N") ──
   const [plan, setPlan] = useState(readActivePlan);
@@ -1818,7 +1904,7 @@ export default function StudioPage() {
         setTextTab("notes");
         setDocsSel({ kind: "note", id: note.id });
         setDocIdx(r.index);
-        if (how === "schedule") show(noteSlides(note.id, note.title || "Note", note.content)[r.index] ?? null);
+        if (how === "schedule") show(noteSlides(note.id, note.title || "Note", note.content, noteLinesOf(note))[r.index] ?? null);
         return;
       }
       case "media":
@@ -2097,6 +2183,8 @@ export default function StudioPage() {
     dock: dockOpen ? layout.dock.width : null,
     preview: layout.previewWidth,
   });
+  /** Half-width window or smaller: Bible, Worship, Notes, Media and Docs are ONE row of named tabs at the left, under the header. */
+  const sectionsInBody = columns.compact || columns.stacked || bodySize.width <= 1300;
   // Keep at least ~300px (or 55% of the height) for the reader and Preview above the drawer.
   const drawerMax = Math.max(110, Math.min(LAYOUT_LIMITS.drawer.max, bodySize.height - 300, Math.round(bodySize.height * (bodySize.height < 640 ? 0.24 : 0.45))));
   // The full side panel (right) has Queue, History and Graphics, so the bottom drawer and the
@@ -2254,6 +2342,15 @@ export default function StudioPage() {
         onScheduleSong={() => schedule(worshipDeck[0] ?? null, { whole: "song" })}
         onNewSong={() => setSongEdit("new")}
         onEditSong={() => setSongEdit(song ? "edit" : "new")}
+        tools={(
+          <TextSlideTools
+            lines={songLinesNow}
+            onLines={changeSongLines}
+            sections={translationSections(worshipBase)}
+            translation={worshipTranslation}
+            onTranslation={(value) => setTranslationFor(`song:${songId}`, value)}
+          />
+        )}
       />
     );
   } else if (view === "media") {
@@ -2310,6 +2407,16 @@ export default function StudioPage() {
         onScroll={changeScreenScroll}
         onImport={(files) => void runImport(files, "document")}
         importing={importing}
+        onSaveNote={saveNoteEdit}
+        tools={openNote ? (
+          <TextSlideTools
+            lines={noteLinesNow}
+            onLines={changeNoteLines}
+            sections={translationSections(noteBase)}
+            translation={noteTranslation}
+            onTranslation={(value) => setTranslationFor(`note:${openNote.id}`, value)}
+          />
+        ) : undefined}
       />
     );
   }
@@ -2318,10 +2425,10 @@ export default function StudioPage() {
   if (section === "worship") {
     workspace = (
       <div className="st-textwrap">
-        <div className="st-subtabs" role="tablist" aria-label="Text">
+        {!sectionsInBody && <div className="st-subtabs" role="tablist" aria-label="Text">
           <button type="button" role="tab" aria-selected={textTab === "worship"} className={textTab === "worship" ? "is-on" : ""} onClick={() => setTextTab("worship")}><Music size={14} /> Worship</button>
           <button type="button" role="tab" aria-selected={textTab === "notes"} className={textTab === "notes" ? "is-on" : ""} onClick={() => setTextTab("notes")}><FileText size={14} /> Notes</button>
-        </div>
+        </div>}
         <div className="st-textwrap__body">{workspace}</div>
       </div>
     );
@@ -2361,9 +2468,10 @@ export default function StudioPage() {
     </div>
   ) : null;
 
+
   return (
     <div className={`studio st${immersive ? " studio--immersive" : ""}`}>
-      <header className="st-head">
+      <header className={`st-head${sectionsInBody ? " is-small" : ""}`}>
         <div className="st-head__left">
           <button type="button" className="st-back" onClick={goBack} title="Back to the app" aria-label="Back to the app">
             <ArrowLeft size={16} />
@@ -2373,13 +2481,15 @@ export default function StudioPage() {
           </div>
         </div>
 
-        <nav className="st-nav" role="tablist" aria-label="Studio sections">
-          {SECTIONS.map(({ id, label, icon: Icon }) => (
-            <button key={id} type="button" role="tab" aria-selected={section === id} className={`st-nav__btn${section === id ? " is-on" : ""}`} onClick={() => chooseSection(id)}>
-              <Icon size={18} /> <span>{label}</span>
-            </button>
-          ))}
-        </nav>
+        {!sectionsInBody && (
+          <nav className="st-nav" role="tablist" aria-label="Studio sections">
+            {SECTIONS.map(({ id, label, icon: Icon }) => (
+              <button key={id} type="button" role="tab" aria-selected={section === id} className={`st-nav__btn${section === id ? " is-on" : ""}`} title={label} aria-label={label} onClick={() => chooseSection(id)}>
+                <Icon size={18} /> <span>{label}</span>
+              </button>
+            ))}
+          </nav>
+        )}
 
         <div className="st-head__right">
           <div className="st-outsplit">
@@ -2458,6 +2568,9 @@ export default function StudioPage() {
       )}
 
       <div className="st-body" ref={bodyRef}>
+        {dockOpen && columns.dock > 0 && columns.dockOverlay && (
+          <div className="st-dockback" onClick={() => patchLayout({ dock: { ...layout.dock, open: false } })} aria-hidden="true" />
+        )}
         {dockOpen && columns.dock > 0 && (
           <div className={`st-col st-col--dock${columns.dockOverlay ? " is-overlay" : ""}`} style={{ width: columns.dock }}>
             <Splitter
@@ -2486,10 +2599,28 @@ export default function StudioPage() {
 
         <div className="st-center">
           <div
-            className={`st-work${columns.stacked ? " is-stacked" : ""}`}
+            className={`st-work${columns.stacked ? " is-stacked" : ""}${columns.compact ? " is-compact" : ""}`}
             style={columns.stacked ? undefined : { gridTemplateColumns: `minmax(0, 1fr) ${columns.preview}px` }}
           >
-            <div className="st-workspace">{workspace}</div>
+            <div className="st-workspace">
+              {sectionsInBody && (
+                // One row, left: Bible · Worship · Notes · Media · Docs (Worship and Notes are the two halves of "Text").
+                <div className="st-subtabs st-subtabs--sections" role="tablist" aria-label="Studio sections">
+                  {([
+                    { key: "bible", label: "Bible", icon: BookOpen, on: view === "bible", go: () => chooseSection("bible") },
+                    { key: "worship", label: "Worship", icon: Music, on: view === "worship", go: () => { chooseSection("worship"); setTextTab("worship"); } },
+                    { key: "notes", label: "Notes", icon: FileText, on: view === "notes", go: () => { chooseSection("worship"); setTextTab("notes"); } },
+                    { key: "media", label: "Media", icon: ImageIcon, on: view === "media", go: () => chooseSection("media") },
+                    { key: "docs", label: "Docs", icon: FileText, on: view === "docs", go: () => chooseSection("docs") },
+                  ]).map(({ key, label, icon: Icon, on, go }) => (
+                    <button key={key} type="button" role="tab" aria-selected={on} className={on ? "is-on" : ""} onClick={go}>
+                      <Icon size={14} /> {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="st-workspace__body">{workspace}</div>
+            </div>
             <div className="st-col st-col--preview" style={{ ["--st-reserve" as string]: `${previewReserve}px` }}>
               {!columns.stacked && (
                 <Splitter
@@ -2525,6 +2656,10 @@ export default function StudioPage() {
                 onTransition={(value) => patchLayout({ transition: value })}
                 textScale={textScale}
                 onTextScale={(percent) => patchLayout({ textScale: percent })}
+                textBold={textBold}
+                textItalic={textItalic}
+                onTextBold={(on) => patchLayout({ textBold: on })}
+                onTextItalic={(on) => patchLayout({ textItalic: on })}
                 onMonitorMenu={openMonitorMenu}
                 playback={playbar}
                 canGoLive={Boolean(previewSlide ?? selectedSlide) || camera.enabled || Boolean(liveCamera?.enabled) || nothingToShow}
@@ -2540,13 +2675,17 @@ export default function StudioPage() {
                 onPreviewFirst={setPreviewFirst}
                 logoOn={screen === "logo"}
                 onLogo={() => toggleScreen("logo")}
+                onEditLogo={() => { setSettingsTab("general"); setSettingsFocus("logo"); setSettingsPanel(true); }}
+                onWheelScroll={pageScrollable ? (deltaY) => changeScreenScroll(screenScroll + deltaY / 6) : undefined}
+                pageScroll={pageScrollable ? { value: screenScroll, onChange: changeScreenScroll } : null}
                 canSchedule={Boolean(previewSlide ?? selectedSlide)}
                 onSchedule={() => schedule(previewSlide ?? selectedSlide)}
                 nextLabel={dockOpen ? undefined : nextItem?.label}
                 onNextItem={nextItem && !dockOpen ? projectNextItem : undefined}
                 notice={liveCamera?.enabled && liveCamera.layout === "camera-only" ? "Camera only: the screen shows just the camera, no words." : ""}
                 previewCam={{ enabled: camera.enabled, layout: camera.layout, stream: camera.stream }}
-                cameraCard={<SharedControls camera={camera} cameraHint={cameraHint} wordsOn={wordsOn} onCamera={setCameraOn} showToggle={false} />}
+                cameraCard={<><SharedControls camera={camera} cameraHint={cameraHint} wordsOn={wordsOn} onCamera={setCameraOn} showToggle={false} /><StudioTip tips={generalTips()} /></>}
+                hideWordsCard={view === "media" || view === "docs"}
                 scenePicker={<ScenePicker active={activeScene} onChoose={(scene) => void chooseScene(scene)} />}
                 graphicLive={graphicLive}
                 onCloseGraphic={closeGraphic}
@@ -2755,14 +2894,15 @@ export default function StudioPage() {
       {settingsPanel && (
         <SettingsModal
           initialTab={settingsTab}
+          focus={settingsFocus}
           previewFirst={previewFirst}
           onPreviewFirst={setPreviewFirst}
           transition={transition}
           onTransition={(value) => patchLayout({ transition: value })}
           textScale={textScale}
           onTextScale={(percent) => patchLayout({ textScale: percent })}
-          onResetLayout={() => setLayout((c) => ({ ...DEFAULT_LAYOUT, section: c.section, displayMode: c.displayMode, transition: c.transition, previewFirst: c.previewFirst, camera: c.camera, micId: c.micId, textScale: c.textScale, logoScale: c.logoScale }))}
-          onClose={() => { setSettingsPanel(false); setSettingsTab("general"); }}
+          onResetLayout={() => setLayout((c) => ({ ...DEFAULT_LAYOUT, section: c.section, displayMode: c.displayMode, transition: c.transition, previewFirst: c.previewFirst, camera: c.camera, micId: c.micId, textScale: c.textScale, textBold: c.textBold, textItalic: c.textItalic, logoScale: c.logoScale }))}
+          onClose={() => { setSettingsPanel(false); setSettingsTab("general"); setSettingsFocus(undefined); }}
           logo={{ url: logoOverride ? resolveOverlayAssetUrl(logoOverride) : resolveOverlayAssetUrl(getMvSettings().brandLogoPath), custom: Boolean(logoOverride), onPick: (file) => void pickLogo(file), onReset: () => applyLogo(""), scale: layout.logoScale, onScale: (percent) => patchLayout({ logoScale: clamp(percent, 30, 250) }), bg: logoBg, onBg: applyLogoBg, onPickBgImage: (file) => void pickLogoBg(file) }}
           output={{
             monitors,

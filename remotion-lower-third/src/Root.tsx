@@ -25,7 +25,7 @@ export const RemotionRoot: React.FC = () => {
         width={1920}
         height={1080}
         defaultProps={{
-          speakerName: "Pastor Henry Odewale",
+          speakerName: "Pastor Firstname Lastname",
           roleOrTitle: "Lead Pastor",
           organization: "MakeChurchEazy Church",
           topic: "Sunday Worship Service",

@@ -11,6 +11,8 @@ import {
 } from "../library/MediaTab";
 import { checkEntitlementSync } from "../services/entitlementClient";
 import { getMediaKind } from "../services/mediaValidation";
+import { checkImportFile } from "../services/importSafety";
+import { isSupportedDocumentFile } from "../dock/documentConversion";
 import type { PlanTier } from "../services/licenseService";
 
 export interface ImportResult {
@@ -19,6 +21,8 @@ export interface ImportResult {
   overLimit: number;
   /** Files that aren't pictures, videos, sound or documents. */
   unsupported: string[];
+  /** Files stopped by the safety check or that could not be read, each with the reason in plain words. */
+  rejected: string[];
 }
 
 export async function importToLibrary(
@@ -27,11 +31,29 @@ export async function importToLibrary(
   onProgress?: (status: string) => void,
 ): Promise<ImportResult> {
   const all = Array.from(files);
-  const unsupported = all.filter((f) => !isSupportedLibraryImportFile(f)).map((f) => f.name);
-  const supported = all.filter((f) => isSupportedLibraryImportFile(f));
-  if (supported.length === 0) return { imported: 0, overLimit: 0, unsupported };
+  const unsupported: string[] = [];
+  const rejected: string[] = [];
+  const queue: Awaited<ReturnType<typeof expandLibraryMediaImportFiles>> = [];
 
-  const queue = await expandLibraryMediaImportFiles(supported, onProgress);
+  for (const file of all) {
+    // Programs, scripts and renamed files are stopped by what is inside, not by the name.
+    const check = await checkImportFile(file, isSupportedDocumentFile(file) ? "document" : "media");
+    if (!check.ok) {
+      rejected.push(check.reason ?? `“${file.name}” cannot be imported.`);
+      continue;
+    }
+    if (!isSupportedLibraryImportFile(file)) {
+      unsupported.push(file.name);
+      continue;
+    }
+    try {
+      queue.push(...await expandLibraryMediaImportFiles([file], onProgress));
+    } catch (error) {
+      rejected.push(`“${file.name}” could not be read${error instanceof Error && error.message ? `: ${error.message}` : "."}`);
+    }
+  }
+  if (queue.length === 0) return { imported: 0, overLimit: 0, unsupported, rejected };
+
   const { limit: imageLimit } = checkEntitlementSync("images", plan);
   const { limit: videoLimit } = checkEntitlementSync("videos", plan);
   const current = await getAllMedia();
@@ -50,5 +72,5 @@ export async function importToLibrary(
     if (kind === "image") images += 1;
     if (kind === "video") videos += 1;
   }
-  return { imported, overLimit, unsupported };
+  return { imported, overLimit, unsupported, rejected };
 }

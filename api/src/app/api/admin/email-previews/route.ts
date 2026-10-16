@@ -47,7 +47,7 @@ type EmailPreview = {
 };
 
 const SAMPLE_USER = {
-  userName: "Tayo Akosile",
+  userName: "Sample User",
   userEmail: "tayo@example.com",
 };
 

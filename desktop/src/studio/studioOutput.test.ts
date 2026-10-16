@@ -15,6 +15,7 @@ import {
   clearProgram,
   goLive,
   setPreviewState,
+  setPreviewMediaControl,
   setProgramCamera,
   setProgramMediaControl,
   stopProgramAudio,
@@ -102,6 +103,23 @@ describe("one way onto the screen", () => {
     // Sound has nothing to preview.
     await setPreviewState(sound, null, "fullscreen");
     expect(getProgramState().preview?.active).toBeNull();
+  });
+
+  it("preview video starts independently and can pause without changing Program", async () => {
+    await goLive(verse, null, "fullscreen", "fade");
+    await setPreviewState(video, null, "fullscreen");
+    const state = getProgramState();
+    const liveBefore = JSON.stringify({ active: state.active, media: state.media, mediaControl: state.mediaControl });
+
+    expect(state.preview?.mediaControl).toMatchObject({ paused: false, loop: true, muted: false });
+    await setPreviewMediaControl({ paused: true });
+
+    expect(getProgramState().preview?.mediaControl).toMatchObject({ paused: true });
+    expect(JSON.stringify({
+      active: getProgramState().active,
+      media: getProgramState().media,
+      mediaControl: getProgramState().mediaControl,
+    })).toBe(liveBefore);
   });
 });
 

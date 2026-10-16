@@ -32,8 +32,8 @@ describe("BroadcastSettingsPanel for MVSettings", () => {
     expect(html).toContain("broadcast-info-btn");
 
     // Profiles and channels
-    expect(html).toContain("Senior Pastor");
-    expect(html).toContain("Destinations for Senior Pastor");
+    expect(html).toContain("Sunday");
+    expect(html).toContain("Destinations for Sunday");
     expect(html).toContain("Church Main YouTube");
     expect(html).toContain("Sync with OBS");
   });

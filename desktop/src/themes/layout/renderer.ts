@@ -110,6 +110,7 @@ const BASE_CSS = `
 .mtl-w{display:inline-block;white-space:pre}
 .mtl-img{display:block;width:100%;height:100%}
 .mtl-media{position:absolute;left:0;top:0}
+video::-webkit-media-controls,video::-webkit-media-controls-enclosure,video::-webkit-media-controls-panel,video::-webkit-media-controls-overlay-play-button,video::-webkit-media-controls-start-playback-button,video::-webkit-media-controls-play-button{display:none!important;opacity:0!important;visibility:hidden!important;-webkit-appearance:none!important;pointer-events:none!important}
 .mtl-dim{position:absolute;inset:0;pointer-events:none}
 .mtl-hidden{display:none!important}
 .mtl-text.is-nowrap{white-space:nowrap}
@@ -206,6 +207,32 @@ const MODE_SWITCH_FALLBACK_FADE_MS = 220;
 
 function finished(anims: Animation[]): Promise<void> {
   return Promise.all(anims.map((a) => a.finished.catch(() => undefined))).then(() => undefined);
+}
+
+/**
+ * Starts a muted background video and keeps it going (after load, after the window was hidden, after a
+ * pause). The video has no autoplay attribute and no controls, so the web view never shows its play button.
+ */
+function keepPlaying(video: HTMLVideoElement): void {
+  const kick = () => {
+    if (!video.isConnected || !video.paused || video.ended) return;
+    try {
+      const started = video.play();
+      if (started && typeof started.catch === "function") started.catch(() => undefined);
+    } catch {
+      /* not allowed yet: tried again on the next event */
+    }
+  };
+  video.addEventListener("loadeddata", kick);
+  video.addEventListener("canplay", kick);
+  video.addEventListener("pause", () => setTimeout(kick, 250));
+  const win = video.ownerDocument.defaultView;
+  win?.document.addEventListener("visibilitychange", kick);
+  const timer = win?.setInterval(() => {
+    if (!video.isConnected) { win.clearInterval(timer); win.document.removeEventListener("visibilitychange", kick); return; }
+    kick();
+  }, 2000);
+  kick();
 }
 
 export class ThemeRenderer {
@@ -596,19 +623,19 @@ export class ThemeRenderer {
       video.muted = true;
       video.defaultMuted = true;
       video.loop = true;
-      video.autoplay = true;
+      // No autoplay attribute: when a web view blocks it, WebKit shows its own big play button. We start it ourselves.
+      video.autoplay = false;
       video.playsInline = true;
       video.preload = "auto";
+      video.controls = false;
+      video.disablePictureInPicture = true;
       video.setAttribute("muted", "");
+      video.setAttribute("disablepictureinpicture", "");
+      video.setAttribute("disableremoteplayback", "");
       video.src = videoSrc;
       video.style.objectFit = s.fit || "cover";
       el.appendChild(video);
-      try {
-        const started = video.play();
-        if (started && typeof started.catch === "function") started.catch(() => undefined);
-      } catch {
-        /* autoplay can be blocked in a plain browser; OBS plays it */
-      }
+      keepPlaying(video);
       return true;
     }
     if (src) {

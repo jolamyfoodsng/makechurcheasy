@@ -272,10 +272,10 @@ export function BroadcastHowItWorksModal({
                     fontWeight: 700,
                   }}
                 >
-                  SP
+                  SS
                 </div>
                 <span style={{ fontSize: "7.5px", color: "#a1a1aa", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  Senior Pastor
+                  Sunday Service
                 </span>
               </div>
             </div>

@@ -261,8 +261,8 @@ export default function ScheduleDock(props: ScheduleDockProps) {
             })}
           </div>
           <footer className="st-dock__foot">
-            <button type="button" className="studio-btn" onClick={clearScheduleDone} disabled={done.size === 0} title="Clear the ✓ marks for a new service"><RotateCcw size={13} /> Reset done</button>
-            <button type="button" className="studio-btn studio-btn--primary" onClick={props.onAddCurrent} disabled={!props.canAddCurrent} title="Add what is in Preview to the schedule"><Plus size={14} /> Add</button>
+            <button type="button" className="studio-btn" onClick={clearScheduleDone} disabled={done.size === 0} title="Reset done: clear the ✓ marks for a new service" aria-label="Reset done marks"><RotateCcw size={12} /> Reset</button>
+            <button type="button" className="studio-btn studio-btn--primary" onClick={props.onAddCurrent} disabled={!props.canAddCurrent} title="Add what is in Preview to the schedule"><Plus size={13} /> Add</button>
           </footer>
         </>
       )}

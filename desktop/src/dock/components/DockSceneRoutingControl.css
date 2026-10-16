@@ -1,0 +1,212 @@
+/* DockSceneRoutingControl.css — the "Send to another scene" popover.
+   Lives here (not in DockBottomToolbar.css) so it is styled in every tab that opens it. */
+.dock-scene-routing-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.dock-scene-routing-popover__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dock-scene-routing-popover__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dock-text, #F8FAFC);
+}
+
+.dock-scene-routing-popover__sub {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--dock-text-dim, #94A3B8);
+}
+
+.dock-scene-routing-popover__refresh {
+  flex: none;
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+}
+
+.dock-scene-routing-control__check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  accent-color: var(--dock-accent, #2563EB);
+  cursor: pointer;
+}
+
+.dock-scene-routing-control__toggle,
+.dock-scene-routing-control__sync {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 8px;
+  background: var(--dock-surface-alt, #1F2937);
+  cursor: pointer;
+}
+
+.dock-scene-routing-control__toggle:hover,
+.dock-scene-routing-control__sync:hover {
+  border-color: color-mix(in srgb, var(--dock-accent, #2563EB) 40%, var(--dock-border, #334155));
+}
+
+.dock-scene-routing-control__toggle.is-on {
+  border-color: var(--dock-accent-soft-border, rgba(37, 99, 235, 0.35));
+  background: var(--dock-accent-soft, rgba(37, 99, 235, 0.1));
+}
+
+.dock-scene-routing-control__toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dock-scene-routing-control__label {
+  color: var(--dock-text, #F8FAFC);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.dock-scene-routing-control__toggle-copy small,
+.dock-scene-routing-control__hint {
+  color: var(--dock-text-dim, #94A3B8);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.dock-scene-routing-control__hint {
+  display: block;
+  margin-top: 5px;
+}
+
+.dock-scene-routing-control__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: var(--dock-text-dim, #94A3B8);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.dock-scene-routing-control__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 999px;
+  background: var(--dock-surface-alt, #1F2937);
+  color: var(--dock-text, #F8FAFC);
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.dock-scene-routing-control__scene-list {
+  max-height: 204px;
+  overflow-y: auto;
+  border: 1px solid var(--dock-border, #334155);
+  border-radius: 8px;
+  background: var(--dock-bg, #0F172A);
+}
+
+.dock-scene-routing-control__scene-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--dock-border, #334155);
+}
+
+.dock-scene-routing-control__scene-row:last-child {
+  border-bottom: none;
+}
+
+.dock-scene-routing-control__scene-row.is-selected {
+  background: var(--dock-accent-soft, rgba(29, 78, 216, 0.1));
+}
+
+.dock-scene-routing-control__scene-check {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-self: stretch;
+  color: var(--dock-text, #F8FAFC);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.dock-scene-routing-control__scene-check .dock-scene-routing-control__check {
+  margin: 0;
+}
+
+.dock-scene-routing-control__scene-check span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-scene-routing-control__mode-select {
+  flex: 0 0 116px;
+  min-width: 0;
+  min-height: 26px;
+  padding: 2px 5px;
+  border: 1px solid var(--dock-input-border, #334155);
+  border-radius: 5px;
+  background: var(--dock-surface-alt, #1F2937);
+  color: var(--dock-text, #F8FAFC);
+  font: inherit;
+  font-size: 10.5px;
+  outline: none;
+}
+
+.dock-scene-routing-control__mode-select:focus-visible {
+  border-color: var(--dock-border-active, #2563EB);
+  box-shadow: 0 0 0 2px var(--dock-accent-soft-border, rgba(37, 99, 235, 0.2));
+}
+
+.dock-scene-routing-control__empty {
+  padding: 14px 10px;
+  color: var(--dock-text-dim, #94A3B8);
+  font-size: 11px;
+  text-align: center;
+}
+
+.dock-scene-routing-popover__error {
+  color: var(--dock-red, #EF4444);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.dock-scene-routing-popover__footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 10px;
+  border-top: 1px solid var(--dock-border, #334155);
+}
+
+.dock-scene-routing-popover__footer .dock-btn {
+  flex: none;
+  min-width: 76px;
+}

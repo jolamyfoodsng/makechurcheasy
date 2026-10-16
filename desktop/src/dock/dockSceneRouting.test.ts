@@ -33,7 +33,8 @@ describe("dock scene routing", () => {
 
   it("persists an independent target and an explicit MCE Presentation sync choice per module", () => {
     expect(routingSource).toContain('const SCENE_ROUTING_STORAGE_KEY = "dock-scene-routing-v1"');
-    expect(routingSource).toContain("syncPresentation: candidate.syncPresentation === true");
+    expect(routingSource).toContain("syncPresentation: candidate.syncPresentation !== false");
+    expect(normalizeDockSceneRoute(undefined).syncPresentation).toBe(true);
     expect(routingSource).toContain("readNativeDockSetting<StoredSceneRoutes>(SCENE_ROUTING_STORAGE_KEY)");
     expect(routingSource).toContain('export type DockSceneOutputMode = "inherit" | "fullscreen" | "lower-third"');
     expect(routingSource).toContain("targets: DockSceneRouteTarget[]");

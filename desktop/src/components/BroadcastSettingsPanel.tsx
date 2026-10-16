@@ -846,11 +846,11 @@ export function BroadcastSettingsPanel({
 
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               <label style={{ fontSize: "14px", fontWeight: 600, color: "#f4f4f5" }}>
-                Profile Name (e.g. Church Account, Pastor Account, Youth Ministry)
+                Profile Name (e.g. Church Account, Sunday Service, Youth Ministry)
               </label>
               <input
                 type="text"
-                placeholder="e.g. Church Main Account or Senior Pastor Account"
+                placeholder="e.g. Church Main Account or Sunday Service"
                 value={personNameInput}
                 onChange={(e) => setPersonNameInput(e.target.value)}
                 style={{

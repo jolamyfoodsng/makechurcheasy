@@ -38,8 +38,8 @@ import {
   MULTISTREAM_EXHAUSTED_EVENT,
   type MultistreamUsageInfo,
 } from "../services/broadcastUsageService";
-import { getMultistreamTarget, isCloudTargetFor } from "../services/multistreamState";
-import { MultistreamStatusPanel } from "../components/MultistreamStatusPanel";
+import { getMultistreamTarget, getTargetFreshness, isCloudTargetFor } from "../services/multistreamState";
+import { MultistreamStatusPanel, useMultistreamTarget } from "../components/MultistreamStatusPanel";
 import { dockObsClient } from "../dock/dockObsClient";
 import { getStoredUser } from "../services/authService";
 import { getEffectivePlan } from "../services/licenseService";
@@ -64,15 +64,14 @@ import {
   Square,
   AlertTriangle,
   ExternalLink,
-  LayoutGrid,
   Info,
   HelpCircle,
   Zap,
   Link2,
   Users,
-  BarChart2,
-  List,
-  GripVertical,
+  ChevronRight,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { OBS_LOGO_BASE64 } from "../assets/obsLogoBase64";
 import "./BroadcastPage.css";
@@ -192,109 +191,6 @@ function useCurrentPlanAllocation(): { effectivePlan: string; allocation: Multis
   };
 }
 
-/**
- * High fidelity SVG diagram illustrating OBS multi-platform streaming
- * with central OBS Studio node and radiating dashed lines to YouTube, Facebook,
- * TikTok, RTMP, Twitch, and Instagram nodes matching reference design.
- */
-function ObsMultiStreamDiagram() {
-  return (
-    <svg
-      width="210"
-      height="125"
-      viewBox="0 0 280 175"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className="broadcast-diagram-svg"
-      aria-hidden="true"
-    >
-      {/* Flat solid subtle circle behind OBS (NO gradients) */}
-      <circle cx="140" cy="88" r="46" fill="#1e3a8a" fillOpacity="0.18" />
-
-      {/* Dashed Radiating Connecting Lines from OBS (140, 88) to Destinations */}
-      {/* 1. To YouTube (85, 26) */}
-      <line x1="128" y1="72" x2="98" y2="39" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="3 3.5" />
-      {/* 2. To Facebook (202, 26) */}
-      <line x1="152" y1="72" x2="190" y2="39" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="3 3.5" />
-      {/* 3. To TikTok (220, 88) */}
-      <line x1="164" y1="88" x2="206" y2="88" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="3 3.5" />
-      {/* 4. To RTMP (198, 142) */}
-      <line x1="154" y1="104" x2="186" y2="133" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="3 3.5" />
-      {/* 5. To Twitch (82, 142) */}
-      <line x1="126" y1="104" x2="94" y2="133" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="3 3.5" />
-      {/* 6. To Instagram (60, 88) */}
-      <line x1="116" y1="88" x2="74" y2="88" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="3 3.5" />
-
-      {/* Central OBS Studio Concentric Rings & Node */}
-      <circle cx="140" cy="88" r="38" fill="none" stroke="#38bdf8" strokeWidth="1" strokeDasharray="3 3" opacity="0.35" />
-      <circle cx="140" cy="88" r="30" fill="none" stroke="#38bdf8" strokeWidth="1.2" opacity="0.55" />
-      <circle cx="140" cy="88" r="23" fill="#0f172a" stroke="#38bdf8" strokeWidth="2.2" />
-      <image
-        href={OBS_LOGO_BASE64}
-        x="126"
-        y="74"
-        width="28"
-        height="28"
-        preserveAspectRatio="xMidYMid meet"
-      />
-
-      {/* Destination 1: YouTube */}
-      <g transform="translate(73, 14)">
-        <circle cx="13" cy="13" r="13" fill="#ef4444" />
-        <path d="M10.5 8.5L17.5 13L10.5 17.5V8.5Z" fill="#FFFFFF" />
-      </g>
-
-      {/* Destination 2: Facebook */}
-      <g transform="translate(191, 14)">
-        <circle cx="13" cy="13" r="13" fill="#1877f2" />
-        <path
-          d="M15.5 11H13.5V18.5H11.2V11H9.8V9H11.2V7.8C11.2 6.3 12.1 5.3 13.9 5.3C14.6 5.3 15.2 5.4 15.2 5.4V7.3H14.4C13.6 7.3 13.5 7.7 13.5 8.3V9H15.6L15.5 11Z"
-          fill="#FFFFFF"
-        />
-      </g>
-
-      {/* Destination 3: TikTok */}
-      <g transform="translate(207, 75)">
-        <circle cx="13" cy="13" r="13" fill="#000000" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
-        <path
-          d="M14.8 9C15.1 9.9 15.8 10.7 16.7 11V12.6C15.9 12.6 15.2 12.3 14.6 11.9V15.2C14.6 16.9 13.2 18.3 11.5 18.3C9.8 18.3 8.4 16.9 8.4 15.2C8.4 13.5 9.8 12.1 11.5 12.1C11.7 12.1 11.9 12.1 12.1 12.2V13.8C11.9 13.7 11.7 13.6 11.5 13.6C10.6 13.6 9.9 14.3 9.9 15.2C9.9 16.1 10.6 16.8 11.5 16.8C12.4 16.8 13.1 16.1 13.1 15.2V8H14.8V9Z"
-          fill="#00F2FE"
-        />
-      </g>
-
-      {/* Destination 4: RTMP */}
-      <g transform="translate(187, 129)">
-        <circle cx="13" cy="13" r="13" fill="#27272a" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
-        <text x="13" y="16" fill="#FFFFFF" fontSize="7" fontWeight="700" textAnchor="middle" letterSpacing="0.04em">
-          RTMP
-        </text>
-      </g>
-
-      {/* Destination 5: Twitch */}
-      <g transform="translate(69, 129)">
-        <circle cx="13" cy="13" r="13" fill="#9146ff" />
-        <path
-          d="M8 7H18V14L15.5 16.5H13L11.5 18V16.5H8V7Z"
-          stroke="#FFFFFF"
-          strokeWidth="1.2"
-          strokeLinejoin="round"
-          fill="none"
-        />
-        <rect x="11" y="9.5" width="1.2" height="2.5" fill="#FFFFFF" />
-        <rect x="14.5" y="9.5" width="1.2" height="2.5" fill="#FFFFFF" />
-      </g>
-
-      {/* Destination 6: Instagram */}
-      <g transform="translate(49, 75)">
-        <circle cx="13" cy="13" r="13" fill="#e1306c" />
-        <rect x="7.5" y="7.5" width="11" height="11" rx="3.2" stroke="#FFFFFF" strokeWidth="1.3" fill="none" />
-        <circle cx="13" cy="13" r="2.5" stroke="#FFFFFF" strokeWidth="1.3" fill="none" />
-        <circle cx="16" cy="10" r="0.8" fill="#FFFFFF" />
-      </g>
-    </svg>
-  );
-}
-
 export default function BroadcastPage() {
   const [store, setStore] = useState<BroadcastStoreState>(loadBroadcastStore);
   const [obsConnected, setObsConnected] = useState(dockObsClient.isConnected);
@@ -309,7 +205,8 @@ export default function BroadcastPage() {
   const [showObsSettingsModal, setShowObsSettingsModal] = useState(false);
 
   // View mode and Dropdown states
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [visibleKeyId, setVisibleKeyId] = useState<string | null>(null);
+  const multistreamTarget = useMultistreamTarget();
   const [showManageProfileMenu, setShowManageProfileMenu] = useState(false);
   const [openProfileMenuId, setOpenProfileMenuId] = useState<string | null>(null);
   const [openChannelMenuId, setOpenChannelMenuId] = useState<string | null>(null);
@@ -505,6 +402,16 @@ export default function BroadcastPage() {
   }, [allocation.allowed, allocation.hours]);
 
   const activeProfile = getActiveProfile(store);
+  const delivery = activeProfile?.channels.filter(ch => ch.enabled && ch.streamKey.trim()) ?? [];
+  const targetFreshness = activeProfile ? getTargetFreshness(activeProfile.id, delivery, multistreamTarget) : "none";
+  useEffect(() => { setVisibleKeyId(null); }, [activeProfile?.id]);
+  useEffect(() => {
+    if (!visibleKeyId) return;
+    const timer = window.setTimeout(() => setVisibleKeyId(null), 15000);
+    const hide = () => setVisibleKeyId(null);
+    window.addEventListener("blur", hide);
+    return () => { window.clearTimeout(timer); window.removeEventListener("blur", hide); };
+  }, [visibleKeyId]);
 
   const showToast = useCallback((text: string, type: "success" | "error" | "info" = "success") => {
     setStatusMessage({ text, type });
@@ -1030,9 +937,7 @@ export default function BroadcastPage() {
           </div>
         </div>
 
-        <div className="broadcast-hero-banner__graphic">
-          <ObsMultiStreamDiagram />
-        </div>
+
       </div>
 
       {multistreamLocked && (
@@ -1066,6 +971,7 @@ export default function BroadcastPage() {
             </button>
           </div>
 
+          <p className="broadcast-profiles-description">Choose a profile to manage its streaming destinations.</p>
           <div className="broadcast-profiles-list">
             {store.profiles.map((p) => {
               const isSelected = activeProfile?.id === p.id;
@@ -1078,9 +984,9 @@ export default function BroadcastPage() {
                   className={`broadcast-profile-card ${
                     isSelected ? "broadcast-profile-card--selected" : ""
                   }`}
-                  onClick={() => !isStreaming && handleSelectPerson(p.id)}
-                  style={{ cursor: isStreaming ? "not-allowed" : "pointer" }}
                 >
+                  <button type="button" className="broadcast-profile-select" disabled={isStreaming}
+                    onClick={() => handleSelectPerson(p.id)} aria-pressed={isSelected}>
                   <div
                     className="broadcast-profile-avatar"
                     style={{ backgroundColor: p.color || "#EF4444" }}
@@ -1095,6 +1001,8 @@ export default function BroadcastPage() {
                     </div>
                   </div>
 
+                  <ChevronRight size={18} className="broadcast-profile-chevron" />
+                  </button>
                   <div
                     className="broadcast-profile-menu-wrapper"
                     onClick={(e) => e.stopPropagation()}
@@ -1225,7 +1133,7 @@ export default function BroadcastPage() {
                       title="Manage Profile"
                     >
                       <Settings size={14} />
-                      <span>Manage Profile</span>
+                      <span>Profile Settings</span>
                     </button>
 
                     {showManageProfileMenu && (
@@ -1282,468 +1190,82 @@ export default function BroadcastPage() {
                 </div>
               </div>
 
-              <MultistreamStatusPanel
-                profile={activeProfile}
-                isStreaming={isStreaming}
-                allowed={allocation.allowed}
-                usage={usageInfo}
-                applying={isSyncing}
-                onApply={handleApplyActivePersonToObs}
-              />
-
-              {/* Channels Card */}
               <div className="broadcast-channels-card">
-                <div className="broadcast-channels-card__header">
-                  <div className="broadcast-channels-card__title-group">
-                    <h3 className="broadcast-channels-card__title">
-                      Channels ({activeProfile.channels.length})
-                    </h3>
-                    <p className="broadcast-channels-card__subtitle">
-                      These platforms will be streamed when you go live in OBS.
-                    </p>
-                  </div>
-
-                  <div className="broadcast-channels-card__actions">
-                    {/* View Switcher: Grid vs List */}
-                    <div className="broadcast-view-toggle">
-                      <button
-                        type="button"
-                        onClick={() => setViewMode("grid")}
-                        className={`broadcast-view-toggle-btn ${
-                          viewMode === "grid" ? "broadcast-view-toggle-btn--active" : ""
-                        }`}
-                        title="Grid View"
-                      >
-                        <LayoutGrid size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setViewMode("list")}
-                        className={`broadcast-view-toggle-btn ${
-                          viewMode === "list" ? "broadcast-view-toggle-btn--active" : ""
-                        }`}
-                        title="List View"
-                      >
-                        <List size={16} />
-                      </button>
-                    </div>
-
-                    {/* Primary Add Channel Button */}
-                    <button
-                      type="button"
-                      onClick={() => !isStreaming && openNewChannelModalWithPlatform(activeProfile.id, "youtube")}
-                      disabled={isStreaming}
-                      className="broadcast-add-channel-primary-btn"
-                      title="Add a new channel"
-                    >
-                      <Plus size={16} />
-                      <span>Add Channel</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Empty State vs Configured Channel List */}
+                <MultistreamStatusPanel
+                  profile={activeProfile}
+                  isStreaming={isStreaming}
+                  allowed={allocation.allowed}
+                  usage={usageInfo}
+                  applying={isSyncing}
+                  onApply={handleApplyActivePersonToObs}
+                  workspace
+                  icon={<img src={OBS_LOGO_BASE64} alt="" width={42} height={42} />}
+                />
                 {activeProfile.channels.length === 0 ? (
                   <div className="broadcast-empty-channels-box">
-                    <div className="broadcast-empty-content-desktop">
-                      <div className="broadcast-empty-radio-icon">
-                        <Radio size={28} />
-                      </div>
-                      <h4 className="broadcast-empty-title">Add your first channel</h4>
-                      <p className="broadcast-empty-subtitle">
-                        Connect YouTube, Facebook, Instagram, TikTok, Twitch, or Custom RTMP to start multi-streaming.
-                      </p>
-                      <div className="broadcast-empty-btn-grid">
-                        <div className="broadcast-empty-btn-row">
-                          <button
-                            type="button"
-                            onClick={() => !isStreaming && openNewChannelModalWithPlatform(activeProfile.id, "youtube")}
-                            disabled={isStreaming}
-                            className="broadcast-btn-platform broadcast-btn-platform--youtube"
-                          >
-                            <PlatformBadgeIcon platform="youtube" size={18} />
-                            <span>Add YouTube</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => !isStreaming && openNewChannelModalWithPlatform(activeProfile.id, "facebook")}
-                            disabled={isStreaming}
-                            className="broadcast-btn-platform broadcast-btn-platform--facebook"
-                          >
-                            <PlatformBadgeIcon platform="facebook" size={18} />
-                            <span>Add Facebook</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => !isStreaming && openNewChannelModalWithPlatform(activeProfile.id, "instagram")}
-                            disabled={isStreaming}
-                            className="broadcast-btn-platform broadcast-btn-platform--instagram"
-                          >
-                            <PlatformBadgeIcon platform="instagram" size={18} />
-                            <span>Add Instagram</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => !isStreaming && openNewChannelModalWithPlatform(activeProfile.id, "tiktok")}
-                            disabled={isStreaming}
-                            className="broadcast-btn-platform broadcast-btn-platform--tiktok"
-                          >
-                            <PlatformBadgeIcon platform="tiktok" size={18} />
-                            <span>Add TikTok</span>
-                          </button>
-                        </div>
-                        <div className="broadcast-empty-btn-row-center">
-                          <button
-                            type="button"
-                            onClick={() => !isStreaming && openNewChannelModalWithPlatform(activeProfile.id, "custom")}
-                            disabled={isStreaming}
-                            className="broadcast-btn-platform broadcast-btn-platform--custom"
-                          >
-                            <LayoutGrid size={15} />
-                            <span>Custom / Other</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                    <Radio size={32} aria-hidden="true" />
+                    <h4 className="broadcast-empty-title">Add your first channel</h4>
+                    <p className="broadcast-empty-subtitle">Choose a platform below to add your streaming destination.</p>
                   </div>
-                ) : viewMode === "grid" ? (
-                  /* Grid View of Channels */
-                  <div className="broadcast-channels-grid">
-                    {activeProfile.channels.map((ch) => {
-                      const isConnected = ch.enabled && Boolean(ch.streamKey.trim());
-                      const isMenuOpen = openChannelMenuId === ch.id;
-
+                ) : (
+                  <div className="broadcast-destination-list">
+                    {activeProfile.channels.map((ch, index) => {
+                      const hasKey = Boolean(ch.streamKey.trim());
+                      const applied = targetFreshness === "applied"
+                        ? multistreamTarget?.destinations.find(d => d.id === ch.id) : undefined;
+                      const status = !ch.enabled ? "Not enabled" : !hasKey ? "Stream key missing"
+                        : applied && !applied.ok ? applied.reason || "Not included"
+                        : applied?.ok ? (isStreaming ? "Receiving the stream" : "Ready") : "Waiting to be applied";
+                      const tone = !ch.enabled ? "muted" : !hasKey || (applied && !applied.ok) ? "error"
+                        : applied?.ok ? "ready" : "muted";
                       return (
-                        <div
-                          key={ch.id}
-                          className={`broadcast-channel-grid-card ${
-                            !ch.enabled ? "broadcast-channel-grid-card--disabled" : ""
-                          }`}
-                        >
-                          <div className="broadcast-channel-grid-card__top">
-                            <PlatformBadgeIcon platform={ch.platform} size={32} />
-                            <div className="broadcast-channel-grid-card__meta">
-                              <div className="broadcast-channel-item__name-row">
-                                <span className="broadcast-channel-item__name" title={ch.name}>
-                                  {ch.name}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => !isStreaming && openEditChannelModal(activeProfile.id, ch)}
-                                  disabled={isStreaming}
-                                  className="broadcast-channel-inline-pencil-btn"
-                                  title="Edit channel name"
-                                >
-                                  <Pencil size={13} />
-                                </button>
+                        <div key={ch.id} className="broadcast-destination-row">
+                          <div className="broadcast-destination-identity">
+                            <span className="broadcast-destination-number" aria-label={`Channel ${index + 1}`}>{String(index + 1).padStart(2, "0")}</span>
+                            <span className="broadcast-destination-logo"><PlatformBadgeIcon platform={ch.platform} size={42} /></span>
+                            <div className="broadcast-destination-meta">
+                              <div className="broadcast-destination-name">
+                                <span title={ch.name}>{ch.name}</span>
+                                <button type="button" className="broadcast-edit-pencil-btn" disabled={isStreaming || isSyncing}
+                                  aria-label={`Edit ${ch.name}`} onClick={() => openEditChannelModal(activeProfile.id, ch)}><Pencil size={15} /></button>
                               </div>
-                              <div className="broadcast-channel-item__status">
-                                <span
-                                  className={`broadcast-status-dot ${
-                                    isConnected
-                                      ? "broadcast-status-dot--connected"
-                                      : "broadcast-status-dot--disconnected"
-                                  }`}
-                                />
-                                <span
-                                  className={`broadcast-status-text ${
-                                    isConnected
-                                      ? "broadcast-status-text--connected"
-                                      : "broadcast-status-text--disconnected"
-                                  }`}
-                                >
-                                  {isConnected ? "Connected" : "Not Connected"}
-                                </span>
-                              </div>
+                              <span className={`broadcast-destination-status broadcast-destination-status--${tone}`}><i aria-hidden="true" />{status}</span>
                             </div>
                           </div>
-
-                          <div className="broadcast-channel-grid-card__bottom">
-                            {/* Purple Toggle Switch */}
-                            <button
-                              type="button"
-                              role="switch"
-                              aria-checked={ch.enabled}
-                              className={`broadcast-toggle ${
-                                ch.enabled ? "broadcast-toggle--checked" : ""
-                              }`}
-                              onClick={() => !isStreaming && handleToggleChannelEnabled(activeProfile.id, ch.id)}
-                              disabled={isStreaming || isSyncing}
-                              title={ch.enabled ? "Channel enabled" : "Channel disabled"}
-                            >
-                              <span className="broadcast-toggle-thumb" />
+                          <div className="broadcast-stream-key">
+                            <div className="broadcast-stream-key-value">
+                              <span>Stream key</span>
+                              {hasKey ? <span className="broadcast-key-text">{visibleKeyId === ch.id ? ch.streamKey : "••••••••••••"}</span>
+                                : <span className={ch.enabled ? "broadcast-key-missing" : ""}>Not set</span>}
+                            </div>
+                            {hasKey ? <button type="button" className="broadcast-key-reveal" aria-label={`${visibleKeyId === ch.id ? "Hide" : "Show"} stream key for ${ch.name}`}
+                              aria-pressed={visibleKeyId === ch.id} onClick={() => setVisibleKeyId(visibleKeyId === ch.id ? null : ch.id)}>
+                              {visibleKeyId === ch.id ? <EyeOff size={19} /> : <Eye size={19} />}
+                            </button> : <button type="button" className="broadcast-add-key" disabled={isStreaming || isSyncing}
+                              onClick={() => openEditChannelModal(activeProfile.id, ch, true)}>Add Key</button>}
+                          </div>
+                          <div className="broadcast-destination-actions">
+                            <button type="button" role="switch" aria-checked={ch.enabled} aria-label={`Enable ${ch.name}`}
+                              className={`broadcast-channel-toggle ${ch.enabled ? "broadcast-channel-toggle--checked" : ""}`}
+                              disabled={isStreaming || isSyncing} onClick={() => handleToggleChannelEnabled(activeProfile.id, ch.id)}>
+                              <span className="broadcast-channel-toggle-thumb" />
                             </button>
-
-                            <div className="broadcast-channel-grid-card__actions">
-                              {/* Direct sync button */}
-                              {Boolean(ch.streamKey.trim()) && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleApplyChannelToObs(ch, activeProfile.nickname)}
-                                  disabled={isSyncing || isStreaming}
-                                  className="broadcast-channel-action-btn"
-                                  title={`Sync ${ch.name} directly to OBS`}
-                                >
-                                  <RefreshCw size={14} className={isSyncing ? "spin" : ""} />
-                                </button>
-                              )}
-
-                              {/* Edit pencil */}
-                              <button
-                                type="button"
-                                onClick={() => !isStreaming && openEditChannelModal(activeProfile.id, ch)}
-                                disabled={isStreaming}
-                                className="broadcast-channel-action-btn"
-                                title="Edit channel"
-                              >
-                                <Pencil size={14} />
-                              </button>
-
-                              {/* Stats / bar chart */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  showToast(
-                                    `${ch.name}: ${
-                                      isConnected ? "Ready for broadcast" : "Stream key required"
-                                    } (Platform: ${PLATFORM_INFO[ch.platform]?.label || ch.platform})`,
-                                    "info",
-                                  );
-                                }}
-                                className="broadcast-channel-action-btn"
-                                title="Channel stats"
-                              >
-                                <BarChart2 size={14} />
-                              </button>
-
-                              {/* Three-dot menu */}
-                              <div
-                                className="broadcast-channel-menu-container"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    !isStreaming &&
-                                    setOpenChannelMenuId((prev) => (prev === ch.id ? null : ch.id))
-                                  }
-                                  disabled={isStreaming}
-                                  className="broadcast-channel-action-btn"
-                                  title="More options"
-                                >
-                                  <MoreVertical size={14} />
-                                </button>
-
-                                {isMenuOpen && (
-                                  <div className="broadcast-dropdown-menu">
-                                    <button
-                                      type="button"
-                                      onClick={() => openEditChannelModal(activeProfile.id, ch)}
-                                      className="broadcast-dropdown-item"
-                                    >
-                                      <Pencil size={14} />
-                                      <span>Edit channel</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => openEditChannelModal(activeProfile.id, ch, true)}
-                                      className="broadcast-dropdown-item"
-                                    >
-                                      <Key size={14} />
-                                      <span>Replace stream key</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteChannel(activeProfile.id, ch)}
-                                      className="broadcast-dropdown-item broadcast-dropdown-item--danger"
-                                    >
-                                      <Trash2 size={14} />
-                                      <span>Remove channel</span>
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
+                            <div className="broadcast-channel-menu-container">
+                              <button type="button" className="broadcast-destination-menu" aria-label={`Options for ${ch.name}`} aria-expanded={openChannelMenuId === ch.id}
+                                onClick={() => setOpenChannelMenuId(openChannelMenuId === ch.id ? null : ch.id)}><MoreVertical size={20} /></button>
+                              {openChannelMenuId === ch.id && <div className="broadcast-dropdown-menu broadcast-dropdown-menu--right">
+                                <button type="button" disabled={isStreaming || isSyncing} onClick={() => { setOpenChannelMenuId(null); openEditChannelModal(activeProfile.id, ch); }}><Pencil size={14} />Edit channel</button>
+                                <button type="button" disabled={isStreaming || isSyncing} onClick={() => { setOpenChannelMenuId(null); openEditChannelModal(activeProfile.id, ch, true); }}><Key size={14} />Replace stream key</button>
+                                <button type="button" disabled={isStreaming || isSyncing || !hasKey} onClick={() => { setOpenChannelMenuId(null); void handleApplyChannelToObs(ch, activeProfile.nickname); }}><RefreshCw size={14} />Send this channel to OBS</button>
+                                <button type="button" disabled={isStreaming || isSyncing || index === 0} onClick={() => { moveChannel(activeProfile.id, ch.id, "up"); setOpenChannelMenuId(null); }}><ArrowUp size={14} />Move up</button>
+                                <button type="button" disabled={isStreaming || isSyncing || index === activeProfile.channels.length - 1} onClick={() => { moveChannel(activeProfile.id, ch.id, "down"); setOpenChannelMenuId(null); }}><ArrowDown size={14} />Move down</button>
+                                <button type="button" className="broadcast-dropdown-item--danger" disabled={isStreaming || isSyncing} onClick={() => { setOpenChannelMenuId(null); handleDeleteChannel(activeProfile.id, ch); }}><Trash2 size={14} />Remove channel</button>
+                              </div>}
                             </div>
                           </div>
                         </div>
                       );
                     })}
-                  </div>
-                ) : (
-                  /* List View of Channels (Matches reference image media_1791432082449.png) */
-                  <div className="broadcast-channels-list-container">
-                    <div className="broadcast-channels-list">
-                      {activeProfile.channels.map((ch, idx) => {
-                        const isConnected = ch.enabled && Boolean(ch.streamKey.trim());
-                        const isMenuOpen = openChannelMenuId === ch.id;
-
-                        return (
-                          <div
-                            key={ch.id}
-                            className={`broadcast-channel-item ${
-                              !ch.enabled ? "broadcast-channel-item--disabled" : ""
-                            }`}
-                          >
-                            <div className="broadcast-channel-item__left">
-                              {/* Drag handle */}
-                              <div
-                                className="broadcast-channel-drag-handle"
-                                title="Reorder channel"
-                                onClick={() => {
-                                  if (activeProfile.channels.length > 1 && !isStreaming) {
-                                    const nextIdx = (idx + 1) % activeProfile.channels.length;
-                                    moveChannel(activeProfile.id, ch.id, nextIdx > idx ? "down" : "up");
-                                  }
-                                }}
-                              >
-                                <GripVertical size={16} />
-                              </div>
-
-                              <PlatformBadgeIcon platform={ch.platform} size={30} />
-
-                              <div className="broadcast-channel-item__info">
-                                <div className="broadcast-channel-item__name-row">
-                                  <span className="broadcast-channel-item__name">{ch.name}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => !isStreaming && openEditChannelModal(activeProfile.id, ch)}
-                                    disabled={isStreaming}
-                                    className="broadcast-channel-inline-pencil-btn"
-                                    title="Edit channel name"
-                                  >
-                                    <Pencil size={13} />
-                                  </button>
-                                </div>
-                                <div className="broadcast-channel-item__status">
-                                  <span
-                                    className={`broadcast-status-dot ${
-                                      isConnected
-                                        ? "broadcast-status-dot--connected"
-                                        : "broadcast-status-dot--disconnected"
-                                    }`}
-                                  />
-                                  <span
-                                    className={`broadcast-status-text ${
-                                      isConnected
-                                        ? "broadcast-status-text--connected"
-                                        : "broadcast-status-text--disconnected"
-                                    }`}
-                                  >
-                                    {isConnected ? "Connected" : "Not Connected"}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="broadcast-channel-item__right">
-                              {/* Purple Toggle Switch */}
-                              <button
-                                type="button"
-                                role="switch"
-                                aria-checked={ch.enabled}
-                                className={`broadcast-toggle ${
-                                  ch.enabled ? "broadcast-toggle--checked" : ""
-                                }`}
-                                onClick={() => !isStreaming && handleToggleChannelEnabled(activeProfile.id, ch.id)}
-                                disabled={isStreaming || isSyncing}
-                                title={ch.enabled ? "Channel active" : "Channel disabled"}
-                              >
-                                <span className="broadcast-toggle-thumb" />
-                              </button>
-
-                              {/* Direct sync button */}
-                              {Boolean(ch.streamKey.trim()) && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleApplyChannelToObs(ch, activeProfile.nickname)}
-                                  disabled={isSyncing || isStreaming}
-                                  className="broadcast-channel-action-btn"
-                                  title={`Sync ${ch.name} directly to OBS`}
-                                >
-                                  <RefreshCw size={14} className={isSyncing ? "spin" : ""} />
-                                </button>
-                              )}
-
-                              {/* Edit pencil */}
-                              <button
-                                type="button"
-                                onClick={() => !isStreaming && openEditChannelModal(activeProfile.id, ch)}
-                                disabled={isStreaming}
-                                className="broadcast-channel-action-btn"
-                                title="Edit channel"
-                              >
-                                <Pencil size={14} />
-                              </button>
-
-                              {/* Stats / bar chart */}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  showToast(
-                                    `${ch.name}: ${
-                                      isConnected ? "Ready for broadcast" : "Stream key required"
-                                    } (Platform: ${PLATFORM_INFO[ch.platform]?.label || ch.platform})`,
-                                    "info",
-                                  );
-                                }}
-                                className="broadcast-channel-action-btn"
-                                title="Channel stats"
-                              >
-                                <BarChart2 size={14} />
-                              </button>
-
-                              {/* Three-dot menu */}
-                              <div
-                                className="broadcast-channel-menu-container"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    !isStreaming &&
-                                    setOpenChannelMenuId((prev) => (prev === ch.id ? null : ch.id))
-                                  }
-                                  disabled={isStreaming}
-                                  className="broadcast-channel-action-btn"
-                                  title="More options"
-                                >
-                                  <MoreVertical size={14} />
-                                </button>
-
-                                {isMenuOpen && (
-                                  <div className="broadcast-dropdown-menu">
-                                    <button
-                                      type="button"
-                                      onClick={() => openEditChannelModal(activeProfile.id, ch)}
-                                      className="broadcast-dropdown-item"
-                                    >
-                                      <Pencil size={14} />
-                                      <span>Edit channel</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => openEditChannelModal(activeProfile.id, ch, true)}
-                                      className="broadcast-dropdown-item"
-                                    >
-                                      <Key size={14} />
-                                      <span>Replace stream key</span>
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteChannel(activeProfile.id, ch)}
-                                      className="broadcast-dropdown-item broadcast-dropdown-item--danger"
-                                    >
-                                      <Trash2 size={14} />
-                                      <span>Remove channel</span>
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
                   </div>
                 )}
 
@@ -1852,11 +1374,11 @@ export default function BroadcastPage() {
             <div className="broadcast-modal-card__body">
               <div className="broadcast-form-group">
                 <label className="broadcast-form-label">
-                  Profile Name (e.g. Church Account, Senior Pastor, Department)
+                  Profile Name (e.g. Church Account, Sunday Service, Department)
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Saviours Assembly or Senior Pastor"
+                  placeholder="e.g. Sunday Service or Youth Ministry"
                   value={personNameInput}
                   onChange={(e) => setPersonNameInput(e.target.value)}
                   className="broadcast-form-input"
@@ -1868,7 +1390,7 @@ export default function BroadcastPage() {
                 <label className="broadcast-form-label">Display Label / Nickname</label>
                 <input
                   type="text"
-                  placeholder="e.g. Saviours Assembly"
+                  placeholder="e.g. Sunday"
                   value={personNicknameInput}
                   onChange={(e) => setPersonNicknameInput(e.target.value)}
                   className="broadcast-form-input"
@@ -1954,7 +1476,7 @@ export default function BroadcastPage() {
                 <label className="broadcast-form-label">Channel Name / Label</label>
                 <input
                   type="text"
-                  placeholder="e.g. Saviours Assembly (YouTube)"
+                  placeholder="e.g. Church Main YouTube"
                   value={channelNameInput}
                   onChange={(e) => setChannelNameInput(e.target.value)}
                   className="broadcast-form-input"

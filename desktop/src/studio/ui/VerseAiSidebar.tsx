@@ -154,7 +154,7 @@ export default function VerseAiSidebar(props: VerseAiSidebarProps) {
   };
 
   const keepLine = (text: string) => {
-    if (ai.pushToNotes(text)) setToast("Added to sermon notes (Docs → Notes)");
+    if (ai.pushToNotes(text)) setToast("Added to sermon notes (Text → Notes)");
   };
 
   const statusText = ai.starting ? "Checking…"

@@ -12,7 +12,7 @@
  * Queue (left) and Suggestions (right) are both always visible. Drag the top edge to make it
  * taller; the chevron collapses it to one row with the two counts.
  */
-import { useState, type DragEvent, type ReactNode } from "react";
+import { useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, CalendarPlus, ChevronDown, ChevronUp, Eye, GripVertical, ListPlus, Play, Trash2, X } from "lucide-react";
 import type { VoiceBibleCandidate } from "../../services/voiceBibleTypes";
 import { candidateKey, suggestionReason } from "../studioQueue";
@@ -49,11 +49,40 @@ interface QueueDrawerProps {
   newKeys?: ReadonlySet<string>;
 }
 
+const SPLIT_KEY = "mce-studio-queue-split";
+const SPLIT_MIN = 18;
+const SPLIT_MAX = 82;
+function readSplit(): number {
+  try {
+    const n = Number(localStorage.getItem(SPLIT_KEY));
+    return Number.isFinite(n) && n >= SPLIT_MIN && n <= SPLIT_MAX ? n : 50;
+  } catch {
+    return 50;
+  }
+}
+
 export default function QueueDrawer(props: QueueDrawerProps) {
   const { open, onToggle, view, onView, queue, suggestions, recentSpeech, liveKey, previewKey } = props;
   const [dragFrom, setDragFrom] = useState<number | null>(null);
   const [dropAt, setDropAt] = useState<number | null>(null);
   const [menu, setMenu] = useState<StudioMenuState | null>(null);
+  // Inside the Verse AI panel the Queue (top) and Suggestions (bottom) share the height; drag the bar between them.
+  const [split, setSplit] = useState(readSplit);
+  const colsRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
+  const moveSplit = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragging.current || !colsRef.current) return;
+    const box = colsRef.current.getBoundingClientRect();
+    if (box.height <= 0) return;
+    setSplit(Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, ((event.clientY - box.top) / box.height) * 100)));
+  };
+  const endSplit = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* already released */ }
+    document.documentElement.classList.remove("st-resizing");
+    setSplit((now) => { try { localStorage.setItem(SPLIT_KEY, String(Math.round(now))); } catch { /* not saved */ } return now; });
+  };
 
   const onDrop = (event: DragEvent, index: number) => {
     event.preventDefault();
@@ -119,7 +148,11 @@ export default function QueueDrawer(props: QueueDrawerProps) {
   };
 
   const cols = (
-        <div className="st-drawer__cols">
+        <div
+          className="st-drawer__cols"
+          ref={colsRef}
+          style={props.embedded ? { gridTemplateRows: `minmax(0, ${split}fr) 10px minmax(0, ${100 - split}fr)` } : undefined}
+        >
           <div className="st-dcol" aria-label="Queue">
             <div className="st-dcol__head">
               <strong>Queue</strong>
@@ -134,6 +167,20 @@ export default function QueueDrawer(props: QueueDrawerProps) {
               {queue.map((c, i) => row(c, i, "queue"))}
             </div>
           </div>
+          {props.embedded && (
+            <div
+              className="st-qsplit"
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label="Make Queue or Suggestions taller"
+              title="Drag up or down to resize (double-click to reset)"
+              onPointerDown={(e) => { if (e.button !== 0) return; e.preventDefault(); dragging.current = true; e.currentTarget.setPointerCapture(e.pointerId); document.documentElement.classList.add("st-resizing"); }}
+              onPointerMove={moveSplit}
+              onPointerUp={endSplit}
+              onPointerCancel={endSplit}
+              onDoubleClick={() => { setSplit(50); try { localStorage.setItem(SPLIT_KEY, "50"); } catch { /* not saved */ } }}
+            />
+          )}
           <div className="st-dcol" aria-label="Suggestions">
             <div className="st-dcol__head">
               <strong>Suggestions</strong>

@@ -2,7 +2,7 @@
  * broadcastSettingsService.ts — Manage broadcast destinations, profiles, and stream keys.
  *
  * Allows tying multiple social media channels (YouTube, Facebook, Kick, Twitch, etc.)
- * to a specific Person/Profile (e.g. "Senior Pastor", "Pastor Profile (Guest)", "Youth Church")
+ * to a profile (e.g. "Sunday Service", "Midweek Service", or a department or speaker)
  * with a friendly nickname for 1-click switching in Make Church Eazy and OBS Studio.
  */
 
@@ -30,8 +30,8 @@ export interface BroadcastChannel {
 
 export interface BroadcastPersonProfile {
   id: string;
-  name: string; // Full label e.g. "Guest Minister"
-  nickname: string; // Short label e.g. "Guest"
+  name: string; // Full label e.g. "Sunday Service"
+  nickname: string; // Short label e.g. "Sunday"
   color: string; // Accent color hex
   channels: BroadcastChannel[];
   activeChannelId?: string; // Currently selected active channel for direct streaming
@@ -150,13 +150,13 @@ export const PLATFORM_KEY_GUIDES: Record<BroadcastPlatform, PlatformKeyGuide> = 
 
 export const DEFAULT_PROFILES: BroadcastPersonProfile[] = [
   {
-    id: "profile-senior-pastor",
-    name: "Senior Pastor (Sunday Service)",
-    nickname: "Senior Pastor",
+    id: "profile-sunday-service",
+    name: "Sunday Service",
+    nickname: "Sunday",
     color: "#F59E0B",
     channels: [
       {
-        id: "ch-senior-yt",
+        id: "ch-sunday-yt",
         name: "Church Main YouTube",
         platform: "youtube",
         streamKey: "",
@@ -164,7 +164,7 @@ export const DEFAULT_PROFILES: BroadcastPersonProfile[] = [
         enabled: true,
       },
       {
-        id: "ch-senior-fb",
+        id: "ch-sunday-fb",
         name: "Church Facebook Page",
         platform: "facebook",
         streamKey: "",
@@ -174,41 +174,17 @@ export const DEFAULT_PROFILES: BroadcastPersonProfile[] = [
     ],
   },
   {
-    id: "profile-guest-minister",
-    name: "Guest Minister",
-    nickname: "Guest",
+    id: "profile-midweek-service",
+    name: "Midweek Service",
+    nickname: "Midweek",
     color: "#3B82F6",
     channels: [
       {
-        id: "ch-guest-yt",
-        name: "Guest Minister YouTube Channel",
+        id: "ch-midweek-yt",
+        name: "Midweek YouTube",
         platform: "youtube",
         streamKey: "",
         serverUrl: "Primary YouTube ingest server",
-        enabled: true,
-      },
-    ],
-  },
-  {
-    id: "profile-youth-ministry",
-    name: "Youth Church (Wednesday)",
-    nickname: "Youth Church",
-    color: "#10B981",
-    channels: [
-      {
-        id: "ch-youth-yt",
-        name: "Youth Live YouTube",
-        platform: "youtube",
-        streamKey: "",
-        serverUrl: "Primary YouTube ingest server",
-        enabled: true,
-      },
-      {
-        id: "ch-youth-kick",
-        name: "Youth Stream on Kick",
-        platform: "kick",
-        streamKey: "",
-        serverUrl: "rtmps://fa723fc1b171.global-contribute.live-video.net:443/app/",
         enabled: true,
       },
     ],
@@ -217,11 +193,43 @@ export const DEFAULT_PROFILES: BroadcastPersonProfile[] = [
 
 export const DEFAULT_BROADCAST_STATE: BroadcastStoreState = {
   profiles: DEFAULT_PROFILES,
-  activeProfileId: "profile-senior-pastor",
+  activeProfileId: "profile-sunday-service",
   multistreamMode: "direct",
   cloudflareIngestUrl: "rtmps://live.cloudflare.com:443/live/",
   cloudflareStreamKey: "",
 };
+
+/**
+ * Older versions started everyone with three sample profiles (Senior Pastor, Guest Minister, Youth Church).
+ * If a store still holds exactly those, untouched (no stream key added, nothing renamed or added), it is
+ * swapped for the two generic profiles. Anything the person changed is left alone.
+ */
+const LEGACY_DEFAULTS: Record<string, { name: string; nickname: string; channels: Record<string, string> }> = {
+  "profile-senior-pastor": {
+    name: "Senior Pastor (Sunday Service)",
+    nickname: "Senior Pastor",
+    channels: { "ch-senior-yt": "Church Main YouTube", "ch-senior-fb": "Church Facebook Page" },
+  },
+  "profile-guest-minister": {
+    name: "Guest Minister",
+    nickname: "Guest",
+    channels: { "ch-guest-yt": "Guest Minister YouTube Channel" },
+  },
+  "profile-youth-ministry": {
+    name: "Youth Church (Wednesday)",
+    nickname: "Youth Church",
+    channels: { "ch-youth-yt": "Youth Live YouTube", "ch-youth-kick": "Youth Stream on Kick" },
+  },
+};
+
+export function isUntouchedLegacyDefaults(profiles: BroadcastPersonProfile[]): boolean {
+  if (profiles.length === 0) return false;
+  return profiles.every((p) => {
+    const legacy = LEGACY_DEFAULTS[p.id];
+    if (!legacy || p.name !== legacy.name || p.nickname !== legacy.nickname) return false;
+    return p.channels.every((ch) => legacy.channels[ch.id] === ch.name && !ch.streamKey.trim());
+  });
+}
 
 // In-memory subscribers
 const subscribers = new Set<(state: BroadcastStoreState) => void>();
@@ -304,10 +312,20 @@ export function loadBroadcastStore(): BroadcastStoreState {
       }
     }
 
+    if (isUntouchedLegacyDefaults(chosen.profiles)) {
+      return {
+        ...DEFAULT_BROADCAST_STATE,
+        multistreamMode: chosen.multistreamMode || "direct",
+        cloudflareIngestUrl: chosen.cloudflareIngestUrl || DEFAULT_BROADCAST_STATE.cloudflareIngestUrl,
+        cloudflareStreamKey: chosen.cloudflareStreamKey || "",
+        updatedAt: chosen.updatedAt,
+      };
+    }
+
     const cleanedProfiles = sanitizeProfiles(chosen.profiles);
     return {
       profiles: cleanedProfiles,
-      activeProfileId: chosen.activeProfileId || cleanedProfiles[0]?.id || "profile-senior-pastor",
+      activeProfileId: chosen.activeProfileId || cleanedProfiles[0]?.id || "profile-sunday-service",
       multistreamMode: chosen.multistreamMode || "direct",
       cloudflareIngestUrl: chosen.cloudflareIngestUrl || "rtmps://live.cloudflare.com:443/live/",
       cloudflareStreamKey: chosen.cloudflareStreamKey || "",

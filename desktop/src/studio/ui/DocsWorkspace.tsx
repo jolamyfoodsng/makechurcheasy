@@ -7,13 +7,16 @@
  *             the screen.
  *  Notes      sermon notes (from Verse AI and the Dock's Notes tab); each blank-line block is a slide.
  */
-import { useMemo, useRef, useState } from "react";
-import { CalendarPlus, ChevronDown, ChevronLeft, ChevronUp, Maximize2, ChevronRight, Eye, FileText, Loader2, Minus, NotebookPen, Play, Plus, Search, Upload, X } from "lucide-react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import { CalendarPlus, ChevronDown, ChevronLeft, ChevronUp, Maximize2, ChevronRight, Eye, FileText, Loader2, Minus, NotebookPen, Pencil, Play, Plus, Search, Upload, X } from "lucide-react";
 import type { MediaItem } from "../../library/libraryTypes";
 import type { DockNote } from "../../dock/dockNotesStorage";
 import type { StudioSlide } from "../studioEngine";
 import StudioModal from "./StudioModal";
+import { useNarrow } from "./useNarrow";
 import StudioMenu, { menuAt, type StudioMenuState } from "./StudioMenu";
+import { DOCUMENT_ACCEPT } from "../../services/importSafety";
+import StudioTip, { DOCS_TIPS } from "./StudioTip";
 
 export interface StudioDocument {
   id: string;
@@ -63,15 +66,20 @@ interface DocsWorkspaceProps {
   onScroll: (percent: number) => void;
   /** Which part to show: documents only (Docs), notes only (Text → Notes), or both. */
   mode?: "all" | "documents" | "notes";
+  /** Notes only: the Lines per slide + Translate row, shown above the slides. */
+  tools?: ReactNode;
+  /** Notes only: save changes made in the editor (blank lines between points make the slides). */
+  onSaveNote?: (id: string, changes: { title: string; content: string }) => void;
 }
 
-const DOC_ACCEPT = ".pdf,.docx,.pptx,application/pdf";
+const DOC_ACCEPT = DOCUMENT_ACCEPT;
 
 const IMPORT_CHOICES: Array<{ label: string; sub: string; accept: string }> = [
   { label: "PDF", sub: "One picture per page", accept: ".pdf,application/pdf" },
   { label: "PowerPoint presentation", sub: ".pptx · one picture per slide", accept: ".pptx" },
   { label: "Word document", sub: ".docx · one picture per page", accept: ".docx" },
-  { label: "Any of these", sub: "PDF, PowerPoint or Word, several at once", accept: DOC_ACCEPT },
+  { label: "Text, web page or OpenDocument", sub: ".txt · .md · .rtf · .html · .odt · .odp · one picture per page", accept: ".txt,.md,.markdown,.rtf,.html,.htm,.odt,.odp" },
+  { label: "Any document", sub: "Several files at once. Programs and renamed files are refused.", accept: DOC_ACCEPT },
 ];
 
 export default function DocsWorkspace(props: DocsWorkspaceProps) {
@@ -84,8 +92,11 @@ export default function DocsWorkspace(props: DocsWorkspaceProps) {
   const [zoom, setZoom] = useState(2);
   const [menu, setMenu] = useState<StudioMenuState | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLElement>(null);
+  const narrow = useNarrow(rootRef, 560);
   const [importMenu, setImportMenu] = useState(false);
   const [viewing, setViewing] = useState(false);
+  const [editNote, setEditNote] = useState<{ id: string; title: string; content: string } | null>(null);
   const pickImport = (accept: string) => {
     setImportMenu(false);
     if (fileRef.current) {
@@ -120,7 +131,7 @@ export default function DocsWorkspace(props: DocsWorkspaceProps) {
   ]));
 
   return (
-    <section className="st-split2" aria-label={mode === "notes" ? "Notes" : "Docs"}>
+    <section ref={rootRef} className={`st-split2${narrow ? " is-narrow" : ""}`} aria-label={mode === "notes" ? "Notes" : "Docs"}>
       <div className="st-lib">
         <div className="st-lib__top">
           <div className="st-searchbox">
@@ -131,7 +142,7 @@ export default function DocsWorkspace(props: DocsWorkspaceProps) {
         </div>
         <div className="st-lib__list">
           {showDocs && mode === "all" && <div className="st-lib__group">Documents</div>}
-          {showDocs && docList.length === 0 && <div className="st-empty st-empty--small">{documents.length ? "No document matches." : "Import a PDF, Word or PowerPoint file."}</div>}
+          {showDocs && docList.length === 0 && <div className="st-empty st-empty--small">{documents.length ? "No document matches." : "Import a PDF, Word, PowerPoint or text file."}</div>}
           {showDocs && docList.map((d) => (
             <div key={d.id} className={`st-lib__row${selection?.kind === "doc" && selection.id === d.id ? " is-on" : ""}`}>
               <button type="button" className="st-lib__main" onClick={() => props.onSelect({ kind: "doc", id: d.id })}>
@@ -153,6 +164,7 @@ export default function DocsWorkspace(props: DocsWorkspaceProps) {
         </div>
         {showDocs && (
           <div className="st-lib__foot st-import">
+            <StudioTip tips={DOCS_TIPS()} />
             {importMenu && (
               <div className="st-import__menu" role="menu">
                 {IMPORT_CHOICES.map((c) => (
@@ -165,7 +177,7 @@ export default function DocsWorkspace(props: DocsWorkspaceProps) {
               </div>
             )}
             <button type="button" className="studio-btn studio-btn--primary" onClick={() => setImportMenu((v) => !v)} disabled={Boolean(props.importing)} aria-expanded={importMenu}>
-              {props.importing ? <Loader2 size={13} className="st-spin" /> : <Upload size={13} />} Import Document <ChevronDown size={13} />
+              {props.importing ? <Loader2 size={13} className="st-spin" /> : <Upload size={13} />} Import <ChevronDown size={13} />
             </button>
             <input ref={fileRef} type="file" hidden multiple accept={DOC_ACCEPT} onChange={(e) => { if (e.target.files?.length) props.onImport(e.target.files); e.target.value = ""; }} />
           </div>
@@ -203,8 +215,12 @@ export default function DocsWorkspace(props: DocsWorkspaceProps) {
                   </div>
                 </>
               )}
+              {!isDoc && props.onSaveNote && selection?.kind === "note" && (
+                <button type="button" className="studio-btn" onClick={() => { const n = notes.find((x) => x.id === selection.id); if (n) setEditNote({ id: n.id, title: n.title || "", content: n.content }); }} title="Change the words of this note"><Pencil size={13} /> Edit</button>
+              )}
               <button type="button" className="studio-btn" onClick={props.onScheduleWhole}><CalendarPlus size={13} /> Add to Schedule</button>
             </div>
+            {!isDoc && props.tools}
             <div className={isDoc ? `st-pages__grid st-pages__grid--z${zoom}` : "st-pages__notes"}>
               {slides.length === 0 && <div className="st-empty">{isDoc ? "This document has no pages." : "This note is empty."}</div>}
               {slides.map((slide, i) => {
@@ -253,6 +269,25 @@ export default function DocsWorkspace(props: DocsWorkspaceProps) {
           )}>
           <div className="st-docview">
             <img src={`${base}${slides[selectedIndex]?.media?.url ?? ""}`} alt={`Page ${selectedIndex + 1}`} />
+          </div>
+        </StudioModal>
+      )}
+      {editNote && (
+        <StudioModal title="Edit note" onClose={() => setEditNote(null)}>
+          <div className="st-noteedit">
+            <label>Title<input value={editNote.title} onChange={(e) => setEditNote({ ...editNote, title: e.target.value })} /></label>
+            <label>Words (leave a blank line between slides)
+              <textarea rows={14} value={editNote.content} onChange={(e) => setEditNote({ ...editNote, content: e.target.value })} autoFocus />
+            </label>
+            <div className="st-noteedit__actions">
+              <button type="button" className="studio-btn" onClick={() => setEditNote(null)}>Cancel</button>
+              <button
+                type="button"
+                className="studio-btn studio-btn--primary"
+                disabled={!editNote.content.trim()}
+                onClick={() => { props.onSaveNote?.(editNote.id, { title: editNote.title.trim(), content: editNote.content.trim() }); setEditNote(null); }}
+              >Save</button>
+            </div>
           </div>
         </StudioModal>
       )}

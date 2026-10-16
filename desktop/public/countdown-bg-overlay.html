@@ -59,6 +59,16 @@
       background: rgba(0, 0, 0, 0);
     }
   </style>
+<style id="mce-no-video-ui">
+/* Never show the browser's own play button or video controls (the overlay plays its videos itself). */
+video::-webkit-media-controls,
+video::-webkit-media-controls-enclosure,
+video::-webkit-media-controls-panel,
+video::-webkit-media-controls-overlay-play-button,
+video::-webkit-media-controls-start-playback-button,
+video::-webkit-media-controls-play-button { display: none !important; opacity: 0 !important; visibility: hidden !important; -webkit-appearance: none !important; pointer-events: none !important; }
+video { outline: none; }
+</style>
 </head>
 
 <body>
@@ -140,7 +150,9 @@
             bgVideo.src = vidSrc;
             bgVideo.loop = bg.loop !== false;
             bgVideo.muted = bg.muted !== false;
-            bgVideo.autoplay = true;
+            bgVideo.autoplay = false;
+            bgVideo.preload = "auto";
+            bgVideo.addEventListener("loadeddata", function () { bgVideo.play().catch(function () {}); }, { once: true });
             bgVideo.style.display = "block";
 
             const fit = bg.imageFit || "cover";

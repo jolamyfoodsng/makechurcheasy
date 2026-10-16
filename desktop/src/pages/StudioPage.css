@@ -566,6 +566,8 @@ html.studio-page .studio { height: 100vh; height: 100dvh; }
 /* Verse AI */
 .sx-vai { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
 .sx-vai__bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sx-vai__mic-select { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.sx-vai__mic-select select { min-width: 0; }
 .sx-vai__status { font-size: 12px; color: var(--text-muted); }
 .sx-vai__status.is-on { color: var(--error); font-weight: 700; }
 .sx-vai__warn { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; border-radius: 6px; background: var(--warning-bg); color: var(--warning-hover); font-size: 12px; }

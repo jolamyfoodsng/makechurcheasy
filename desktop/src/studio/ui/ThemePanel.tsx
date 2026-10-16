@@ -67,7 +67,7 @@ export default function ThemePanel({ themes, currentId, mode, forLabel, sample, 
       <div className="st-tp__head">
         <strong>Theme</strong>
         <span className="st-tp__for">{forLabel} · {lookName}</span>
-        <button type="button" className="st-chip" onClick={() => onEdit(themes.find((t) => t.id === currentId) ?? null)} disabled={!themes.some((t) => t.id === currentId)} title="Edit the theme in use"><Pencil size={12} /> Edit Theme</button>
+        <button type="button" className="st-chip" onClick={() => onEdit(themes.find((t) => t.id === currentId) ?? null)} disabled={!themes.some((t) => t.id === currentId)} title="Edit the theme in use"><Pencil size={12} /> <span className="st-chip__lbl">Edit Theme</span></button>
       </div>
 
       {themes.length === 0 ? (
