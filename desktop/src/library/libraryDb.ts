@@ -23,6 +23,12 @@ const MEDIA_UPLOAD_EXTENSIONS = new Set([
 const AUDIO_UPLOAD_EXTENSIONS = new Set([
   "mp3", "wav", "ogg", "oga", "flac", "aac", "m4a", "m4b", "wma", "opus",
 ]);
+const REFERENCE_UPLOAD_NAME = /^ref_[0-9a-f]{32}\.[a-z0-9]+$/i;
+
+/** Virtual upload name of a referenced file (see mediaReferences.ts). */
+export function isReferenceUploadName(name: string | undefined | null): boolean {
+  return Boolean(name && REFERENCE_UPLOAD_NAME.test(name));
+}
 const INTERNAL_UPLOAD_PREFIXES = ["dock_theme_bg_", "dock_theme_box_bg_", "dock_theme_logo_"];
 
 function getUploadMediaType(fileName: string): MediaItem["type"] | null {
@@ -168,6 +174,9 @@ function mergeMediaItems(
       !item.diskFileName
       || !getManagedUploadFileName(item)
       || discoveredFileNames.has(item.diskFileName)
+      // Referenced media lives outside uploads/, so the folder listing
+      // never contains it.
+      || isReferenceUploadName(item.diskFileName)
     ))
     : stored;
   for (const item of [...reconciledStored, ...discovered]) {
@@ -357,6 +366,22 @@ export async function deleteMedia(id: string): Promise<void> {
 
   // Push updated usage counts to the server immediately
   import("../services/usageSync").then((m) => m.triggerUsageSync()).catch(() => { });
+}
+
+/** Merge fields into a stored media item. Returns the updated item. */
+export async function patchMedia(id: string, patch: Partial<MediaItem>): Promise<MediaItem | null> {
+  const items = await getAllMedia();
+  const item = items.find((m) => m.id === id);
+  if (!item) return null;
+  const updated = { ...item, ...patch, id };
+  await withStore("readwrite", (store) => store.put(updated));
+
+  void syncMediaToDock()
+    .then(() => {
+      import("../services/dockBridge").then((m) => m.dockBridge.sendLibraryUpdated());
+    })
+    .catch(() => { });
+  return updated;
 }
 
 /** Rename a media item */

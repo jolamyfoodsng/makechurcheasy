@@ -23,7 +23,20 @@ import { useAuth } from "../contexts/AuthContext";
 import { getEffectivePlan } from "../services/licenseService";
 import { checkEntitlementSync } from "../services/entitlementClient";
 import { openDashboardSubscriptionPlans } from "../services/subscriptionNavigation";
-import { DOCK_MEDIA_ACCEPT, getMediaKind, isSupportedMediaFile } from "../services/mediaValidation";
+import { COMMON_DOCUMENT_EXTENSIONS, DOCK_MEDIA_ACCEPT, getMediaKind, isSupportedMediaFile } from "../services/mediaValidation";
+import {
+  REFERENCE_MEDIA_EXTENSIONS,
+  copyReferenceIntoLibrary,
+  findMissingReferenceItems,
+  getCopyImportedMediaPreference,
+  importMediaPaths,
+  isReferenceMediaItem,
+  listenForNativeFileDrops,
+  mediaKindForPath,
+  pickMediaPaths,
+  relinkReferenceItem,
+  setCopyImportedMediaPreference,
+} from "./mediaReferences";
 import {
   convertDocumentToPageFiles,
   isSupportedDocumentFile,
@@ -301,6 +314,34 @@ export async function saveLibraryMediaFile(file: File, overrideName?: string): P
 /* MediaTab                                                                  */
 /* ========================================================================= */
 
+function fileNameFromPath(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
+}
+
+function isDocumentPath(path: string): boolean {
+  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  return COMMON_DOCUMENT_EXTENSIONS.includes(ext);
+}
+
+/** Documents are converted to page images, so they still need their bytes. */
+async function readDocumentFiles(paths: string[]): Promise<File[]> {
+  const { readFile } = await import("@tauri-apps/plugin-fs");
+  return Promise.all(paths.map(async (path) => new File([await readFile(path)], fileNameFromPath(path))));
+}
+
+/** How many more images/videos the current plan allows. */
+async function getMediaQuotaRoom(effectivePlan: string): Promise<{ image: number; video: number }> {
+  const { limit: imageLimit } = checkEntitlementSync("images", effectivePlan);
+  const { limit: videoLimit } = checkEntitlementSync("videos", effectivePlan);
+  const currentItems = await getAllMedia();
+  const imageCount = currentItems.filter((m) => m.type === "image").length;
+  const videoCount = currentItems.filter((m) => m.type === "video").length;
+  return {
+    image: imageLimit === -1 ? Infinity : Math.max(0, imageLimit - imageCount),
+    video: videoLimit === -1 ? Infinity : Math.max(0, videoLimit - videoCount),
+  };
+}
+
 export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?: string; openReceiver?: boolean }) {
   const { t } = useTranslation();
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -319,6 +360,8 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
   const [starterPictures, setStarterPictures] = useState<TemplatePictureAsset[]>([]);
   const [starterPicturesLoading, setStarterPicturesLoading] = useState(false);
   const [starterPictureDownloading, setStarterPictureDownloading] = useState<string | null>(null);
+  const [missingIds, setMissingIds] = useState<Set<string>>(() => new Set());
+  const [copyImportedMedia, setCopyImportedMedia] = useState(getCopyImportedMediaPreference);
   const menuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCounterRef = useRef(0);
@@ -346,6 +389,8 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
         if (cancelled) return;
         setItems(items);
         setLoading(false);
+        const missing = await findMissingReferenceItems(items);
+        if (!cancelled) setMissingIds(missing);
       } catch (err) {
         if (cancelled) return;
         console.error("[MediaTab] Failed to load media:", err);
@@ -590,6 +635,134 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
     }
   }, [effectivePlan, reload, t]);
 
+  const replaceItem = useCallback((item: MediaItem) => {
+    setItems((current) => current.map((candidate) => (candidate.id === item.id ? item : candidate)));
+  }, []);
+
+  /** Import files by path: the library references them instead of copying. */
+  const handlePathImport = useCallback(async (paths: string[]) => {
+    const mediaPaths = paths.filter((path) => mediaKindForPath(path));
+    const documentPaths = paths.filter((path) => !mediaKindForPath(path) && isDocumentPath(path));
+    for (const path of paths) {
+      if (!mediaKindForPath(path) && !isDocumentPath(path)) {
+        alert(`${t("library.mediaTab.unsupportedFileType")}: "${fileNameFromPath(path)}"`);
+      }
+    }
+    if (mediaPaths.length === 0 && documentPaths.length === 0) return;
+
+    setPageUploading(true);
+    try {
+      if (mediaPaths.length > 0) {
+        const room = await getMediaQuotaRoom(effectivePlan);
+        let overLimit = false;
+        const allowed = mediaPaths.filter((path) => {
+          const kind = mediaKindForPath(path);
+          if (kind !== "image" && kind !== "video") return true;
+          if (room[kind] <= 0) {
+            overLimit = true;
+            return false;
+          }
+          room[kind] -= 1;
+          return true;
+        });
+
+        const result = await importMediaPaths(allowed, {
+          copyIntoLibrary: getCopyImportedMediaPreference(),
+          onItemUpdated: replaceItem,
+        });
+        if (result.saved.length > 0) {
+          const savedIds = new Set(result.saved.map((item) => item.id));
+          setItems((current) => [...result.saved, ...current.filter((item) => !savedIds.has(item.id))]);
+        }
+        for (const failure of result.failed) {
+          console.warn("[MediaTab] Could not add media:", failure);
+          alert(`${t("library.mediaTab.failedToSave")}: "${fileNameFromPath(failure.path)}"`);
+        }
+        if (overLimit) void openDashboardSubscriptionPlans();
+      }
+
+      if (documentPaths.length > 0) {
+        await handleDirectUpload(await readDocumentFiles(documentPaths));
+      }
+    } catch (error) {
+      console.error("[MediaTab] Failed to add media:", error);
+      alert(t("library.mediaTab.failedToSaveMultiple"));
+    } finally {
+      setPageUploading(false);
+    }
+  }, [effectivePlan, handleDirectUpload, replaceItem, t]);
+
+  /** Native picker in the desktop app (real paths); file input elsewhere. */
+  const openImportPicker = useCallback(async () => {
+    if (!isTauriRuntime()) {
+      fileInputRef.current?.click();
+      return;
+    }
+    let paths: string[];
+    try {
+      paths = await pickMediaPaths({ extensions: [...REFERENCE_MEDIA_EXTENSIONS, ...COMMON_DOCUMENT_EXTENSIONS] });
+    } catch (error) {
+      console.warn("[MediaTab] Native file picker unavailable:", error);
+      fileInputRef.current?.click();
+      return;
+    }
+    if (paths.length > 0) await handlePathImport(paths);
+  }, [handlePathImport]);
+
+  // Native drops carry file paths, so dropped media is referenced too.
+  const handlePathImportRef = useRef(handlePathImport);
+  handlePathImportRef.current = handlePathImport;
+  useEffect(() => {
+    if (mediaView !== "library") return;
+    let unlisten: (() => void) | null = null;
+    let disposed = false;
+    void listenForNativeFileDrops({
+      onHover: setPageDragging,
+      onDrop: (paths) => {
+        setShowAddModal(false);
+        void handlePathImportRef.current(paths);
+      },
+    }).then((stop) => {
+      if (disposed) stop();
+      else unlisten = stop;
+    }).catch((error) => console.warn("[MediaTab] Native drag-and-drop unavailable:", error));
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [mediaView]);
+
+  const handleRelink = useCallback(async (item: MediaItem) => {
+    try {
+      const updated = await relinkReferenceItem(item);
+      if (!updated) return;
+      replaceItem(updated);
+      setMissingIds((current) => {
+        const next = new Set(current);
+        next.delete(item.id);
+        return next;
+      });
+    } catch (error) {
+      console.error("[MediaTab] Could not relink media:", error);
+      alert(String(error));
+    }
+  }, [replaceItem]);
+
+  const handleMakeLocalCopy = useCallback(async (item: MediaItem) => {
+    try {
+      const updated = await copyReferenceIntoLibrary(item);
+      if (updated) replaceItem(updated);
+    } catch (error) {
+      console.error("[MediaTab] Could not copy media into the library:", error);
+      alert(String(error));
+    }
+  }, [replaceItem]);
+
+  const handleCopyPreferenceChange = useCallback((value: boolean) => {
+    setCopyImportedMedia(value);
+    setCopyImportedMediaPreference(value);
+  }, []);
+
   return (
     <div
       className={`lib-media-shell${pageDragging ? " lib-media-shell--dragging" : ""}`}
@@ -707,11 +880,25 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
               </span>
             )}
 
+            {isTauriRuntime() && (
+              <label
+                className="lib-media-copy-toggle"
+                title={t("library.mediaTab.copyImportedHint", "Off: the library links to your files where they are. On: a copy is also kept in the MakeChurchEazy folder.")}
+              >
+                <input
+                  type="checkbox"
+                  checked={copyImportedMedia}
+                  onChange={(event) => handleCopyPreferenceChange(event.target.checked)}
+                />
+                <span>{t("library.mediaTab.copyImported", "Copy into library")}</span>
+              </label>
+            )}
+
             <button
               type="button"
               className="lib-media-add-action-btn"
               onClick={() => {
-                fileInputRef.current?.click();
+                void openImportPicker();
               }}
               title={t("library.mediaTab.addMedia", "Add Media")}
             >
@@ -782,7 +969,7 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
                 )}
                 <div className="lib-empty-actions">
                   <button className="lib-add-btn" onClick={() => {
-                    fileInputRef.current?.click();
+                    void openImportPicker();
                   }} title={t("library.mediaTab.addMedia")}>
                     <Icon name="add" size={20} />
                     {t("library.mediaTab.addMedia")}
@@ -794,7 +981,7 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
                 <Icon name="perm_media" size={48} style={{ opacity: 0.3 }} />
                 <p>{t("library.mediaTab.noMediaFound")}</p>
                 <button className="lib-add-btn" onClick={() => {
-                  fileInputRef.current?.click();
+                  void openImportPicker();
                 }} title={t("library.mediaTab.addMedia")}>
                   <Icon name="add" size={20} />
                   {t("library.mediaTab.addMedia")}
@@ -854,6 +1041,19 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
                 <span className="lib-media-badge-type">
                   {(m.type === "video" ? t("library.mediaTab.preview.video", "Video") : t("library.mediaTab.preview.image", "Image")).toUpperCase()}
                 </span>
+                {missingIds.has(m.id) && (
+                  <button
+                    type="button"
+                    className="lib-media-badge-missing"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleRelink(m);
+                    }}
+                    title={t("library.mediaTab.missingFile.locate", "Locate file…")}
+                  >
+                    {t("library.mediaTab.missingFile.badge", "File missing")}
+                  </button>
+                )}
                 {/* Duration badge */}
                 {m.type === "video" && m.durationSec != null && (
                   <span className="lib-media-badge-dur">
@@ -950,6 +1150,34 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
                           <Icon name="edit" size={16} />
                           {t("library.mediaTab.rename")}
                         </button>
+                        {isReferenceMediaItem(m) && m.referenceId && (
+                          <button
+                            type="button"
+                            className="lib-media-menu-action"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMenuOpenId(null);
+                              void handleRelink(m);
+                            }}
+                            title={t("library.mediaTab.missingFile.locate", "Locate file…")}>
+                            <Icon name="folder" size={16} />
+                            {t("library.mediaTab.missingFile.locate", "Locate file…")}
+                          </button>
+                        )}
+                        {isReferenceMediaItem(m) && m.referenceId && m.storage !== "copy" && !missingIds.has(m.id) && (
+                          <button
+                            type="button"
+                            className="lib-media-menu-action"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMenuOpenId(null);
+                              void handleMakeLocalCopy(m);
+                            }}
+                            title={t("library.mediaTab.makeLocalCopyHint", "Keep a copy in the MakeChurchEazy library so it plays even if the original moves")}>
+                            <Icon name="content_copy" size={16} />
+                            {t("library.mediaTab.makeLocalCopy", "Make a local copy")}
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="lib-media-menu-action lib-media-menu-action--danger"
@@ -985,7 +1213,14 @@ export function MediaTab({ focusMediaId, openReceiver = false }: { focusMediaId?
         <div className="lib-modal-backdrop" onClick={() => setDeleteConfirmId(null)}>
           <div className="lib-confirm-modal" onClick={(e) => e.stopPropagation()}>
             <h3>{t("library.mediaTab.deleteConfirm.title")}</h3>
-            <p>{t("library.mediaTab.deleteConfirm.message")}</p>
+            <p>
+              {(() => {
+                const target = items.find((item) => item.id === deleteConfirmId);
+                return target && isReferenceMediaItem(target) && target.storage !== "copy"
+                  ? t("library.mediaTab.deleteConfirm.referenceMessage", "This removes it from the library. The original file stays on your computer.")
+                  : t("library.mediaTab.deleteConfirm.message");
+              })()}
+            </p>
             <div className="lib-confirm-actions">
               <button className="lib-confirm-cancel" onClick={() => setDeleteConfirmId(null)} title={t("common.cancel")}>{t("common.cancel")}</button>
               <button className="lib-confirm-delete" onClick={() => handleDelete(deleteConfirmId)} title={t("common.delete")}>{t("common.delete")}</button>

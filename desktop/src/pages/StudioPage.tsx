@@ -53,7 +53,7 @@ import { BROADCAST_GRAPHICS_UPDATED_EVENT, loadSavedBroadcastGraphics } from "..
 import { consumeFreeUse, freeLeftNote, freeLimitMessage } from "../studio/studioAccess";
 import { clearStudioLogo, readStudioPrefs, saveStudioLogo, studioLogoUrl } from "../studio/studioPrefs";
 import type { VoiceBibleCandidate } from "../services/voiceBibleTypes";
-import { getAllMedia } from "../library/libraryDb";
+import { deleteMedia, getAllMedia } from "../library/libraryDb";
 import type { MediaItem } from "../library/libraryTypes";
 import type { ServicePlanItem } from "../service-planner/types";
 import { getChapter } from "../bible/bibleData";
@@ -113,7 +113,17 @@ import { candidateKey, decideAutoProjection, isAutoProjectable, mentionKey, type
 import { planDraftForSlide, planItemMatchesSlide, resolvePlanItem, type PlanTarget } from "../studio/studioItems";
 import { appendToSchedule, markScheduleItemDone, nextScheduleItemId, readActivePlan, recordProjected } from "../studio/studioSchedule";
 import { DOCK_SCHEDULE_CHANGED_EVENT } from "../dock/dockScheduleService";
-import { importToLibrary } from "../studio/studioImport";
+import { importPathsToLibrary, importToLibrary, type ImportResult } from "../studio/studioImport";
+import {
+  REFERENCE_MEDIA_EXTENSIONS,
+  copyReferenceIntoLibrary,
+  findMissingReferenceItems,
+  isTauriRuntime,
+  listenForNativeFileDrops,
+  pickMediaPaths,
+  relinkReferenceItem,
+} from "../library/mediaReferences";
+import { COMMON_DOCUMENT_EXTENSIONS } from "../services/mediaValidation";
 import VerseAiSidebar, { VAI_NEXT_TAB_EVENT, VerseAiRail } from "../studio/ui/VerseAiSidebar";
 import QueueDrawer from "../studio/ui/QueueDrawer";
 import BroadcastGraphicsDrawer, { type ProjectedGraphic } from "../studio/ui/BroadcastGraphicsDrawer";
@@ -478,9 +488,21 @@ export default function StudioPage() {
   const [notes, setNotes] = useState<DockNote[]>([]);
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [importing, setImporting] = useState("");
+  const [missingMediaIds, setMissingMediaIds] = useState<Set<string>>(() => new Set());
+  const [mediaDropActive, setMediaDropActive] = useState(false);
 
   const loadMedia = useCallback(() => {
-    void getAllMedia().then(setMedia).catch(() => undefined);
+    void getAllMedia()
+      .then((list) => {
+        setMedia(list);
+        return findMissingReferenceItems(list).then(setMissingMediaIds);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  /** A referenced item got its details, thumbnail or library copy in the background. */
+  const replaceMediaItem = useCallback((item: MediaItem) => {
+    setMedia((current) => current.map((candidate) => (candidate.id === item.id ? item : candidate)));
   }, []);
 
   useEffect(() => {
@@ -1490,22 +1512,106 @@ export default function StudioPage() {
     if (slide) void project(slide);
   }, [mediaDeck, project]);
 
+  const reportImport = useCallback((result: ImportResult, what: "media" | "document") => {
+    const parts: string[] = [];
+    if (result.imported) parts.push(`${result.imported} ${what === "document" ? "page" : "file"}${result.imported === 1 ? "" : "s"} added`);
+    if (result.overLimit) parts.push(`${result.overLimit} skipped (your plan's limit is reached)`);
+    if (result.unsupported.length) parts.push(`not supported: ${result.unsupported.join(", ")}`);
+    say(parts.join(" · ") || "Nothing was imported.", result.imported ? "info" : "error");
+  }, [say]);
+
   const runImport = useCallback(async (files: FileList, what: "media" | "document") => {
     setImporting(what === "document" ? "Reading the document…" : "Importing…");
     try {
       const result = await importToLibrary(files, getEffectivePlan(user), (status) => setImporting(status));
       loadMedia();
-      const parts: string[] = [];
-      if (result.imported) parts.push(`${result.imported} ${what === "document" ? "page" : "file"}${result.imported === 1 ? "" : "s"} added`);
-      if (result.overLimit) parts.push(`${result.overLimit} skipped (your plan's limit is reached)`);
-      if (result.unsupported.length) parts.push(`not supported: ${result.unsupported.join(", ")}`);
-      say(parts.join(" · ") || "Nothing was imported.", result.imported ? "info" : "error");
+      reportImport(result, what);
     } catch (err) {
       say(err instanceof Error ? `Import failed: ${err.message}` : "Import failed.", "error");
     } finally {
       setImporting("");
     }
-  }, [user, loadMedia, say]);
+  }, [user, loadMedia, reportImport, say]);
+
+  // Desktop app: pictures, videos and sound are referenced where they are (no copy), so even a
+  // large video is in the library at once.
+  const runPathImport = useCallback(async (paths: string[]) => {
+    if (paths.length === 0) return;
+    setImporting("Importing…");
+    try {
+      const result = await importPathsToLibrary(paths, getEffectivePlan(user), {
+        onProgress: (status) => setImporting(status),
+        onItemUpdated: replaceMediaItem,
+      });
+      loadMedia();
+      reportImport(result, "media");
+    } catch (err) {
+      say(err instanceof Error ? `Import failed: ${err.message}` : "Import failed.", "error");
+    } finally {
+      setImporting("");
+    }
+  }, [user, loadMedia, replaceMediaItem, reportImport, say]);
+
+  const openMediaPicker = useCallback(async () => {
+    try {
+      const paths = await pickMediaPaths({ extensions: [...REFERENCE_MEDIA_EXTENSIONS, ...COMMON_DOCUMENT_EXTENSIONS] });
+      await runPathImport(paths);
+    } catch (err) {
+      say(err instanceof Error ? `Import failed: ${err.message}` : "Import failed.", "error");
+    }
+  }, [runPathImport, say]);
+
+  const relinkMedia = useCallback(async (id: string) => {
+    const item = media.find((candidate) => candidate.id === id);
+    if (!item) return;
+    try {
+      const updated = await relinkReferenceItem(item);
+      if (!updated) return;
+      replaceMediaItem(updated);
+      setMissingMediaIds((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+      say(`“${updated.name}” found again.`);
+    } catch (err) {
+      say(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [media, replaceMediaItem, say]);
+
+  const copyMediaIntoLibrary = useCallback(async (id: string) => {
+    const item = media.find((candidate) => candidate.id === id);
+    if (!item) return;
+    say(`Copying “${item.name}” into your library…`);
+    try {
+      const updated = await copyReferenceIntoLibrary(item);
+      if (updated) replaceMediaItem(updated);
+      say(`“${item.name}” is now kept in your library.`);
+    } catch (err) {
+      say(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [media, replaceMediaItem, say]);
+
+  // Files dropped on the window while the Media view is open go straight into the library.
+  const runPathImportRef = useRef(runPathImport);
+  runPathImportRef.current = runPathImport;
+  useEffect(() => {
+    if (view !== "media" || !isTauriRuntime()) return;
+    let stop: (() => void) | null = null;
+    let disposed = false;
+    void listenForNativeFileDrops({
+      onHover: setMediaDropActive,
+      onDrop: (paths) => void runPathImportRef.current(paths),
+    }).then((unlisten) => {
+      if (disposed) unlisten();
+      else stop = unlisten;
+    }).catch(() => undefined);
+    return () => {
+      disposed = true;
+      stop?.();
+      setMediaDropActive(false);
+    };
+  }, [view]);
 
   // Fit / Fill for a document page that is on the screen applies at once.
   const changeDocFit = useCallback((fit: "contain" | "cover") => {
@@ -2268,6 +2374,21 @@ export default function StudioPage() {
         onProject={projectMedia}
         onSchedule={(id) => schedule(mediaDeck.find((s) => s.origin?.id === id) ?? null)}
         onImport={(files) => void runImport(files, "media")}
+        onImportClick={isTauriRuntime() ? () => void openMediaPicker() : undefined}
+        dropActive={mediaDropActive}
+        missingIds={missingMediaIds}
+        onRelink={(id) => void relinkMedia(id)}
+        onMakeCopy={(id) => void copyMediaIntoLibrary(id)}
+        onDelete={async (ids) => {
+          try {
+            for (const id of ids) {
+              await deleteMedia(id);
+              if (id === mediaId) setMediaId("");
+            }
+          } finally {
+            loadMedia();
+          }
+        }}
         importing={importing}
         onSlideshow={startSlideshow}
         resumeIndexFor={slideshow.resumeIndexFor}
