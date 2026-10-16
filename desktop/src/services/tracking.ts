@@ -152,17 +152,21 @@ export function trackEvent(
   event: string,
   properties?: Record<string, unknown>,
 ): void {
-  const request = buildTrackingRequest(event, properties);
-  if (!request) return;
+  try {
+    const request = buildTrackingRequest(event, properties);
+    if (!request) return;
 
-  void fetch(request.url, {
-    method: "POST",
-    headers: request.headers,
-    body: request.body,
-    keepalive: true,
-  }).catch(() => {
-    // Tracking should never break the app
-  });
+    void fetch(request.url, {
+      method: "POST",
+      headers: request.headers,
+      body: request.body,
+      keepalive: true,
+    }).catch(() => {
+      // Tracking should never break the app
+    });
+  } catch {
+    // Storage or analytics failures must never interrupt the user's action.
+  }
 }
 
 // ── Broadcast Graphics usage (admin: who added / showed which graphic) ─────
