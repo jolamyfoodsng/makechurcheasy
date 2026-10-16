@@ -383,6 +383,16 @@ function withCompareColumns(
   return { ...slide, compare: columns, compareLayout };
 }
 
+function localUploadNameFromMediaUrl(url: string): string | null {
+  const match = url.split(/[?#]/, 1)[0].match(/(?:^|\/)uploads\/([^/]+)$/i);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+}
+
 // The theme editor opens in a window on top of the Studio (never a different page).
 const ThemeCreatorModal = lazy(() => import("./ThemeCreatorModal"));
 const WorshipSongModal = lazy(() => import("../worship/WorshipSongModal"));
@@ -830,6 +840,31 @@ export default function StudioPage() {
 
   const project = useCallback(async (slide: StudioSlide | null, opts: { scheduleItemId?: string | null } = {}): Promise<boolean> => {
     if (!slide) return false;
+    let readySlide = slide;
+    if (slide.media?.kind === "video") {
+      const fileName = localUploadNameFromMediaUrl(slide.media.url);
+      if (fileName) {
+        let preparationNoticeShown = false;
+        const preparationNotice = window.setTimeout(() => {
+          preparationNoticeShown = true;
+          say(`Preparing “${slideName(slide)}” for Program playback…`);
+        }, 700);
+        try {
+          const prepared = await invoke<{ fileName: string; converted: boolean }>("prepare_studio_video_for_program", { fileName });
+          readySlide = {
+            ...slide,
+            media: { ...slide.media, url: `/uploads/${encodeURIComponent(prepared.fileName)}` },
+          };
+          if (preparationNoticeShown) say(`“${slideName(slide)}” is ready for Program playback.`);
+        } catch (error) {
+          console.warn("[Studio] Could not prepare video for Program playback:", error);
+          say("This video could not be prepared for Program playback. Try an MP4 with H.264 video and AAC audio, then import it again.", "error");
+          return false;
+        } finally {
+          window.clearTimeout(preparationNotice);
+        }
+      }
+    }
     // Showing words means the operator wants them seen: "camera only" gives way to the words.
     const cam = cameraRef.current;
     let stagedLayout = cam.layout;

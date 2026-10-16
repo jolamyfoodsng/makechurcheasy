@@ -6,8 +6,8 @@
  *   Words   (the card above) on / off.
  * Nothing goes on the screen until Send to Screen (or Straight to screen is on).
  */
-import { useEffect, useRef } from "react";
-import { CameraOff, Video } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CameraOff, RefreshCw, Video } from "lucide-react";
 import type { StudioCameraApi } from "../useStudioCamera";
 
 interface CameraCardProps {
@@ -52,8 +52,20 @@ function Preview({ stream, on }: { stream: MediaStream | null; on: boolean }) {
 
 export default function SharedControls(props: CameraCardProps) {
   const { camera } = props;
+  const [refreshing, setRefreshing] = useState(false);
   const cameraOn = camera.enabled && camera.layout !== "hidden";
   const showHint = Boolean(props.cameraHint) && cameraOn && props.wordsOn;
+
+  const refreshCameras = async () => {
+    setRefreshing(true);
+    try {
+      await camera.refresh();
+    } catch (err) {
+      console.warn("[Studio] Could not refresh camera list:", err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   return (
     <section className="st-lo__mini st-camcard" aria-label="Camera">
@@ -73,6 +85,17 @@ export default function SharedControls(props: CameraCardProps) {
           {camera.devices.length === 0 && <option value="">No camera found</option>}
           {camera.devices.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
         </select>
+        <button
+          type="button"
+          className="st-iconbtn st-iconbtn--sm st-cm__refresh"
+          onClick={() => void refreshCameras()}
+          disabled={refreshing}
+          aria-label="Refresh camera list"
+          title={refreshing ? "Refreshing camera list…" : "Refresh camera list"}
+          aria-busy={refreshing}
+        >
+          <RefreshCw size={14} className={refreshing ? "st-spin" : undefined} />
+        </button>
         {props.showToggle !== false && <button
           type="button"
           className={`st-cm__btn st-cm__toggle${cameraOn ? " is-on" : " is-off"}`}

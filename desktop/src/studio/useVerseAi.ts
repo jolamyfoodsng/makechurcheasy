@@ -74,6 +74,8 @@ export interface StudioVerseAi {
   /** The last few finished sentences (to explain suggestions). */
   recentSpeech: string;
   mics: Array<{ id: string; label: string }>;
+  refreshingMics: boolean;
+  refreshMics: () => Promise<void>;
   mic: string;
   setMic: (id: string) => void;
   /** Microphone sensitivity in percent (100 = as recorded). */
@@ -100,6 +102,7 @@ export function useVerseAi(enabled: boolean): StudioVerseAi {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [mics, setMics] = useState<Array<{ id: string; label: string }>>([]);
+  const [refreshingMics, setRefreshingMics] = useState(false);
   const [mic, setMicState] = useState(() => readNativeDockSetting<string>(MIC_KEY) || "");
   const [gain, setGainState] = useState(() => {
     const value = Number(getMvSettings().inputGain);
@@ -165,6 +168,22 @@ export function useVerseAi(enabled: boolean): StudioVerseAi {
   const setMic = useCallback((id: string) => {
     setMicState(id);
     writeNativeDockSetting(MIC_KEY, id);
+  }, []);
+
+  const refreshMics = useCallback(async () => {
+    setRefreshingMics(true);
+    try {
+      const service = serviceRef.current ?? (await import("../services/lmDockService")).lmDockService;
+      serviceRef.current = service;
+      const list = await service.getMics();
+      setMics(list);
+      setMicState((current) => current && list.some((device) => device.id === current) ? current : list[0]?.id ?? "");
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? `Could not refresh microphones: ${err.message}` : "Could not refresh microphones.");
+    } finally {
+      setRefreshingMics(false);
+    }
   }, []);
 
   const setGain = useCallback((percent: number) => {
@@ -327,6 +346,8 @@ export function useVerseAi(enabled: boolean): StudioVerseAi {
     suggestions,
     recentSpeech,
     mics,
+    refreshingMics,
+    refreshMics,
     mic,
     setMic,
     gain,

@@ -22,7 +22,7 @@
         "minHeight": 600,
         "center": true,
         "visible": true,
-        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows"
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required"
       }
     ],
     "security": {
@@ -58,6 +58,7 @@
       "../dist/lm-dock.html",
       "resources/obs-move-transition/**/*",
       "resources/obs-mce-bridge/**/*",
+      "resources/ffmpeg/**/*",
       "resources/app_icons/**/*",
       "../dist/app_icons/**/*",
       "../dist/animated-lower-thirds/**/*",

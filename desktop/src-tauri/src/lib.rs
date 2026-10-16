@@ -51,6 +51,7 @@ use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::{mpsc, Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{image::Image, Emitter, Manager};
+use uuid::Uuid;
 
 /// The port the overlay server is running on (set at startup).
 /// Always canonical port 45678 so OBS custom browser docks and overlays never change.
@@ -1573,6 +1574,11 @@ fn save_upload_file(file_name: String, file_data: Vec<u8>) -> Result<String, Str
     let file_path = uploads_dir.join(&safe_file_name);
     fs::write(&file_path, &file_data)
         .map_err(|e| format!("Failed to write file '{}': {}", safe_file_name, e))?;
+    let prepared_video = uploads_dir.join(studio_video_cache_name(&safe_file_name));
+    if prepared_video.is_file() {
+        fs::remove_file(&prepared_video)
+            .map_err(|error| format!("Failed to refresh prepared Studio video: {error}"))?;
+    }
 
     let abs_path = file_path
         .to_str()
@@ -1585,6 +1591,191 @@ fn save_upload_file(file_name: String, file_data: Vec<u8>) -> Result<String, Str
         file_data.len()
     );
     Ok(abs_path)
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StudioVideoPreparation {
+    file_name: String,
+    converted: bool,
+}
+
+fn studio_ffmpeg_platform_dir() -> Result<&'static str, String> {
+    #[cfg(target_os = "windows")]
+    {
+        return Ok("windows-x64");
+    }
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        return Ok("macos-arm64");
+    }
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    {
+        return Ok("macos-x64");
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        Err("Studio video preparation is supported on Windows and macOS.".to_string())
+    }
+}
+
+fn studio_ffmpeg_path(app: &tauri::AppHandle, executable: &str) -> Result<PathBuf, String> {
+    let platform_dir = studio_ffmpeg_platform_dir()?;
+    let mut roots = Vec::new();
+    if let Ok(resource_dir) = app.path().resource_dir() {
+        roots.push(resource_dir);
+    }
+    roots.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+
+    for root in roots {
+        for prefix in [Path::new("ffmpeg"), Path::new("resources/ffmpeg")] {
+            let candidate = root
+                .join(prefix)
+                .join(platform_dir)
+                .join("bin")
+                .join(executable);
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
+        }
+    }
+
+    Err(format!("The bundled FFmpeg runtime is missing ({platform_dir}/{executable}). Reinstall or update MakeChurchEazy, then try again."))
+}
+
+fn studio_video_cache_name(file_name: &str) -> String {
+    let digest = Sha256::digest(file_name.as_bytes());
+    let hex = format!("{digest:x}");
+    format!("studio_video_{}.mp4", &hex[..24])
+}
+
+fn studio_ffmpeg_command(executable: &Path) -> std::process::Command {
+    std::process::Command::new(executable)
+}
+
+fn studio_video_is_browser_compatible(ffprobe: &Path, input: &Path) -> bool {
+    let output = match studio_ffmpeg_command(ffprobe)
+        .args([
+            "-v", "error", "-show_entries", "format=format_name:stream=codec_type,codec_name,pix_fmt",
+            "-of", "json",
+        ])
+        .arg(input)
+        .output()
+    {
+        Ok(output) if output.status.success() => output,
+        _ => return false,
+    };
+
+    let Ok(metadata) = serde_json::from_slice::<serde_json::Value>(&output.stdout) else {
+        return false;
+    };
+    let format = metadata
+        .get("format")
+        .and_then(|value| value.get("format_name"))
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    let is_mp4 = format.split(',').any(|name| name == "mp4");
+    let streams = metadata.get("streams").and_then(serde_json::Value::as_array);
+    let Some(streams) = streams else { return false };
+    let video = streams.iter().find(|stream| {
+        stream.get("codec_type").and_then(serde_json::Value::as_str) == Some("video")
+    });
+    let audio = streams.iter().find(|stream| {
+        stream.get("codec_type").and_then(serde_json::Value::as_str) == Some("audio")
+    });
+    let Some(video) = video else { return false };
+    let video_codec = video.get("codec_name").and_then(serde_json::Value::as_str);
+    let pixel_format = video.get("pix_fmt").and_then(serde_json::Value::as_str);
+    let audio_supported = audio
+        .map(|stream| stream.get("codec_name").and_then(serde_json::Value::as_str) == Some("aac"))
+        .unwrap_or(true);
+
+    is_mp4
+        && video_codec == Some("h264")
+        && matches!(pixel_format, Some("yuv420p" | "yuvj420p"))
+        && audio_supported
+}
+
+fn prepare_studio_video(
+    uploads_dir: &Path,
+    file_name: &str,
+    ffmpeg: &Path,
+    ffprobe: &Path,
+) -> Result<StudioVideoPreparation, String> {
+    let input = uploads_dir.join(file_name);
+    if !input.is_file() {
+        return Err("The selected video file is no longer in the media library. Import it again, then try once more.".to_string());
+    }
+    if studio_video_is_browser_compatible(ffprobe, &input) {
+        return Ok(StudioVideoPreparation { file_name: file_name.to_string(), converted: false });
+    }
+
+    let output_name = studio_video_cache_name(file_name);
+    let output = uploads_dir.join(&output_name);
+    if output.is_file() && fs::metadata(&output).map(|metadata| metadata.len() > 0).unwrap_or(false) {
+        return Ok(StudioVideoPreparation { file_name: output_name, converted: true });
+    }
+
+    let temporary_name = format!("studio_video_{}_working.mp4", Uuid::new_v4().simple());
+    let temporary_output = uploads_dir.join(temporary_name);
+    #[cfg(target_os = "macos")]
+    let encoder = "h264_videotoolbox";
+    #[cfg(target_os = "windows")]
+    let encoder = "h264_mf";
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let encoder = "h264";
+
+    let command_output = studio_ffmpeg_command(ffmpeg)
+        .args(["-hide_banner", "-loglevel", "error", "-y", "-i"])
+        .arg(&input)
+        .args([
+            "-map", "0:v:0", "-map", "0:a?", "-sn", "-dn", "-c:v", encoder,
+            "-b:v", "12000k", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
+            "-movflags", "+faststart",
+        ])
+        .arg(&temporary_output)
+        .output()
+        .map_err(|error| format!("FFmpeg could not start: {error}"))?;
+
+    if !command_output.status.success() {
+        let _ = fs::remove_file(&temporary_output);
+        let detail = String::from_utf8_lossy(&command_output.stderr).trim().to_string();
+        return Err(if detail.is_empty() {
+            "FFmpeg could not convert this video to a format supported by Studio.".to_string()
+        } else {
+            format!("FFmpeg could not prepare this video: {detail}")
+        });
+    }
+    if !temporary_output.is_file() || fs::metadata(&temporary_output).map(|metadata| metadata.len() == 0).unwrap_or(true) {
+        let _ = fs::remove_file(&temporary_output);
+        return Err("FFmpeg finished without creating a playable video.".to_string());
+    }
+
+    if output.exists() {
+        let _ = fs::remove_file(&temporary_output);
+    } else {
+        fs::rename(&temporary_output, &output)
+            .map_err(|error| format!("Could not save the prepared Studio video: {error}"))?;
+    }
+    Ok(StudioVideoPreparation { file_name: output_name, converted: true })
+}
+
+/// Prepare a local library video for inline Studio playback using FFmpeg's platform H.264 encoder.
+#[tauri::command]
+async fn prepare_studio_video_for_program(
+    app: tauri::AppHandle,
+    file_name: String,
+) -> Result<StudioVideoPreparation, String> {
+    let safe_file_name = validate_upload_basename(&file_name)?;
+    let uploads_dir = app_dir()?.join("uploads");
+    let ffmpeg = studio_ffmpeg_path(&app, if cfg!(target_os = "windows") { "ffmpeg.exe" } else { "ffmpeg" })?;
+    let ffprobe = studio_ffmpeg_path(&app, if cfg!(target_os = "windows") { "ffprobe.exe" } else { "ffprobe" })?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        prepare_studio_video(&uploads_dir, &safe_file_name, &ffmpeg, &ffprobe)
+    })
+    .await
+    .map_err(|error| format!("Studio video preparation stopped unexpectedly: {error}"))?
 }
 
 /// Delete a user-uploaded file from ~/Documents/MakeChurchEasy/uploads/.
@@ -1600,6 +1791,11 @@ fn delete_upload_file(file_name: String) -> Result<(), String> {
         }
         fs::remove_file(&file_path)
             .map_err(|e| format!("Failed to delete upload '{}': {}", safe_file_name, e))?;
+    }
+    let prepared_video = uploads_dir.join(studio_video_cache_name(&safe_file_name));
+    if prepared_video.is_file() {
+        fs::remove_file(&prepared_video)
+            .map_err(|error| format!("Failed to delete prepared Studio video: {error}"))?;
     }
     println!("[Tauri] Deleted upload: {}", file_path.display());
     Ok(())
@@ -9213,6 +9409,7 @@ async fn open_studio_projector(
     };
     #[cfg(windows)]
     {
+        // Custom WebView2 arguments replace Wry's defaults; keep its no-gesture media policy.
         let main_args = app
             .config()
             .app
@@ -9508,6 +9705,7 @@ pub fn run() {
             open_studio_projector,
             save_bg_image,
             save_upload_file,
+            prepare_studio_video_for_program,
             delete_upload_file,
             save_share_temp_file,
             get_local_share_file_metadata,

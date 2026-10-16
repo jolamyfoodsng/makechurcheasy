@@ -446,10 +446,17 @@ jobs:
           test -n "$IDENTITY" || { echo "Developer ID Application identity for the configured team was not found"; exit 1; }
           echo "identity=$IDENTITY" >> "$GITHUB_OUTPUT"
 
+      - name: Stage LGPL FFmpeg runtime
+        shell: bash
+        env:
+          MCE_TARGET_TRIPLE: ${{ matrix.target }}
+        run: node scripts/prepare-ffmpeg-assets.cjs
+
       - name: Sign bundled OBS plugins for notarization
         shell: bash
         env:
           APPLE_SIGNING_IDENTITY: ${{ steps.apple-signing.outputs.identity }}
+          MCE_TARGET_TRIPLE: ${{ matrix.target }}
         run: |
           set -euo pipefail
           plugin_bundles=(
@@ -466,6 +473,20 @@ jobs:
             codesign --force --deep --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$bundle"
             codesign --verify --deep --strict "$bundle"
           done
+
+          case "$MCE_TARGET_TRIPLE" in
+            aarch64-apple-darwin) ffmpeg_arch="arm64" ;;
+            x86_64-apple-darwin) ffmpeg_arch="x64" ;;
+            *) echo "Unsupported macOS FFmpeg target: $MCE_TARGET_TRIPLE"; exit 1 ;;
+          esac
+          ffmpeg_dir="src-tauri/resources/ffmpeg/macos-$ffmpeg_arch"
+          test -d "$ffmpeg_dir" || { echo "Expected FFmpeg runtime was not staged: $ffmpeg_dir"; exit 1; }
+          while IFS= read -r -d '' candidate; do
+            if /usr/bin/file -b "$candidate" | /usr/bin/grep -q "Mach-O"; then
+              codesign --force --options runtime --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$candidate"
+              codesign --verify --strict "$candidate"
+            fi
+          done < <(find "$ffmpeg_dir" -type f -print0)
 
       # ── Build + Release ──
       - name: Build and release Tauri app

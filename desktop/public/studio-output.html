@@ -244,6 +244,16 @@
     #menu button span { opacity: 0.6; }
     body:not(.monitor).show-cursor { cursor: default; }
   </style>
+<style id="mce-no-video-ui">
+/* Never show the browser's own play button or video controls (the overlay plays its videos itself). */
+video::-webkit-media-controls,
+video::-webkit-media-controls-enclosure,
+video::-webkit-media-controls-panel,
+video::-webkit-media-controls-overlay-play-button,
+video::-webkit-media-controls-start-playback-button,
+video::-webkit-media-controls-play-button { display: none !important; opacity: 0 !important; visibility: hidden !important; -webkit-appearance: none !important; pointer-events: none !important; }
+video { outline: none; }
+</style>
 </head>
 <body>
   <div id="mix-back" aria-hidden="true"></div>
@@ -300,7 +310,7 @@
       var appliedPacket = {};
       var hideTimers = {};
       var lastRevision = 0;
-      var PAGE_REV = 4;
+      var PAGE_REV = 8;
       var lastScreenKey = '';
       var lastMediaKey = '';
 
@@ -344,6 +354,72 @@
       var mediaNode = null;
       var lastVideoSeek = 0;
 
+      // Start muted so WebKit can autoplay even when the Studio click happened in another window.
+      // Restore the requested sound only after playback has actually started.
+      function applyRequestedVideoMute(node) {
+        var muted = isMonitor || node.dataset.requestedMuted === '1';
+        node.defaultMuted = muted;
+        node.muted = muted;
+      }
+
+      function playVideo(node, mutedByChoice) {
+        var desiredMuted = isMonitor || mutedByChoice === true;
+        node.dataset.requestedMuted = desiredMuted ? '1' : '0';
+        node.dataset.autoplayMutePending = desiredMuted ? '0' : '1';
+        node.defaultMuted = true;
+        node.muted = true;
+        var attempt;
+        try { attempt = node.play(); } catch (e) { attempt = Promise.reject(e); }
+        if (attempt && attempt.then) attempt.then(function () {
+          if (node.dataset.paused) return;
+          delete node.dataset.autoplayMutePending;
+          if (node.dataset.soundBlocked === '1') { node.defaultMuted = true; node.muted = true; return; }
+          applyRequestedVideoMute(node);
+        }).catch(function () { /* the file may not be playable */ });
+      }
+
+      // Safety net: the browser sometimes pauses a video (blocked sound, stalled load, tab hidden).
+      // If nobody asked for a pause, start it again - muted if the sound was the reason.
+      function keepVideoMoving(node) {
+        if (!node || node.tagName !== 'VIDEO' || node.dataset.paused || node.ended) return;
+        if (node.paused) {
+          if (node.dataset.requestedMuted === '0' && node.dataset.autoplayMutePending !== '1' && node.muted === false && node.currentTime > 0) {
+            node.dataset.soundBlocked = '1';
+          }
+          playVideo(node, node.dataset.soundBlocked === '1' ? true : node.dataset.requestedMuted === '1');
+        }
+      }
+      setInterval(function () { keepVideoMoving(mediaNode); }, 700);
+
+      // Diagnostic: if the screen video has not moved for 3 seconds, say why in a small badge (monitor only).
+      var diagBadge = null, diagLast = -1, diagSince = Date.now();
+      function videoPlaybackHint(node) {
+        if (node.error) {
+          if (node.error.code === 3) return 'Video could not be decoded. Export as MP4 (H.264 video, AAC audio).';
+          if (node.error.code === 4) return 'This video format or codec is unsupported. Export as MP4 (H.264 video, AAC audio).';
+          if (node.error.code === 2) return 'Video could not be loaded. Check that the file is still available, then send it again.';
+          if (node.error.code === 1) return 'Video loading was interrupted. Send it to the screen again.';
+        }
+        if (node.readyState === 0) return 'Video has not loaded. Check the file, then try sending it again.';
+        if (node.paused) return 'Video is paused or playback was blocked. Send it to the screen again.';
+        return 'Video is waiting for data. Check the file and try an MP4 export (H.264/AAC).';
+      }
+      setInterval(function () {
+        var n = mediaNode;
+        if (!isMonitor || !n || n.tagName !== 'VIDEO') { if (diagBadge) diagBadge.style.display = 'none'; return; }
+        var t = n.currentTime;
+        if (t !== diagLast || n.dataset.paused) { diagLast = t; diagSince = Date.now(); if (diagBadge) diagBadge.style.display = 'none'; return; }
+        if (Date.now() - diagSince < 3000) return;
+        if (!diagBadge) {
+          diagBadge = document.createElement('div');
+          diagBadge.style.cssText = 'position:fixed;left:6px;right:6px;bottom:6px;z-index:99999;font:11px/1.35 system-ui,sans-serif;color:#fff;background:rgba(130,20,20,.94);padding:6px 8px;border-radius:3px;pointer-events:none';
+          document.body.appendChild(diagBadge);
+        }
+        var err = n.error ? ' · error ' + n.error.code : '';
+        diagBadge.textContent = videoPlaybackHint(n) + err;
+        diagBadge.style.display = 'block';
+      }, 1000);
+
       function applyMedia(media) {
         var el = layers.media;
         // Only a new file rebuilds the element; fit, loop, sound and seeking come from mediaControl.
@@ -362,15 +438,28 @@
         var node;
         if (media.kind === 'video') {
           node = document.createElement('video');
-          node.autoplay = true;
+          // Do not set the autoplay attribute: WebKit can show a large play overlay when it blocks autoplay.
+          // Start playback explicitly below while muted, which works in both WKWebView and WebView2.
+          node.autoplay = false;
+          node.removeAttribute('autoplay');
+          node.controls = false;
           node.loop = media.loop !== false;
-          // The in-app monitor stays silent; the projector plays sound unless muted.
-          node.muted = isMonitor || media.muted === true;
+          // Set the muted attribute before loading: WebKit checks it when deciding whether to autoplay.
+          node.defaultMuted = true;
+          node.muted = true;
+          node.setAttribute('muted', '');
+          node.dataset.requestedMuted = (isMonitor || media.muted === true) ? '1' : '0';
+          node.dataset.autoplayMutePending = (isMonitor || media.muted === true) ? '0' : '1';
           node.playsInline = true;
+          // Load the whole file now: with no autoplay attribute a video that only loads its header never says "canplay".
+          node.preload = 'auto';
           node.src = media.url;
           node.addEventListener('canplay', function () {
-            if (!node.dataset.paused) { try { node.play(); } catch (e) { /* ignore */ } }
+            if (!node.dataset.paused) playVideo(node, media.muted);
           }, { once: true });
+          ['loadeddata', 'canplaythrough', 'stalled', 'waiting', 'pause', 'suspend', 'error'].forEach(function (ev) {
+            node.addEventListener(ev, function () { setTimeout(function () { keepVideoMoving(node); }, ev === 'pause' ? 60 : 0); });
+          });
         } else {
           node = document.createElement('img');
           node.alt = '';
@@ -379,6 +468,8 @@
         node.style.objectFit = media.fit === 'cover' ? 'cover' : 'contain';
         mediaNode = node;
         el.appendChild(node);
+        // Start it straight away (muted first, then the requested sound), and again when it can play.
+        if (node.tagName === 'VIDEO' && !node.dataset.paused) playVideo(node, media.muted);
         requestAnimationFrame(function () { el.classList.add('is-on'); });
       }
 
@@ -391,7 +482,9 @@
         }
         if (node.tagName === 'VIDEO') node.style.objectFit = ctrl.fit === 'cover' ? 'cover' : 'contain';
         node.loop = ctrl.loop !== false;
-        node.muted = isMonitor || ctrl.muted === true;
+        node.dataset.requestedMuted = (isMonitor || ctrl.muted === true) ? '1' : '0';
+        node.muted = node.dataset.autoplayMutePending === '1' || isMonitor || ctrl.muted === true;
+        if (node.tagName === 'VIDEO' && node.dataset.autoplayMutePending !== '1') applyRequestedVideoMute(node);
         var volume = Number(ctrl.volume);
         if (isFinite(volume)) node.volume = Math.max(0, Math.min(1, volume));
         var rev = Number(ctrl.seekRev) || 0;
@@ -406,7 +499,7 @@
           try { node.pause(); } catch (e) { /* ignore */ }
         } else {
           delete node.dataset.paused;
-          if (node.paused) { var p = node.play(); if (p && p.catch) p.catch(function () { /* autoplay blocked */ }); }
+          if (node.paused) playVideo(node, ctrl.muted);
         }
         return lastSeekRef;
       }
@@ -1042,8 +1135,8 @@
         var scrollState = Number(state.scrollY) || 0;
         var cameraState = (feed === 'preview' ? (state.previewCamera || state.camera) : state.camera) || null;
         if (feed === 'preview') {
-          var pv = state.preview || { active: null, packets: {}, media: null };
-          state = { active: pv.active, packets: pv.packets || {}, media: pv.media || null, screen: 'live' };
+          var pv = state.preview || { active: null, packets: {}, media: null, mediaControl: null };
+          state = { active: pv.active, packets: pv.packets || {}, media: pv.media || null, mediaControl: pv.mediaControl || null, screen: 'live' };
         }
         var packets = state.packets || {};
         ['bible', 'worship', 'notes'].forEach(function (key) {
@@ -1060,7 +1153,7 @@
         applyMedia(state.media || null);
         // A tall picture or document page that fills the width can be scrolled up and down.
         if (mediaNode && mediaNode.tagName === 'IMG') mediaNode.style.objectPosition = '50% ' + Math.max(0, Math.min(100, scrollState)) + '%';
-        if (feed === 'program' && mediaNode) lastVideoSeek = controlPlayer(mediaNode, mediaCtrl, lastVideoSeek);
+        if (mediaNode) lastVideoSeek = controlPlayer(mediaNode, mediaCtrl, lastVideoSeek);
         applyActive(state.active || null);
         applyScreen(state);
         lastScreen = String(state.screen || 'live'); lastActive = state.active ? String(state.active) : '';

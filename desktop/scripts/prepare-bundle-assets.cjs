@@ -469,9 +469,16 @@ function ensureMceObsBridgeAssets() {
   });
 }
 
+function ensureFfmpegAssets() {
+  execFileSync(process.execPath, [path.join(projectRoot, "scripts", "prepare-ffmpeg-assets.cjs")], {
+    stdio: "inherit",
+  });
+}
+
 async function main() {
   stageWindowsRuntimeDlls();
   copyAppIcons();
+  ensureFfmpegAssets();
   await ensureMovePluginAssets();
   ensureMceObsBridgeAssets();
 }

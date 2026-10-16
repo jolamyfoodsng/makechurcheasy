@@ -8,7 +8,7 @@
  *               to project" turns them into slides and puts them in today's schedule.
  */
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { ArrowDown, ArrowUp, Check, Mic, MicOff, Pencil, Plus, Presentation, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Mic, MicOff, Pencil, Plus, Presentation, RefreshCw, Trash2, X } from "lucide-react";
 import { loadDockNotes, saveDockNotes, type DockNote } from "../../dock/dockNotesStorage";
 import type { VoiceBibleCandidate } from "../../services/voiceBibleTypes";
 import type { StudioVerseAi } from "../useVerseAi";
@@ -188,10 +188,17 @@ export default function VerseAiPanel({ ai, notes, onOpenVerse, onConvert }: Vers
         >
           {ai.listening ? <><MicOff size={14} /> Stop listening</> : <><Mic size={14} /> Start listening</>}
         </button>
-        {!ai.listening && ai.mics.length > 1 && (
-          <select value={ai.mic} onChange={(e) => ai.setMic(e.target.value)} aria-label="Microphone">
-            {ai.mics.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-          </select>
+        {!ai.listening && (
+          <div className="sx-vai__mic-select">
+            {ai.mics.length > 1 && (
+              <select value={ai.mic} onChange={(e) => ai.setMic(e.target.value)} aria-label="Microphone">
+                {ai.mics.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+            )}
+            <button type="button" className="st-iconbtn st-iconbtn--sm" onClick={() => void ai.refreshMics()} disabled={ai.refreshingMics} aria-label="Refresh microphone list" title={ai.refreshingMics ? "Refreshing microphone list…" : "Refresh microphone list"} aria-busy={ai.refreshingMics}>
+              <RefreshCw size={14} className={ai.refreshingMics ? "st-spin" : undefined} />
+            </button>
+          </div>
         )}
         <span className={`sx-vai__status${ai.listening ? " is-on" : ""}`}>{statusText}</span>
         {(ai.notice || ai.error) && (

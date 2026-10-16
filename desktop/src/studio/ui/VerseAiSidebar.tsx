@@ -11,7 +11,7 @@
  * The » button folds it to a slim rail (mic button, counts) to give the reader more room.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronsLeft, ChevronsRight, ListOrdered, Mic, MicOff, Pencil, Plus, Scissors, Search, SlidersHorizontal, Sparkles, Trash2, X, Zap } from "lucide-react";
+import { Check, ChevronsLeft, ChevronsRight, ListOrdered, Mic, MicOff, Pencil, Plus, RefreshCw, Scissors, Search, SlidersHorizontal, Sparkles, Trash2, X, Zap } from "lucide-react";
 import type { StudioVerseAi } from "../useVerseAi";
 import StudioMenu, { menuAt, type StudioMenuState } from "./StudioMenu";
 
@@ -198,6 +198,9 @@ export default function VerseAiSidebar(props: VerseAiSidebarProps) {
           {ai.mics.length === 0 && <option value="">Default microphone</option>}
           {ai.mics.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
         </select>
+        <button type="button" className="st-iconbtn st-iconbtn--sm" onClick={() => void ai.refreshMics()} disabled={ai.refreshingMics} aria-label="Refresh microphone list" title={ai.refreshingMics ? "Refreshing microphone list…" : "Refresh microphone list"} aria-busy={ai.refreshingMics}>
+          <RefreshCw size={14} className={ai.refreshingMics ? "st-spin" : undefined} />
+        </button>
         <button type="button" className={`st-iconbtn${showGain ? " is-on" : ""}`} onClick={() => setShowGain((v) => !v)} aria-label="Microphone sensitivity" title="Microphone sensitivity">
           <SlidersHorizontal size={15} />
         </button>
