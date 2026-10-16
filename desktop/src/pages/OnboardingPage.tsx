@@ -43,6 +43,7 @@ import { persistOBSWebSocketConfig } from "../services/obsConnectionSettings";
 import {
   completeWorkspaceOnboarding,
   isOnboardingCompleted,
+  markStudioWelcomePending,
   setPreferredWorkspace,
   type PreferredWorkspace,
 } from "../services/workspacePreference";
@@ -422,6 +423,7 @@ export default function OnboardingPage() {
 
     if (hasFinishedRef.current) return;
     hasFinishedRef.current = true;
+    markStudioWelcomePending();
     const alreadyReported = readLocalValue("mce-onboarding-completed-reported") === "true";
     if (!alreadyReported) {
       writeLocalValue("mce-onboarding-completed-reported", "true");

@@ -150,6 +150,7 @@ const TemplatesPage = safeLazy(() => import("./pages/TemplatesPage"));
 const DesignStudioPage = safeLazy(() => import("./pages/DesignStudioPage"));
 const BroadcastPage = safeLazy(() => import("./pages/BroadcastPage"));
 const StudioPage = safeLazy(() => import("./pages/StudioPage"));
+const StudioWelcomeModal = safeLazy(() => import("./pages/StudioWelcomeModal"));
 
 type LmDockService = typeof import("./services/lmDockService").lmDockService;
 let lmDockServicePromise: Promise<LmDockService> | null = null;
@@ -1609,7 +1610,7 @@ function App() {
                                       <Route path="service-control-hub" element={<Navigate to="/" replace />} />
                                       <Route path="quick-merge" element={<Navigate to="/" replace />} />
                                       <Route path="broadcast" element={<BroadcastPage />} />
-                                      <Route path="studio" element={<StudioPage />} />
+                                      <Route path="studio" element={<><StudioPage /><StudioWelcomeModal /></>} />
                                       <Route path="bible" element={<Navigate to="/settings" replace />} />
                                       <Route path="bible/*" element={<Navigate to="/settings" replace />} />
                                       <Route path="worship" element={<Navigate to="/resources?tab=worship" replace />} />

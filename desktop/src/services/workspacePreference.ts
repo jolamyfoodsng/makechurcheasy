@@ -3,6 +3,7 @@ export type PreferredWorkspace = "studio" | "obs";
 export const PREFERRED_WORKSPACE_KEY = "mce-preferred-workspace-v1";
 export const ONBOARDING_COMPLETED_KEY = "mce-onboarding-completed-v1";
 const LEGACY_ONBOARDING_COMPLETED_KEY = "mce-onboarding-complete";
+const STUDIO_WELCOME_PENDING_KEY = "mce-studio-welcome-pending-v1";
 const sessionFallback = new Map<string, string>();
 
 function readValue(key: string): string | null {
@@ -37,6 +38,18 @@ export function getPreferredWorkspace(): PreferredWorkspace | null {
 
 export function setPreferredWorkspace(workspace: PreferredWorkspace): void {
   writeValue(PREFERRED_WORKSPACE_KEY, workspace);
+}
+
+export function markStudioWelcomePending(): void {
+  writeValue(STUDIO_WELCOME_PENDING_KEY, "true");
+}
+
+export function hasStudioWelcomePending(): boolean {
+  return readValue(STUDIO_WELCOME_PENDING_KEY) === "true";
+}
+
+export function clearStudioWelcomePending(): void {
+  removeValue(STUDIO_WELCOME_PENDING_KEY);
 }
 
 export function isOnboardingCompleted(): boolean {
