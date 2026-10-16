@@ -1,7 +1,7 @@
 /**
- * PreviewPanel.tsx — the "Live Output" column.
+ * PreviewPanel.tsx — the Studio screen preview and controls.
  *
- *  Header    green dot (output open), LIVE badge and how long something has been on the screen.
+ *  Header    a quick toggle for the church logo.
  *  Screen    one big monitor: what the congregation sees. "Preview" flips it to what is next.
  *  Buttons   Preview | Send to Screen (Space) with a menu (Preview first / Straight to screen, Logo,
  *            Previous / Next) | Clear | bigger view.
@@ -10,7 +10,7 @@
  *  Compare   (Bible) the previewed verse in every installed translation (button in the Bible bar).
  */
 import { useEffect, useRef, useState } from "react";
-import { CalendarPlus, Check, ChevronDown, ChevronLeft, ChevronRight, Eye, Zap, Expand, Image as ImageIcon, Minus, Monitor, MonitorOff, PanelBottom, Plus, SlidersHorizontal, Timer, X } from "lucide-react";
+import { CalendarPlus, Check, ChevronDown, ChevronLeft, ChevronRight, Eye, Zap, Expand, Image as ImageIcon, Minus, Monitor, MonitorOff, PanelBottom, Plus, SlidersHorizontal, X } from "lucide-react";
 import StudioModal from "./StudioModal";
 import StudioMenu, { menuAt, type StudioMenuState } from "./StudioMenu";
 import type { BibleTheme } from "../../bible/types";
@@ -81,8 +81,6 @@ interface PreviewPanelProps {
   previewSlide: StudioSlide | null;
   liveSlide: StudioSlide | null;
   screen: StudioScreen;
-  outputConnected: boolean;
-  outputName: string;
   compare: CompareRow[] | null;
   compareLoading: boolean;
   onUseTranslation: (translation: string) => void;
@@ -173,19 +171,6 @@ export default function PreviewPanel(props: PreviewPanelProps) {
   const shown = props.wordsOn || Boolean(props.wordsLocked);
   const showFrame = tab === "preview" || tab === "output";
 
-  // How long something has been on the screen without a break (00:00:00 when nothing is).
-  const [since, setSince] = useState<number | null>(null);
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => { setSince((current) => (onAir ? current ?? Date.now() : null)); }, [onAir]);
-  useEffect(() => {
-    if (since === null) return undefined;
-    setNow(Date.now());
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, [since]);
-  const seconds = since === null ? 0 : Math.max(0, Math.floor((now - since) / 1000));
-  const clock = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60].map((n) => String(n).padStart(2, "0")).join(":");
-
   const openSendMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
     setMenu(menuAt({ clientX: rect.right - 215, clientY: rect.bottom + 6 }, [
@@ -197,12 +182,8 @@ export default function PreviewPanel(props: PreviewPanelProps) {
   };
 
   return (
-    <section className="st-preview st-lo" aria-label="Live Output">
+    <section className="st-preview st-lo" aria-label="Studio screen">
       <div className="st-lo__head">
-        <span className={`st-lo__dot${props.outputConnected ? " is-ok" : ""}`} title={props.outputConnected ? `On the screen${props.outputName ? ` · ${props.outputName}` : ""}` : "No output open yet. Press Start output at the top."} role="img" aria-label={props.outputConnected ? "Output open" : "No output open"} />
-        <strong>Live Output</strong>
-        <span className={`st-lo__badge${onAir ? " is-live" : ""}`}>{onAir ? "LIVE" : "OFF AIR"}</span>
-        <span className="st-lo__timer" title="How long something has been on the screen"><Timer size={14} /> {clock}</span>
         <button type="button" className={`st-lo__logo${props.logoOn ? " is-on" : ""}`} onClick={props.onLogo} aria-pressed={props.logoOn} title={props.logoOn ? "Hide the church logo" : "Show the church logo on the screen"}>
           <ImageIcon size={13} /> <span>Logo</span>
         </button>

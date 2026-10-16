@@ -2507,8 +2507,6 @@ export default function StudioPage() {
                 previewSlide={previewSlide}
                 liveSlide={liveSlide}
                 screen={screen}
-                outputConnected={outputOpen}
-                outputName={outputMonitorName}
                 compare={compare}
                 compareLoading={compareLoading}
                 onUseTranslation={(t) => {
