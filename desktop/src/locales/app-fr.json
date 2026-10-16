@@ -4196,7 +4196,7 @@
   "appShell.shortcutsCategory.speaker": "Président",
   "appShell.shortcutsCategory.ticker": "Téléscripteur",
   "dashboard.header.readyMessage": "Tout semble prêt pour votre prochain service.",
-  "dashboard.header.connectMessage": "Connectez-vous à OBS pour commencer.",
+  "dashboard.header.connectMessage": "Connectez OBS pour les outils de diffusion, ou ouvrez le mode Studio pour projeter directement.",
   "dashboard.header.themeToggle.dark": "Passer en mode sombre",
   "dashboard.header.themeToggle.light": "Passer en mode éclairage",
   "dashboard.btn.connect": "Connectez-vous",

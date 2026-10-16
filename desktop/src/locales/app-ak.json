@@ -4196,7 +4196,7 @@
   "appShell.shortcutsCategory.speaker": "Ɔkasafo",
   "appShell.shortcutsCategory.ticker": "Ticker a ɔyɛ ɔkyerɛwfo",
   "dashboard.header.readyMessage": "Ɛte sɛ nea biribiara ayɛ krado ama wo som a edi hɔ no.",
-  "dashboard.header.connectMessage": "Fa wo ho to OBS so na woafi ase.",
+  "dashboard.header.connectMessage": "Fa OBS hyɛ mu ma broadcast nnwinnade, anaa bue Studio Mode na fa kɔ screen so tẽẽ.",
   "dashboard.header.themeToggle.dark": "Dan kɔ esum tebea mu",
   "dashboard.header.themeToggle.light": "Dan kɔ hann tebea mu",
   "dashboard.btn.connect": "Nkitahodi",

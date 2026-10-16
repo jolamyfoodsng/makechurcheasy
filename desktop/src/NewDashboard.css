@@ -1714,6 +1714,148 @@
 
 /* ── Two promo cards side by side (Multi-Platform Streaming + Broadcast Graphics) ── */
 
+.studio-mode-promo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: 1.25rem;
+    padding: 1.15rem 1.35rem;
+    border: 1px solid rgba(96, 165, 250, 0.26);
+    border-radius: 16px;
+    background:
+        radial-gradient(100% 150% at 0% 0%, rgba(59, 130, 246, 0.18), transparent 58%),
+        #131724;
+}
+
+.studio-mode-promo__main,
+.studio-mode-promo__action {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.studio-mode-promo__main {
+    gap: 1rem;
+}
+
+.studio-mode-promo__icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    border: 1px solid rgba(147, 197, 253, 0.22);
+    border-radius: 13px;
+    color: #dbeafe;
+    background: linear-gradient(145deg, #2563eb, #4338ca);
+    box-shadow: 0 6px 18px rgba(37, 99, 235, 0.22);
+}
+
+.studio-mode-promo__copy {
+    min-width: 0;
+}
+
+.studio-mode-promo__title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+}
+
+.studio-mode-promo__title-row h2 {
+    margin: 0;
+    color: #fff;
+    font-size: 1.05rem;
+    font-weight: 750;
+    letter-spacing: -0.015em;
+}
+
+.studio-mode-promo__badge {
+    padding: 0.18rem 0.42rem;
+    border: 1px solid rgba(96, 165, 250, 0.3);
+    border-radius: 999px;
+    color: #bfdbfe;
+    background: rgba(37, 99, 235, 0.18);
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+    line-height: 1.2;
+}
+
+.studio-mode-promo__tagline {
+    margin: 0.22rem 0 0;
+    color: #bfdbfe;
+    font-size: 0.86rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.studio-mode-promo__description {
+    margin: 0.22rem 0 0;
+    color: #aab6c8;
+    font-size: 0.76rem;
+    line-height: 1.5;
+}
+
+.studio-mode-promo__action {
+    justify-content: flex-end;
+    gap: 1.25rem;
+    flex: 0 0 auto;
+}
+
+.studio-mode-promo__flow {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    color: #93a4bb;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.studio-mode-promo__flow > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: #d6e2f1;
+}
+
+.studio-mode-promo__flow > svg {
+    color: #64748b;
+}
+
+.studio-mode-promo__action button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    min-height: 40px;
+    padding: 0.55rem 0.85rem;
+    border: 1px solid rgba(96, 165, 250, 0.4);
+    border-radius: 9px;
+    color: #fff;
+    background: #2563eb;
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 700;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.studio-mode-promo__action button:hover {
+    transform: translateY(-1px);
+    border-color: rgba(147, 197, 253, 0.72);
+    background: #1d4ed8;
+}
+
+.studio-mode-promo__action button:focus-visible {
+    outline: 2px solid #bfdbfe;
+    outline-offset: 3px;
+}
+
 .broadcast-promo-row {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1979,6 +2121,50 @@
 @media (max-width: 1100px) {
     .broadcast-promo-row {
         grid-template-columns: minmax(0, 1fr);
+    }
+
+    .studio-mode-promo {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .studio-mode-promo__action {
+        width: 100%;
+        justify-content: space-between;
+        padding-left: calc(48px + 1rem);
+    }
+}
+
+@media (max-width: 640px) {
+    .studio-mode-promo {
+        padding: 1rem;
+    }
+
+    .studio-mode-promo__main {
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
+    .studio-mode-promo__icon {
+        width: 42px;
+        height: 42px;
+        flex-basis: 42px;
+    }
+
+    .studio-mode-promo__action {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding-left: calc(42px + 0.75rem);
+    }
+
+    .studio-mode-promo__flow {
+        justify-content: flex-start;
+    }
+
+    .studio-mode-promo__action button {
+        width: 100%;
     }
 }
 

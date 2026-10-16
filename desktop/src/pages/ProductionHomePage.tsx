@@ -36,6 +36,7 @@ import {
 } from "../services/obsMovePlugin";
 import MultiPlatformStreamingBanner from "../components/MultiPlatformStreamingBanner";
 import BroadcastGraphicsPromoBanner from "../components/BroadcastGraphicsPromoBanner";
+import StudioModePromoBanner from "../components/StudioModePromoBanner";
 import BroadcastHowItWorksModal from "../components/BroadcastHowItWorksModal";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -89,7 +90,7 @@ function DashboardGreeting({
           <p className="header-subtitle">
             {obsConnected
               ? t("dashboard.header.readyMessage", "Everything looks ready for your next service.")
-              : t("dashboard.header.connectMessage", "Connect to OBS Studio to start your service.")}
+              : t("dashboard.header.connectMessage", "Connect OBS for broadcast tools, or open Studio Mode to project directly.")}
           </p>
         </div>
       </div>
@@ -770,6 +771,8 @@ export default function ProductionHomePage() {
         obsConnected={obsStatus === "connected"}
         onWatchTutorials={() => navigate("/tutorials")}
       />
+
+      <StudioModePromoBanner onOpenStudio={() => handleNavigate("/studio")} />
 
       <DashboardObsDockStatus
         obsStatus={obsStatus}

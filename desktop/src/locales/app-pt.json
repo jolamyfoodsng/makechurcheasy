@@ -4196,7 +4196,7 @@
   "appShell.shortcutsCategory.speaker": "Palestrante",
   "appShell.shortcutsCategory.ticker": "Marcador",
   "dashboard.header.readyMessage": "Tudo parece pronto para seu próximo serviço.",
-  "dashboard.header.connectMessage": "Conecte-se ao OBS para começar.",
+  "dashboard.header.connectMessage": "Conecte o OBS para os recursos de transmissão ou abra o Modo Studio para projetar diretamente.",
   "dashboard.header.themeToggle.dark": "Mudar para o modo escuro",
   "dashboard.header.themeToggle.light": "Mudar para modo claro",
   "dashboard.btn.connect": "Conectar",

@@ -4304,7 +4304,7 @@
   "appShell.shortcutsCategory.speaker": "Speaker",
   "appShell.shortcutsCategory.ticker": "Ticker",
   "dashboard.header.readyMessage": "Everything looks ready for your next service.",
-  "dashboard.header.connectMessage": "Connect to OBS to get started.",
+  "dashboard.header.connectMessage": "Connect OBS for broadcast tools, or open Studio Mode to project directly.",
   "dashboard.header.themeToggle.dark": "Switch to dark mode",
   "dashboard.header.themeToggle.light": "Switch to light mode",
   "dashboard.btn.connect": "Connect",

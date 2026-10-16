@@ -4196,7 +4196,7 @@
   "appShell.shortcutsCategory.speaker": "Altavoz",
   "appShell.shortcutsCategory.ticker": "Teletipo",
   "dashboard.header.readyMessage": "Todo parece listo para tu próximo servicio.",
-  "dashboard.header.connectMessage": "Conéctate a OBS para comenzar.",
+  "dashboard.header.connectMessage": "Conecta OBS para las herramientas de transmisión o abre el Modo Studio para proyectar directamente.",
   "dashboard.header.themeToggle.dark": "Cambiar al modo oscuro",
   "dashboard.header.themeToggle.light": "Cambiar al modo de luz",
   "dashboard.btn.connect": "Conectar",

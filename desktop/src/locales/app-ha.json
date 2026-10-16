@@ -4196,7 +4196,7 @@
   "appShell.shortcutsCategory.speaker": "Mai magana",
   "appShell.shortcutsCategory.ticker": "Ticker",
   "dashboard.header.readyMessage": "Komai yana shirye don sabis na gaba.",
-  "dashboard.header.connectMessage": "Haɗa zuwa OBS don farawa.",
+  "dashboard.header.connectMessage": "Haɗa OBS don kayan aikin watsa shirye-shirye, ko buɗe Studio Mode don nuna kai tsaye.",
   "dashboard.header.themeToggle.dark": "Canja zuwa yanayin duhu",
   "dashboard.header.themeToggle.light": "Canja zuwa yanayin haske",
   "dashboard.btn.connect": "Haɗawa",

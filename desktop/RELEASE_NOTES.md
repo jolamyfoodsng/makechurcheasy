@@ -1,4 +1,13 @@
-# MakeChurchEazy Release Highlights (v4.3.6)
+# MakeChurchEazy Release Highlights (v4.3.8)
+
+## 1. Project Directly with Studio Mode
+- **Lead:** Open the new Studio Mode card from the dashboard and send scripture, worship lyrics, and media straight to a projector or TV—no OBS required.
+
+> **How to get it:** Install the update when MakeChurchEazy prompts you, or download it from makechurcheazy.com/downloads.
+
+---
+
+# Previous Release Highlights (v4.3.7)
 
 ## 1. Instant Media Import in Studio
 - **Lead:** Import pictures, videos and sound in Studio or the Media library and they appear at once, even large videos. MakeChurchEazy now links to your files where they are instead of copying them first. Drag files onto the window to add them too.
