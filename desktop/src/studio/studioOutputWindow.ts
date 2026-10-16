@@ -11,16 +11,13 @@
  */
 import { availableMonitors, currentMonitor, PhysicalPosition, PhysicalSize, type Monitor } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { invoke } from "@tauri-apps/api/core";
 import { getOverlayBaseUrl } from "../services/overlayUrl";
 import { toLoopbackBase } from "./studioEngine";
 import { overlayBridge } from "../dock/dockOverlayBridge";
 
 const OUTPUT_MONITOR_KEY = "mce-studio-output-monitor";
 const LABEL_PREFIX = "studio-projector-";
-// The main window has custom WebView2 browser arguments in tauri.conf.json.
-// Windows requires windows with different browser settings to use different
-// WebView data directories; Tauri scopes this relative path to each unique label.
-const PROJECTOR_WEBVIEW_DATA_DIRECTORY = "studio-projector";
 /** Phase 1 window label, closed too so an old window never gets stuck. */
 const LEGACY_LABEL = "studio-output";
 
@@ -157,16 +154,28 @@ export async function closeAllProjectors(feed?: ProjectorFeed): Promise<void> {
   if (!feed || feed === "program") await destroyWindow(LEGACY_LABEL);
 }
 
-function waitForCreation(win: WebviewWindow): Promise<void> {
-  return new Promise((resolve, reject) => {
-    let done = false;
-    void win.once("tauri://created", () => { if (!done) { done = true; resolve(); } });
-    void win.once("tauri://error", (event) => {
-      if (done) return;
-      done = true;
-      reject(new Error(typeof event.payload === "string" ? event.payload : "The projector could not be opened."));
-    });
-  });
+/**
+ * Create the projector window in Rust (`open_studio_projector`). Windows made from JavaScript get
+ * different WebView2 settings than the main window, and on some Windows PCs WebView2 then kills
+ * them a second after they open. The Rust side copies the main window's settings exactly.
+ */
+async function createProjectorWindow(options: {
+  label: string;
+  url: string;
+  title: string;
+  width: number;
+  height: number;
+  x?: number;
+  y?: number;
+  decorations: boolean;
+  visible: boolean;
+  focus: boolean;
+  alwaysOnTop: boolean;
+}): Promise<WebviewWindow> {
+  await invoke("open_studio_projector", { ...options, x: options.x ?? null, y: options.y ?? null });
+  const win = await WebviewWindow.getByLabel(options.label);
+  if (!win) throw new Error("The projector window closed as soon as it opened.");
+  return win;
 }
 
 /** The projector is already open: bring it forward (rebuilding a full-screen window right away leaves a blank one). */
@@ -209,21 +218,18 @@ export async function openProjector(feed: ProjectorFeed, target: ProjectorTarget
   let win: WebviewWindow;
 
   if (target === "window") {
-    win = new WebviewWindow(label, {
-      title: `${title} (Window)`,
+    win = await createProjectorWindow({
+      label,
       url,
+      title: `${title} (Window)`,
       width: 960,
       height: 540,
-      minWidth: 320,
-      minHeight: 180,
-      center: true,
-      resizable: true,
       decorations: true,
+      visible: true,
       focus: true,
-      dataDirectory: PROJECTOR_WEBVIEW_DATA_DIRECTORY,
+      alwaysOnTop: false,
     });
     entry = { label, feed, monitorKey: null, where: "Window" };
-    await waitForCreation(win);
   } else {
     const monitors = await availableMonitors();
     const current = await currentMonitor();
@@ -246,12 +252,12 @@ export async function openProjector(feed: ProjectorFeed, target: ProjectorTarget
     await Promise.all(listOpenProjectors().filter((p) => p.monitorKey === key).map((p) => closeProjector(p.label)));
 
     const scale = Math.max(monitor.scaleFactor || 1, 1);
-    win = new WebviewWindow(label, {
-      title,
+    win = await createProjectorWindow({
+      label,
       url,
+      title,
       visible: false,
       decorations: false,
-      resizable: true,
       // On the operator's own screen the projector takes focus so Esc reaches it;
       // on a projector screen the operator keeps the keyboard.
       focus: isControl,
@@ -260,10 +266,8 @@ export async function openProjector(feed: ProjectorFeed, target: ProjectorTarget
       y: Math.round(monitor.position.y / scale),
       width: Math.max(640, Math.round(monitor.size.width / scale)),
       height: Math.max(360, Math.round(monitor.size.height / scale)),
-      dataDirectory: PROJECTOR_WEBVIEW_DATA_DIRECTORY,
     });
     entry = { label, feed, monitorKey: key, where: monitor.name?.trim() || "Display" };
-    await waitForCreation(win);
     await win.setPosition(new PhysicalPosition(monitor.position.x, monitor.position.y));
     await win.setSize(new PhysicalSize(monitor.size.width, monitor.size.height));
     await win.show();

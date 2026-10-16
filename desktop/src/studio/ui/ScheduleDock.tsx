@@ -66,6 +66,8 @@ interface ScheduleDockProps {
   /** Add what is in Preview now (disabled when nothing is). */
   onAddCurrent: () => void;
   canAddCurrent: boolean;
+  /** Show only one tab: "schedule" (History is in the Verse AI panel) or "history" (inside the Verse AI panel, no header). */
+  only?: "schedule" | "history";
 }
 
 const TYPE_ICON: Record<ServicePlanItem["type"], typeof BookOpen> = {
@@ -98,7 +100,8 @@ function formatDate(value: string): string {
 }
 
 export default function ScheduleDock(props: ScheduleDockProps) {
-  const { tab, onTab, onClose, liveSlide, displayMode, liveItemId } = props;
+  const { tab: tabProp, onTab, onClose, liveSlide, displayMode, liveItemId } = props;
+  const tab = props.only ?? tabProp;
   const [plan, setPlan] = useState<ServicePlan | null>(readActivePlan);
   const [history, setHistory] = useState<ServicePlanItem[]>(() => getPresentationHistory());
   const [query, setQuery] = useState("");
@@ -185,14 +188,20 @@ export default function ScheduleDock(props: ScheduleDockProps) {
   };
 
   return (
-    <aside className="st-dock" aria-label="Schedule and history">
-      <header className="st-dock__head">
-        <div className="st-tabs st-tabs--pill" role="tablist">
-          <button type="button" role="tab" aria-selected={tab === "schedule"} className={tab === "schedule" ? "is-on" : ""} onClick={() => onTab("schedule")}>Schedule</button>
-          <button type="button" role="tab" aria-selected={tab === "history"} className={tab === "history" ? "is-on" : ""} onClick={() => onTab("history")}>History</button>
-        </div>
-        <button type="button" className="st-iconbtn" onClick={onClose} aria-label="Close" title="Close"><X size={16} /></button>
-      </header>
+    <aside className={`st-dock${props.only === "history" ? " st-dock--bare" : ""}`} aria-label={props.only === "history" ? "History" : props.only === "schedule" ? "Schedule" : "Schedule and history"}>
+      {props.only !== "history" && (
+        <header className="st-dock__head">
+          {props.only === "schedule" ? (
+            <strong className="st-dock__title">Schedule</strong>
+          ) : (
+            <div className="st-tabs st-tabs--pill" role="tablist">
+              <button type="button" role="tab" aria-selected={tab === "schedule"} className={tab === "schedule" ? "is-on" : ""} onClick={() => onTab("schedule")}>Schedule</button>
+              <button type="button" role="tab" aria-selected={tab === "history"} className={tab === "history" ? "is-on" : ""} onClick={() => onTab("history")}>History</button>
+            </div>
+          )}
+          <button type="button" className="st-iconbtn" onClick={onClose} aria-label="Close" title="Close"><X size={16} /></button>
+        </header>
+      )}
 
       {tab === "schedule" && (
         <>
@@ -214,7 +223,7 @@ export default function ScheduleDock(props: ScheduleDockProps) {
           )}
           <div className="st-dock__list">
             {items.length === 0 && (
-              <div className="st-empty">Nothing scheduled yet. Right-click a verse, song, picture or document → Add to Schedule, or press “Add current”.</div>
+              <div className="st-empty">Nothing scheduled yet. Right-click a verse, song, picture or document → Add to Schedule, or press “Add”.</div>
             )}
             {items.map((item, index) => {
               const Icon = TYPE_ICON[item.type] ?? FileText;
@@ -253,7 +262,7 @@ export default function ScheduleDock(props: ScheduleDockProps) {
           </div>
           <footer className="st-dock__foot">
             <button type="button" className="studio-btn" onClick={clearScheduleDone} disabled={done.size === 0} title="Clear the ✓ marks for a new service"><RotateCcw size={13} /> Reset done</button>
-            <button type="button" className="studio-btn studio-btn--primary" onClick={props.onAddCurrent} disabled={!props.canAddCurrent} title="Add what is in Preview to the schedule"><Plus size={14} /> Add current</button>
+            <button type="button" className="studio-btn studio-btn--primary" onClick={props.onAddCurrent} disabled={!props.canAddCurrent} title="Add what is in Preview to the schedule"><Plus size={14} /> Add</button>
           </footer>
         </>
       )}

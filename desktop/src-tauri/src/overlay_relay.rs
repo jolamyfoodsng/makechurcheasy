@@ -26,10 +26,6 @@ use tokio_tungstenite::{accept_async, tungstenite::Message};
 
 static OVERLAY_RELAY_PORT: AtomicU16 = AtomicU16::new(0);
 
-pub fn relay_port() -> u16 {
-    OVERLAY_RELAY_PORT.load(Ordering::Relaxed)
-}
-
 fn relay_broadcast() -> &'static broadcast::Sender<String> {
     static STORE: OnceLock<broadcast::Sender<String>> = OnceLock::new();
     STORE.get_or_init(|| {

@@ -18,6 +18,8 @@ interface CameraCardProps {
   wordsOn: boolean;
   /** Camera on / off. (The words are not touched.) */
   onCamera: (on: boolean) => void;
+  /** Show the Show / Hide button. Off when the "What's on the screen" picker turns the camera on and off. */
+  showToggle?: boolean;
 }
 
 /** Opens the system's Camera privacy page (Mac and Windows). */
@@ -71,7 +73,7 @@ export default function SharedControls(props: CameraCardProps) {
           {camera.devices.length === 0 && <option value="">No camera found</option>}
           {camera.devices.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
         </select>
-        <button
+        {props.showToggle !== false && <button
           type="button"
           className={`st-cm__btn st-cm__toggle${cameraOn ? " is-on" : " is-off"}`}
           onClick={() => props.onCamera(!cameraOn)}
@@ -79,9 +81,9 @@ export default function SharedControls(props: CameraCardProps) {
           title={cameraOn ? "Hide Camera: take the camera off the screen. The words stay as they are." : "Show Camera: put the camera on the screen. The words stay as they are."}
         >
           {cameraOn ? <CameraOff size={16} /> : <Video size={16} />} <span>{cameraOn ? "Hide" : "Show"}</span>
-        </button>
+        </button>}
       </div>
-      {!cameraOn && !camera.error && <p className="st-lay__help">Choose a camera to show on screen.</p>}
+      {!cameraOn && !camera.error && <p className="st-lay__help">{props.showToggle === false ? "Pick Camera above to show it." : "Choose a camera to show on screen."}</p>}
       {camera.error && (
         <div className="st-lay__err" role="status">
           <span>{camera.error}</span>

@@ -117,7 +117,15 @@ async function ensureObsSource() {
     await downloadFile(url, archivePath);
   }
 
-  execFileSync("tar", ["-xzf", archivePath, "-C", cacheRoot], { stdio: "inherit" });
+  // The OBS tarball contains symlinks (e.g. .github/scripts/build-macos) that
+  // Windows can't create without Developer Mode/admin. tar then exits 1 even
+  // though every real file was extracted, so tolerate that if the headers exist.
+  try {
+    execFileSync("tar", ["-xzf", archivePath, "-C", cacheRoot], { stdio: "inherit" });
+  } catch (error) {
+    if (process.platform !== "win32" || !findObsSourceRoot(cacheRoot)) throw error;
+    console.warn("[build-obs-bridge] tar reported symlink errors on Windows; continuing (headers extracted).");
+  }
   const extracted = findObsSourceRoot(cacheRoot);
   if (!extracted) {
     throw new Error(`OBS SDK archive ${obsSdkVersion} did not contain libobs/obs.h`);
@@ -260,6 +268,15 @@ async function main() {
     const compilerArgs = platform === "win32" && hasCommand("clang-cl")
       ? ["-DCMAKE_C_COMPILER=clang-cl"]
       : [];
+    // `npm run` prepends node_modules/.bin to PATH. On Windows that folder has an
+    // `rc` shim (from the npm "rc" package) that shadows the real Windows
+    // resource compiler rc.exe and breaks CMake's compiler check. Strip it.
+    const cmakeEnv = { ...process.env };
+    const pathKey = Object.keys(cmakeEnv).find((key) => key.toLowerCase() === "path") || "PATH";
+    cmakeEnv[pathKey] = (cmakeEnv[pathKey] || "")
+      .split(path.delimiter)
+      .filter((entry) => !/[\\/]node_modules[\\/]\.bin[\\/]?$/i.test(entry))
+      .join(path.delimiter);
     execFileSync(
       "cmake",
       [
@@ -273,10 +290,11 @@ async function main() {
         `-DOBS_SOURCE_DIR=${obsSourceRoot}`,
         `-DMCE_SIMDE_INCLUDE_DIR=${simdeIncludeRoot}`,
       ],
-      { stdio: "inherit" },
+      { stdio: "inherit", env: cmakeEnv },
     );
     execFileSync("cmake", ["--build", buildRoot, "--config", "Release", "--parallel"], {
       stdio: "inherit",
+      env: cmakeEnv,
     });
     stagePlugin(platform, findBuiltLibrary(buildRoot, platform), fingerprint);
   } finally {

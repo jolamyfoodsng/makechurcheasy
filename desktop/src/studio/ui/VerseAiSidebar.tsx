@@ -4,14 +4,14 @@
  *  Listening    Start / Stop, microphone, sensitivity, timer and a level meter.
  *  Transcript   what the pastor is saying, newest at the bottom (it follows along unless you
  *               scroll up). Search it; right-click a line to keep it as a sermon note, edit or delete.
- *  Verses       the counts link to the Queue / Suggestions drawer under the reader (one list,
- *               not two): references the pastor said go to the Queue, matches to Suggestions.
+ *  Tabs         Queue (references the pastor said, with Suggestions under it: half the height each),
+ *               Transcript (what is being said), History (what was shown on the screen).
  *  Auto mode    shows detected references on the screen by itself (only certain ones).
  *
- * The « button folds it to a slim rail (mic button, counts) to give the reader more room.
+ * The » button folds it to a slim rail (mic button, counts) to give the reader more room.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronsLeft, ChevronsRight, Eraser, ListOrdered, Mic, MicOff, Pencil, Plus, Scissors, Search, SlidersHorizontal, Sparkles, Trash2, X, Zap } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Check, ChevronsLeft, ChevronsRight, ListOrdered, Mic, MicOff, Pencil, Plus, Scissors, Search, SlidersHorizontal, Sparkles, Trash2, X, Zap } from "lucide-react";
 import type { StudioVerseAi } from "../useVerseAi";
 import StudioMenu, { menuAt, type StudioMenuState } from "./StudioMenu";
 
@@ -25,8 +25,26 @@ interface VerseAiSidebarProps {
   onOpenDrawer: (tab: "queue" | "suggestions") => void;
   /** Fold to the slim rail. */
   onCollapse: () => void;
-  /** Open "search everything". */
+  /** Open "search everything". (No longer shown in the panel; kept so callers don't break.) */
   onSearchAll?: () => void;
+  /** The Queue tab: Queue on top, Suggestions under it. */
+  queuePanel?: ReactNode;
+  /** The History tab: what was shown on the screen. */
+  historyPanel?: ReactNode;
+}
+
+type VaiTab = "queue" | "transcript" | "history";
+const VAI_TAB_KEY = "mce-studio-vai-tab";
+/** Fired by the Studio's shortcut (Alt+Q): show the next Verse AI tab. */
+export const VAI_NEXT_TAB_EVENT = "mce-vai-next-tab";
+const VAI_TABS: VaiTab[] = ["queue", "transcript", "history"];
+function readVaiTab(): VaiTab {
+  try {
+    const v = localStorage.getItem(VAI_TAB_KEY);
+    return v === "transcript" || v === "history" ? v : "queue";
+  } catch {
+    return "queue";
+  }
 }
 
 const MAX_LINES = 400;
@@ -54,7 +72,21 @@ function useNow(active: boolean): number {
 }
 
 export default function VerseAiSidebar(props: VerseAiSidebarProps) {
-  const { ai, autoMode, onAutoMode, autoMessage, onOpenDrawer, onCollapse, onSearchAll } = props;
+  const { ai, autoMode, onAutoMode, autoMessage, onCollapse } = props;
+  const [vaiTab, setVaiTabState] = useState<VaiTab>(readVaiTab);
+  const setVaiTab = (next: VaiTab) => {
+    setVaiTabState(next);
+    try { localStorage.setItem(VAI_TAB_KEY, next); } catch { /* not saved */ }
+  };
+  useEffect(() => {
+    const onNext = () => setVaiTabState((cur) => {
+      const next = VAI_TABS[(VAI_TABS.indexOf(cur) + 1) % VAI_TABS.length];
+      try { localStorage.setItem(VAI_TAB_KEY, next); } catch { /* not saved */ }
+      return next;
+    });
+    window.addEventListener(VAI_NEXT_TAB_EVENT, onNext);
+    return () => window.removeEventListener(VAI_NEXT_TAB_EVENT, onNext);
+  }, []);
   const [query, setQuery] = useState("");
   const [showAll, setShowAll] = useState(false);
   const [follow, setFollow] = useState(true);
@@ -112,7 +144,7 @@ export default function VerseAiSidebar(props: VerseAiSidebarProps) {
   useEffect(() => {
     const box = listRef.current;
     if (box && follow && !query) box.scrollTop = box.scrollHeight;
-  }, [lines, follow, query]);
+  }, [lines, follow, query, vaiTab]);
 
   const onScroll = () => {
     const box = listRef.current;
@@ -141,7 +173,7 @@ export default function VerseAiSidebar(props: VerseAiSidebarProps) {
           <span>Real-time speech-to-scripture detection</span>
         </div>
         <span className={`st-dot st-dot--${connection}`} title={connection === "ok" ? "Speech service connected" : connection === "wait" ? "Connecting" : connection === "bad" ? "Not connected" : "Off"} />
-        <button type="button" className="st-iconbtn st-iconbtn--sm" onClick={onCollapse} title="Fold Verse AI (more room for the Bible)" aria-label="Fold Verse AI"><ChevronsLeft size={15} /></button>
+        <button type="button" className="st-iconbtn st-iconbtn--sm" onClick={onCollapse} title="Fold Verse AI (more room for the Bible)" aria-label="Fold Verse AI"><ChevronsRight size={15} /></button>
       </header>
 
       {confirmStop && ai.listening ? (
@@ -196,21 +228,30 @@ export default function VerseAiSidebar(props: VerseAiSidebarProps) {
         </div>
       )}
 
-      <div className="st-vai__counts">
-        <button type="button" onClick={() => onOpenDrawer("queue")} title="References the pastor said — in the Queue under the Bible">
-          <ListOrdered size={13} /> Queue <span className="st-count">{ai.queue.length}</span>
+      <div className="st-vai__tabs" role="tablist" aria-label="Verse AI">
+        <button type="button" role="tab" aria-selected={vaiTab === "queue"} className={vaiTab === "queue" ? "is-on" : ""} onClick={() => setVaiTab("queue")}>
+          <ListOrdered size={13} /> Queue <span className="st-count">{ai.queue.length + ai.suggestions.length}</span>
         </button>
-        <button type="button" onClick={() => onOpenDrawer("suggestions")} title="Verses that match what is being said — under the Bible">
-          <Sparkles size={13} /> Suggestions <span className="st-count">{ai.suggestions.length}</span>
+        <button type="button" role="tab" aria-selected={vaiTab === "transcript"} className={vaiTab === "transcript" ? "is-on" : ""} onClick={() => setVaiTab("transcript")}>
+          <Sparkles size={13} /> Transcript
+        </button>
+        <button type="button" role="tab" aria-selected={vaiTab === "history"} className={vaiTab === "history" ? "is-on" : ""} onClick={() => setVaiTab("history")}>
+          History
         </button>
       </div>
 
+      {vaiTab === "queue" && <div className="st-vai__tabbody">{props.queuePanel}</div>}
+      {vaiTab === "history" && <div className="st-vai__tabbody">{props.historyPanel}</div>}
+
+      {vaiTab === "transcript" && (
       <div className="st-vai__search">
         <Search size={13} />
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search the transcript" aria-label="Search the transcript" />
         {query && <button type="button" onClick={() => setQuery("")} aria-label="Clear search"><X size={12} /></button>}
       </div>
+      )}
 
+      {vaiTab === "transcript" && (
       <div className="st-vai__body" ref={listRef} onScroll={onScroll}>
         {hiddenCount > 0 && (
           <button type="button" className="st-more" onClick={() => setShowAll(true)}>Show {hiddenCount} earlier lines</button>
@@ -271,7 +312,9 @@ export default function VerseAiSidebar(props: VerseAiSidebarProps) {
         ))}
       </div>
 
-      {!follow && !query && (
+      )}
+
+      {vaiTab === "transcript" && !follow && !query && (
         <button type="button" className="st-jump" onClick={() => setFollow(true)}>Jump to latest ↓</button>
       )}
 
@@ -284,16 +327,6 @@ export default function VerseAiSidebar(props: VerseAiSidebarProps) {
             <small>{autoMessage || (autoMode ? "Detected references go on the screen" : "Detected references wait in the Queue")}</small>
           </span>
         </label>
-        <div className="st-vai__tools">
-          {onSearchAll && (
-            <button type="button" className="st-vai__tool" onClick={onSearchAll} title="Search the Bible, songs, notes, media and graphics. Just start typing anywhere.">
-              <Search size={13} /> <span>Search everything</span> <kbd>⌘K</kbd>
-            </button>
-          )}
-          <button type="button" className="st-vai__tool" onClick={ai.clearTranscript} disabled={ai.lines.length === 0} title="Clear the transcript">
-            <Eraser size={13} /> <span>Clear transcript</span>
-          </button>
-        </div>
       </footer>
 
       {toast && <div className="st-toast" role="status">{toast}</div>}
@@ -318,7 +351,7 @@ export function VerseAiRail({ ai, autoMode, onExpand, onOpenDrawer }: {
   }, [askStop]);
   return (
     <aside className="st-rail" aria-label="Verse AI (folded)">
-      <button type="button" className="st-iconbtn" onClick={onExpand} title="Open Verse AI" aria-label="Open Verse AI"><ChevronsRight size={15} /></button>
+      <button type="button" className="st-iconbtn" onClick={onExpand} title="Open Verse AI" aria-label="Open Verse AI"><ChevronsLeft size={15} /></button>
       <button
         type="button"
         className={`st-rail__mic${ai.listening ? " is-on" : ""}`}

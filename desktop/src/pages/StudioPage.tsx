@@ -113,13 +113,14 @@ import { planDraftForSlide, planItemMatchesSlide, resolvePlanItem, type PlanTarg
 import { appendToSchedule, markScheduleItemDone, nextScheduleItemId, readActivePlan, recordProjected } from "../studio/studioSchedule";
 import { DOCK_SCHEDULE_CHANGED_EVENT } from "../dock/dockScheduleService";
 import { importToLibrary } from "../studio/studioImport";
-import VerseAiSidebar, { VerseAiRail } from "../studio/ui/VerseAiSidebar";
+import VerseAiSidebar, { VAI_NEXT_TAB_EVENT, VerseAiRail } from "../studio/ui/VerseAiSidebar";
 import QueueDrawer from "../studio/ui/QueueDrawer";
 import BroadcastGraphicsDrawer, { type ProjectedGraphic } from "../studio/ui/BroadcastGraphicsDrawer";
 import ScheduleDock from "../studio/ui/ScheduleDock";
 import ThemePanel from "../studio/ui/ThemePanel";
 import PreviewPanel, { type CompareRow, type PreviewTab } from "../studio/ui/PreviewPanel";
 import SharedControls from "../studio/ui/SharedControls";
+import ScenePicker, { type StudioScene } from "../studio/ui/ScenePicker";
 import BibleWorkspace from "../studio/ui/BibleWorkspace";
 import WorshipWorkspace, { markSongRecent } from "../studio/ui/WorshipWorkspace";
 import MediaWorkspace, { MediaControls } from "../studio/ui/MediaWorkspace";
@@ -420,6 +421,28 @@ export default function StudioPage() {
   const [immersive, setImmersive] = useState(false);
   const [previewTab, setPreviewTab] = useState<PreviewTab>("output");
 
+  // Side panel (right): Verse AI or the full Broadcast graphics list (remembered on this computer).
+  const [leftTab, setLeftTabState] = useState<"verseai" | "graphics">(() => {
+    try {
+      return localStorage.getItem("mce-studio-left-tab") === "graphics" ? "graphics" : "verseai";
+    } catch {
+      return "verseai";
+    }
+  });
+  const setLeftTab = useCallback((tab: "verseai" | "graphics") => {
+    setLeftTabState(tab);
+    try { localStorage.setItem("mce-studio-left-tab", tab); } catch { /* not saved */ }
+  }, []);
+  // False while the side panel is folded to the slim rail: graphics then open in the bottom drawer.
+  const leftFullRef = useRef(true);
+  const openGraphics = useCallback(() => {
+    if (leftFullRef.current) {
+      setLeftTab("graphics");
+      return;
+    }
+    setLayout((c) => ({ ...c, drawer: { ...c.drawer, tab: "graphics", open: true } }));
+  }, [setLeftTab]);
+
   useEffect(() => saveLayout(layout), [layout]);
   const patchLayout = useCallback((patch: Partial<StudioLayout>) => setLayout((current) => ({ ...current, ...patch })), []);
   const layoutRef = useRef(layout);
@@ -683,10 +706,11 @@ export default function StudioPage() {
   const liveCameraRef = useRef<StudioCamera | null>(null);
   liveCameraRef.current = liveCamera;
 
-  // Like a source in OBS, the camera is always running while the Studio is open. Whether it is SHOWN
-  // is a separate choice (the Layers card for Preview, Go Live for the screen).
+  // The camera only runs when the operator turns it on, or while it is live on the screen
+  // (so taking it off Preview never cuts the camera that is on air). Opening the Studio
+  // no longer switches the camera (and its light) on by itself.
   const wordsOn = layout.wordsOn;
-  const camera = useStudioCamera(layout.camera, true, !wordsOn);
+  const camera = useStudioCamera(layout.camera, Boolean(liveCamera?.enabled), !wordsOn);
   const cameraRef = useRef(camera);
   cameraRef.current = camera;
   // The screen windows can't always open the camera themselves, so this window always sends them the
@@ -920,6 +944,82 @@ export default function StudioPage() {
       window.setTimeout(() => { switchingRef.current = false; }, 400);
     }
   }, [displayMode, liveSlide, screen, transition, themes, patchLayout, say, previewFirst]);
+
+  // ── "What's on the screen": Full screen / Lower third / Camera / Camera + lower third ──
+  // One choice instead of separate words and camera switches. It goes on the screen at once,
+  // even with "Preview first" on, because it decides what the screen shows, not which slide.
+  const cameraShown = camera.enabled && camera.layout !== "hidden";
+  const activeScene: StudioScene | null =
+    cameraShown && !wordsOn ? "camera"
+      : cameraShown && wordsOn && displayMode === "lower-third" ? "camera-lt"
+        : !cameraShown && wordsOn && displayMode === "fullscreen" ? "fullscreen"
+          : !cameraShown && wordsOn && displayMode === "lower-third" ? "lower-third"
+            : null;
+
+  /** Full Screen / Lower Third, applied to what is on the screen now. */
+  const applyLook = useCallback(async (mode: StudioMode) => {
+    if (mode === displayMode) return;
+    if (!previewFirst) {
+      await changeDisplayMode(mode);
+      return;
+    }
+    patchLayout({ displayMode: mode });
+    if (liveSlide && liveSlide.module !== "media" && screen === "live") {
+      const ok = await goLive(liveSlide, themes, mode, "cut");
+      if (ok) liveModeRef.current = mode;
+    }
+  }, [displayMode, previewFirst, changeDisplayMode, patchLayout, liveSlide, screen, themes]);
+
+  // Set by the word choices (not Camera); the effect below then puts the selected verse/song up
+  // (once the look has switched) if nothing is on the screen yet.
+  const [sceneGo, setSceneGo] = useState<{ mode: StudioMode; n: number } | null>(null);
+  const chooseScene = useCallback(async (scene: StudioScene) => {
+    // Show what is on the screen now, not Preview, so the change is visible straight away.
+    setPreviewTab((t) => (t === "compare" ? t : "output"));
+    setSceneGo(scene === "camera" ? null : { mode: scene === "fullscreen" ? "fullscreen" : "lower-third", n: Date.now() });
+    const cam = cameraRef.current;
+    const camWasOn = cam.enabled && cam.layout !== "hidden";
+    if (scene === "fullscreen" || scene === "lower-third") {
+      // Words only (Bible, songs, notes): the camera goes off.
+      if (camWasOn) cam.setLayout("hidden");
+      if (!layoutRef.current.wordsOn) patchLayout({ wordsOn: true });
+      await pushCameraLive({ enabled: false, deviceId: cam.deviceId, layout: "hidden", wordsOff: false });
+      await applyLook(scene);
+      return;
+    }
+    if (!camWasOn) {
+      // Free plan: a few camera turn-ons a day (switching between the camera choices costs nothing).
+      if (!consumeFreeUse("camera")) {
+        say(freeLimitMessage("camera"), "error");
+        return;
+      }
+      const left = freeLeftNote("camera");
+      if (left) say(left);
+      if (!cam.enabled) void cam.requestAccess();
+    }
+    if (scene === "camera") {
+      patchLayout({ wordsOn: false });
+      cam.setLayout("camera-only");
+      await pushCameraLive({ enabled: true, deviceId: cam.deviceId, layout: "camera-only", wordsOff: true });
+      return;
+    }
+    patchLayout({ wordsOn: true });
+    cam.setLayout("behind-content");
+    await pushCameraLive({ enabled: true, deviceId: cam.deviceId, layout: "behind-content", wordsOff: false });
+    await applyLook("lower-third");
+  }, [applyLook, patchLayout, pushCameraLive, say]);
+
+  // A word choice with nothing on the screen yet: put up the selected verse or song
+  // in the new look. Runs after the look has changed, so `project` uses the new Full Screen / Lower Third.
+  useEffect(() => {
+    if (!sceneGo || displayMode !== sceneGo.mode || !wordsOn) return;
+    setSceneGo(null);
+    if (liveSlide) return;
+    const target = previewSlide ?? selectedSlide;
+    if (target && target.module !== "media") void project(target);
+    // Only when a choice is made (and its look is in place), not whenever the slide changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sceneGo, wordsOn, displayMode]);
 
   const handleClear = useCallback(async () => {
     const settings = getMvSettings();
@@ -1637,20 +1737,20 @@ export default function StudioPage() {
     { id: "logo", title: screen === "logo" ? "Hide the logo" : "Show the logo", keywords: "logo church", run: () => toggleScreen("logo") },
     { id: "prevfirst", title: "Preview first", hint: previewFirst ? "On now" : "Things wait in Preview until Send to Screen", keywords: "preview first wait", run: () => patchLayout({ previewFirst: true }) },
     { id: "straight", title: "Straight to screen", hint: !previewFirst ? "On now" : "Clicks and search go on the screen at once", keywords: "straight to screen live direct", run: () => patchLayout({ previewFirst: false }) },
-    { id: "words", title: wordsOn ? "Hide the words (camera only)" : "Show the words", keywords: "words show bible text hide", run: () => setWordsOn(!wordsOn) },
-    { id: "camera", title: camera.enabled ? "Turn the camera off" : "Turn the camera on", keywords: "camera video webcam", run: () => setCameraOn(!camera.enabled) },
-    { id: "fullscreen", title: "Full Screen look", keywords: "full screen fullscreen look", run: () => patchLayout({ displayMode: "fullscreen" }) },
-    { id: "lowerthird", title: "Lower Third look", keywords: "lower third look", run: () => patchLayout({ displayMode: "lower-third" }) },
+    { id: "scene-fullscreen", title: "Full screen (words, no camera)", hint: "Alt+1", keywords: "full screen fullscreen words bible song notes", run: () => void chooseScene("fullscreen") },
+    { id: "scene-lowerthird", title: "Lower third (words, no camera)", hint: "Alt+2", keywords: "lower third bar words", run: () => void chooseScene("lower-third") },
+    { id: "scene-camera", title: "Camera only", hint: "Alt+3", keywords: "camera video webcam", run: () => void chooseScene("camera") },
+    { id: "scene-camera-lt", title: "Camera + lower third", hint: "Alt+4", keywords: "camera lower third words video", run: () => void chooseScene("camera-lt") },
     { id: "next", title: "Next in schedule", hint: "Alt+N", keywords: "next schedule item", run: () => projectNextItem() },
     { id: "sec-bible", title: "Go to Bible", keywords: "open bible section", run: () => chooseSection("bible") },
     { id: "sec-text", title: "Go to Text (songs and notes)", keywords: "open text songs lyrics worship section", run: () => chooseSection("worship") },
     { id: "sec-media", title: "Go to Media", keywords: "open media pictures videos section", run: () => chooseSection("media") },
     { id: "sec-docs", title: "Go to Docs", keywords: "open docs documents section", run: () => chooseSection("docs") },
-    { id: "graphics", title: "Open Broadcast graphics", hint: "Templates in the bottom drawer", keywords: "broadcast graphics lower third banner templates drawer", run: () => patchLayout({ drawer: { ...layout.drawer, tab: "graphics", open: true } }) },
+    { id: "graphics", title: "Open Broadcast graphics", hint: "The Graphics tab in the side panel", keywords: "broadcast graphics lower third banner templates drawer", run: () => openGraphics() },
     ...(graphicLive ? [{ id: "graphic-close", title: `Close the graphic (${graphicLive.name})`, keywords: "close graphic out animation hide", run: () => closeGraphic() }] : []),
     { id: "shortcuts", title: "Keyboard shortcuts", hint: "See and change the keys", keywords: "keyboard shortcuts keys hotkeys", run: () => { setSettingsTab("shortcuts"); setSettingsPanel(true); } },
     { id: "settings", title: "Open Settings and Output", keywords: "settings output options preferences projector monitor", run: () => setSettingsPanel(true) },
-  ], [autoMode, setAutoMode, ai, handleClear, screen, toggleScreen, previewFirst, patchLayout, wordsOn, setWordsOn, camera.enabled, setCameraOn, projectNextItem, chooseSection, layout.drawer, graphicLive, closeGraphic]);
+  ], [autoMode, setAutoMode, ai, handleClear, screen, toggleScreen, previewFirst, patchLayout, chooseScene, projectNextItem, chooseSection, layout.drawer, graphicLive, closeGraphic]);
 
 
   // ── Projectors ──
@@ -1716,7 +1816,7 @@ export default function StudioPage() {
       case "text-notes": chooseSection("worship"); setTextTab("notes"); break;
       case "search": setSearchAll(""); break;
       case "toggle-schedule": setLayout((c) => ({ ...c, dock: { ...c.dock, open: !c.dock.open } })); break;
-      case "graphics": patchLayout({ drawer: { ...layout.drawer, tab: "graphics", open: true } }); break;
+      case "graphics": openGraphics(); break;
       case "themes":
         if (lookModule) setThemeModal(true);
         else say("Open the Bible or Text first, then choose a theme.");
@@ -1739,14 +1839,23 @@ export default function StudioPage() {
       }
       case "close-graphic": if (graphicLive) closeGraphic(); break;
       case "preview-first": patchLayout({ previewFirst: !previewFirst }); break;
-      case "look-fullscreen": if (lookModule) void changeDisplayMode("fullscreen"); break;
-      case "look-lowerthird": if (lookModule) void changeDisplayMode("lower-third"); break;
-      case "transition": patchLayout({ transition: transition === "fade" ? "cut" : "fade" }); break;
-      case "words":
-        if (camera.enabled) setWordsOn(!wordsOn);
-        else say("The words can be hidden only while the camera is on.");
+      case "look-fullscreen": void chooseScene("fullscreen"); break;
+      case "look-lowerthird": void chooseScene("lower-third"); break;
+      case "scene-camera": void chooseScene("camera"); break;
+      case "scene-camera-lt": void chooseScene("camera-lt"); break;
+      case "queue-project":
+        if (ai.queue[0]) void projectCandidate(ai.queue[0]);
+        else say("The Queue is empty.");
         break;
-      case "camera": setCameraOn(!camera.enabled); break;
+      case "monitor-toggle": setPreviewTab((t) => (t === "output" ? "preview" : "output")); break;
+      case "panel-verseai": setLeftTab("verseai"); patchLayout({ verseAiCollapsed: false }); break;
+      case "vai-tab":
+        setLeftTab("verseai");
+        if (layout.verseAiCollapsed) patchLayout({ verseAiCollapsed: false });
+        window.dispatchEvent(new Event(VAI_NEXT_TAB_EVENT));
+        break;
+      case "fold-panel": patchLayout({ verseAiCollapsed: !layout.verseAiCollapsed }); break;
+      case "transition": patchLayout({ transition: transition === "fade" ? "cut" : "fade" }); break;
       case "auto": setAutoMode(!autoMode); break;
       case "listen": if (ai.listening) ai.stop(); else void ai.start(); break;
       case "text-bigger": patchLayout({ textScale: clamp(textScale + 5, 70, 160) }); break;
@@ -1874,7 +1983,12 @@ export default function StudioPage() {
   });
   // Keep at least ~300px (or 55% of the height) for the reader and Preview above the drawer.
   const drawerMax = Math.max(110, Math.min(LAYOUT_LIMITS.drawer.max, bodySize.height - 300, Math.round(bodySize.height * (bodySize.height < 640 ? 0.24 : 0.45))));
-  const drawerView: "verseai" | "graphics" | "mine" = layout.drawer.tab === "graphics" ? "graphics" : layout.drawer.tab === "mine" ? "mine" : "verseai";
+  // The full side panel (right) has Queue, History and Graphics, so the bottom drawer and the
+  // Schedule's History tab are only used while the panel is folded to the slim rail.
+  const leftFull = !(layout.verseAiCollapsed || columns.verseAiRail);
+  leftFullRef.current = leftFull;
+  const drawerTabView: "verseai" | "graphics" | "mine" = layout.drawer.tab === "graphics" ? "graphics" : layout.drawer.tab === "mine" ? "mine" : "verseai";
+  const drawerView: "verseai" | "graphics" | "mine" = leftFull ? "verseai" : drawerTabView;
   const drawerHasContent = drawerView !== "verseai" || ai.listening || ai.queue.length > 0 || ai.suggestions.length > 0;
   const drawerOpen = layout.drawer.open && drawerHasContent;
   const drawerHeight = drawerOpen ? clamp(layout.drawer.height, 100, drawerMax) : DRAWER_COLLAPSED;
@@ -2190,31 +2304,31 @@ export default function StudioPage() {
       )}
 
       <div className="st-body" ref={bodyRef}>
-        {showVerseAi && columns.verseAi > 0 && (layout.verseAiCollapsed || columns.verseAiRail ? (
-          <div className="st-col st-col--vai" style={{ width: columns.verseAi }}>
-            <VerseAiRail ai={ai} autoMode={autoMode} onExpand={() => patchLayout({ verseAiCollapsed: false })} onOpenDrawer={openDrawer} />
-          </div>
-        ) : (
-          <div className="st-col st-col--vai" style={{ width: columns.verseAi }}>
-            <VerseAiSidebar
-              ai={ai}
-              autoMode={autoMode}
-              onAutoMode={setAutoMode}
-              onSearchAll={() => setSearchAll("")}
-              autoMessage={autoMessage}
-              onOpenDrawer={openDrawer}
-              onCollapse={() => patchLayout({ verseAiCollapsed: true })}
-            />
+        {dockOpen && columns.dock > 0 && (
+          <div className={`st-col st-col--dock${columns.dockOverlay ? " is-overlay" : ""}`} style={{ width: columns.dock }}>
             <Splitter
               axis="x"
               edge="right"
-              label="Resize Verse AI"
-              onStart={() => { dragStart.current = columns.verseAi; }}
-              onDrag={(d) => patchLayout({ verseAiWidth: clamp(dragStart.current + d, LAYOUT_LIMITS.verseAi.min, LAYOUT_LIMITS.verseAi.max) })}
-              onReset={() => patchLayout({ verseAiWidth: DEFAULT_LAYOUT.verseAiWidth })}
+              label="Resize Schedule"
+              onStart={() => { dragStart.current = columns.dock; }}
+              onDrag={(d) => patchLayout({ dock: { ...layout.dock, width: clamp(dragStart.current + d, LAYOUT_LIMITS.dock.min, LAYOUT_LIMITS.dock.max) } })}
+              onReset={() => patchLayout({ dock: { ...layout.dock, width: DEFAULT_LAYOUT.dock.width } })}
+            />
+            <ScheduleDock
+              only={leftFull ? "schedule" : undefined}
+              tab={layout.dock.tab}
+              onTab={(tab) => patchLayout({ dock: { ...layout.dock, tab } })}
+              onClose={() => patchLayout({ dock: { ...layout.dock, open: false } })}
+              liveSlide={liveSlide}
+              displayMode={displayMode}
+              liveItemId={liveScheduleItemId}
+              onOpenItem={(item) => void openPlanItem(item)}
+              onProjectItem={(item) => void projectPlanItem(item)}
+              onAddCurrent={() => schedule(previewSlide ?? selectedSlide)}
+              canAddCurrent={Boolean(previewSlide ?? selectedSlide)}
             />
           </div>
-        ))}
+        )}
 
         <div className="st-center">
           <div
@@ -2280,7 +2394,8 @@ export default function StudioPage() {
                 onNextItem={nextItem && !dockOpen ? projectNextItem : undefined}
                 notice={liveCamera?.enabled && liveCamera.layout === "camera-only" ? "Camera only: the screen shows just the camera, no words." : ""}
                 previewCam={{ enabled: camera.enabled, layout: camera.layout, stream: camera.stream }}
-                cameraCard={<SharedControls camera={camera} cameraHint={cameraHint} wordsOn={wordsOn} onCamera={setCameraOn} />}
+                cameraCard={<SharedControls camera={camera} cameraHint={cameraHint} wordsOn={wordsOn} onCamera={setCameraOn} showToggle={false} />}
+                scenePicker={<ScenePicker active={activeScene} onChoose={(scene) => void chooseScene(scene)} />}
                 liveCam={{
                   enabled: Boolean(liveCamera?.enabled),
                   layout: liveCamera?.layout ?? "hidden",
@@ -2303,7 +2418,7 @@ export default function StudioPage() {
             </div>
           </div>
 
-          {(
+          {!leftFull && (
             <div className="st-drawer-wrap" style={{ height: drawerHeight }}>
               {drawerOpen && (
                 <Splitter
@@ -2322,6 +2437,7 @@ export default function StudioPage() {
                 view={drawerView}
                 onView={(view) => patchLayout({ drawer: { ...layout.drawer, tab: view === "graphics" ? "graphics" : view === "mine" ? "mine" : "queue", open: true } })}
                 graphicLive={Boolean(graphicLive)}
+                hideGraphics={leftFull}
                 savedCount={savedGraphicsCount}
                 graphics={<BroadcastGraphicsDrawer mode={drawerView === "mine" ? "mine" : "all"} live={graphicLive} onProject={projectGraphic} onClose={closeGraphic} />}
                 queue={ai.queue}
@@ -2341,30 +2457,84 @@ export default function StudioPage() {
           )}
         </div>
 
-        {dockOpen && columns.dock > 0 && (
-          <div className={`st-col st-col--dock${columns.dockOverlay ? " is-overlay" : ""}`} style={{ width: columns.dock }}>
+        {showVerseAi && columns.verseAi > 0 && (layout.verseAiCollapsed || columns.verseAiRail ? (
+          <div className="st-col st-col--vai" style={{ width: columns.verseAi }}>
+            <VerseAiRail ai={ai} autoMode={autoMode} onExpand={() => patchLayout({ verseAiCollapsed: false })} onOpenDrawer={openDrawer} />
+          </div>
+        ) : (
+          <div className="st-col st-col--vai" style={{ width: columns.verseAi }}>
+            <div className="st-lefttabs" role="tablist" aria-label="Side panel">
+              <button type="button" role="tab" aria-selected={leftTab === "verseai"} className={`st-drawer__count${leftTab === "verseai" ? " is-on" : ""}`} onClick={() => setLeftTab("verseai")}>
+                Verse AI {ai.listening && <span className="st-drawer__live" title="Listening" />}
+              </button>
+              <button type="button" role="tab" aria-selected={leftTab === "graphics"} className={`st-drawer__count${leftTab === "graphics" ? " is-on" : ""}`} onClick={() => setLeftTab("graphics")}>
+                Graphics {graphicLive && <span className="st-drawer__live" title="A graphic is on the screen" />}
+              </button>
+            </div>
+            {leftTab === "graphics" ? (
+              <section className="st-leftgfx" aria-label="Broadcast graphics">
+                <BroadcastGraphicsDrawer live={graphicLive} onProject={projectGraphic} onClose={closeGraphic} />
+              </section>
+            ) : (
+              <VerseAiSidebar
+                ai={ai}
+                autoMode={autoMode}
+                onAutoMode={setAutoMode}
+                onSearchAll={() => setSearchAll("")}
+                autoMessage={autoMessage}
+                onOpenDrawer={openDrawer}
+                onCollapse={() => patchLayout({ verseAiCollapsed: true })}
+                queuePanel={(
+                  <QueueDrawer
+                    embedded
+                    open
+                    onToggle={() => undefined}
+                    view="verseai"
+                    onView={() => undefined}
+                    graphics={null}
+                    graphicLive={false}
+                    newKeys={recentKeys}
+                    queue={ai.queue}
+                    suggestions={ai.suggestions}
+                    recentSpeech={ai.recentSpeech}
+                    liveKey={slideCandidateKey(liveSlide)}
+                    previewKey={slideCandidateKey(previewSlide)}
+                    onOpen={previewCandidate}
+                    onProject={(c) => void projectCandidate(c)}
+                    onSchedule={(c) => void scheduleCandidate(c)}
+                    onAddToQueue={ai.addToQueue}
+                    onRemove={ai.removeFromQueue}
+                    onMove={ai.moveInQueue}
+                    onClear={ai.clearQueue}
+                  />
+                )}
+                historyPanel={(
+                  <ScheduleDock
+                    only="history"
+                    tab="history"
+                    onTab={() => undefined}
+                    onClose={() => undefined}
+                    liveSlide={liveSlide}
+                    displayMode={displayMode}
+                    liveItemId={liveScheduleItemId}
+                    onOpenItem={(item) => void openPlanItem(item)}
+                    onProjectItem={(item) => void projectPlanItem(item)}
+                    onAddCurrent={() => schedule(previewSlide ?? selectedSlide)}
+                    canAddCurrent={Boolean(previewSlide ?? selectedSlide)}
+                  />
+                )}
+              />
+            )}
             <Splitter
               axis="x"
               edge="left"
-              label="Resize Schedule / History"
-              onStart={() => { dragStart.current = columns.dock; }}
-              onDrag={(d) => patchLayout({ dock: { ...layout.dock, width: clamp(dragStart.current - d, LAYOUT_LIMITS.dock.min, LAYOUT_LIMITS.dock.max) } })}
-              onReset={() => patchLayout({ dock: { ...layout.dock, width: DEFAULT_LAYOUT.dock.width } })}
-            />
-            <ScheduleDock
-              tab={layout.dock.tab}
-              onTab={(tab) => patchLayout({ dock: { ...layout.dock, tab } })}
-              onClose={() => patchLayout({ dock: { ...layout.dock, open: false } })}
-              liveSlide={liveSlide}
-              displayMode={displayMode}
-              liveItemId={liveScheduleItemId}
-              onOpenItem={(item) => void openPlanItem(item)}
-              onProjectItem={(item) => void projectPlanItem(item)}
-              onAddCurrent={() => schedule(previewSlide ?? selectedSlide)}
-              canAddCurrent={Boolean(previewSlide ?? selectedSlide)}
+              label="Resize Verse AI"
+              onStart={() => { dragStart.current = columns.verseAi; }}
+              onDrag={(d) => patchLayout({ verseAiWidth: clamp(dragStart.current - d, LAYOUT_LIMITS.verseAi.min, LAYOUT_LIMITS.verseAi.max) })}
+              onReset={() => patchLayout({ verseAiWidth: DEFAULT_LAYOUT.verseAiWidth })}
             />
           </div>
-        )}
+        ))}
       </div>
 
       {themeGate.modal}

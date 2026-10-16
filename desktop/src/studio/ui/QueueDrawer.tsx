@@ -29,6 +29,10 @@ interface QueueDrawerProps {
   graphics: ReactNode;
   /** A graphic is on the screen now (shows a dot on the tab). */
   graphicLive: boolean;
+  /** Graphics are in the left column (Verse AI | Graphics), so the drawer leaves out its graphics tab. */
+  hideGraphics?: boolean;
+  /** Inside the Verse AI panel: only the Queue (top half) and Suggestions (bottom half), no header. */
+  embedded?: boolean;
   queue: VoiceBibleCandidate[];
   suggestions: VoiceBibleCandidate[];
   recentSpeech: string;
@@ -114,26 +118,7 @@ export default function QueueDrawer(props: QueueDrawerProps) {
     );
   };
 
-  return (
-    <section className={`st-drawer${open ? " is-open" : ""}`} aria-label="Verse AI and broadcast graphics">
-      <div className="st-drawer__head">
-        <div className="st-drawer__counts" role="tablist">
-          <button type="button" role="tab" aria-selected={view === "verseai"} className={`st-drawer__count${view === "verseai" ? " is-on" : ""}`} onClick={() => onView("verseai")}>
-            Verse AI <span className="st-count">{queue.length + suggestions.length}</span>
-          </button>
-          <button type="button" role="tab" aria-selected={view === "graphics"} className={`st-drawer__count${view === "graphics" ? " is-on" : ""}`} onClick={() => onView("graphics")}>
-            Broadcast graphics {props.graphicLive && <span className="st-drawer__live" title="A graphic is on the screen" />}
-          </button>
-        </div>
-        <span className="st-drawer__hint">
-          {view === "verseai" ? "Click to open in the reader · Project shows it now · drag to reorder" : view === "mine" ? "Graphics you edited and saved: view, edit or project them" : "Preview a template, edit it, then Project it on top of the screen"}
-        </span>
-        <button type="button" className="st-iconbtn" onClick={onToggle} aria-label={open ? "Collapse" : "Expand"} title={open ? "Collapse" : "Expand"}>
-          {open ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
-        </button>
-      </div>
-      {open && (view === "graphics" || view === "mine") && <div className="st-drawer__graphics">{props.graphics}</div>}
-      {open && view === "verseai" && (
+  const cols = (
         <div className="st-drawer__cols">
           <div className="st-dcol" aria-label="Queue">
             <div className="st-dcol__head">
@@ -163,7 +148,39 @@ export default function QueueDrawer(props: QueueDrawerProps) {
             </div>
           </div>
         </div>
-      )}
+  );
+
+  if (props.embedded) {
+    return (
+      <div className="st-qpanel">
+        {cols}
+        <StudioMenu menu={menu} onClose={() => setMenu(null)} />
+      </div>
+    );
+  }
+
+  return (
+    <section className={`st-drawer${open ? " is-open" : ""}`} aria-label="Verse AI and broadcast graphics">
+      <div className="st-drawer__head">
+        <div className="st-drawer__counts" role="tablist">
+          <button type="button" role="tab" aria-selected={view === "verseai"} className={`st-drawer__count${view === "verseai" ? " is-on" : ""}`} onClick={() => onView("verseai")}>
+            Verse AI <span className="st-count">{queue.length + suggestions.length}</span>
+          </button>
+          {!props.hideGraphics && (
+            <button type="button" role="tab" aria-selected={view === "graphics"} className={`st-drawer__count${view === "graphics" ? " is-on" : ""}`} onClick={() => onView("graphics")}>
+              Broadcast graphics {props.graphicLive && <span className="st-drawer__live" title="A graphic is on the screen" />}
+            </button>
+          )}
+        </div>
+        <span className="st-drawer__hint">
+          {view === "verseai" ? "Click to open in the reader · Project shows it now · drag to reorder" : view === "mine" ? "Graphics you edited and saved: view, edit or project them" : "Preview a template, edit it, then Project it on top of the screen"}
+        </span>
+        <button type="button" className="st-iconbtn" onClick={onToggle} aria-label={open ? "Collapse" : "Expand"} title={open ? "Collapse" : "Expand"}>
+          {open ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+        </button>
+      </div>
+      {open && (view === "graphics" || view === "mine") && <div className="st-drawer__graphics">{props.graphics}</div>}
+      {open && view === "verseai" && cols}
       <StudioMenu menu={menu} onClose={() => setMenu(null)} />
     </section>
   );

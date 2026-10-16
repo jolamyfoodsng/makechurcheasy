@@ -1174,7 +1174,7 @@ html.st-resizing iframe { pointer-events: none !important; }
 .st-lo__badge { flex: none; padding: 3px 9px; border-radius: 5px; background: var(--st-raised); color: var(--st-text-3); font-size: 11.5px; font-weight: 800; letter-spacing: 0.06em; }
 .st-lo__badge.is-live { background: var(--st-red); color: #fff; }
 .st-lo__timer { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--st-text-2); font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.st-lo .st-preview__stage { max-width: none; width: 100%; margin: 0; }
+.st-lo .st-preview__stage { max-width: min(100%, 340px); width: 100%; margin: 0 auto; }
 .st-lo .st-monitor { border-radius: 12px; overflow: hidden; }
 .st-lo__actions { display: flex; align-items: stretch; gap: 8px; min-width: 0; }
 .st-lo__btn { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 46px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--st-line-strong); background: var(--st-raised); color: var(--st-text); font-size: 14px; font-weight: 650; cursor: pointer; }
@@ -1700,3 +1700,123 @@ html.st-resizing iframe { pointer-events: none !important; }
 .st-found__btns button { height: 28px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--st-line-strong); background: var(--st-raised); color: var(--st-text); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
 .st-found__btns .st-found__go { background: var(--st-red); border-color: var(--st-red); color: #fff; }
 .st-found__btns .st-found__x { margin-left: auto; width: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+
+/* Live Output monitor (right column): keep it short so the controls below stay in view. */
+.st-work .st-lo.st-preview > .st-preview__stage,
+.st-lo .st-preview__stage { max-width: min(100%, 280px); margin-left: auto; margin-right: auto; }
+
+/* "What's on the screen": Full screen / Lower third / Camera / Camera + lower third (2 x 2). */
+.st-lo__tiles2.st-lo__tiles3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.st-lo__words .st-lo__tiles3 .st-lo__t { min-height: 34px; flex-direction: row; gap: 6px; padding: 4px 6px; font-size: 11.5px; line-height: 1.15; }
+
+/* Left column: Verse AI | Graphics (the full Broadcast graphics list). */
+.st-lefttabs { display: flex; gap: 6px; flex: none; padding-bottom: 8px; }
+.st-lefttabs .st-drawer__count { flex: 1 1 0; justify-content: center; }
+.st-leftgfx { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; overflow: hidden; padding-top: 8px;
+  background: var(--st-panel); border: 1px solid var(--st-line); border-radius: var(--st-radius); }
+.st-leftgfx .st-bg__grid { grid-template-columns: minmax(0, 1fr); }
+
+/* Schedule on the left, Verse AI / Graphics on the right. */
+.st-col--dock.is-overlay { right: auto; left: 8px; box-shadow: 14px 0 36px rgba(0, 0, 0, 0.55); }
+.st-dock__title { flex: 1; font-size: 13.5px; font-weight: 700; color: var(--st-text); padding-left: 4px; }
+
+/* Verse AI tabs: Queue (Queue over Suggestions) / Transcript / History. */
+.st-vai__tabs { display: flex; gap: 4px; margin: 0 12px; padding: 3px; border-radius: 9px; background: #0a1222; border: 1px solid var(--st-line); flex: none; }
+.st-vai__tabs button { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 26px; padding: 0 6px; border: 0; border-radius: 7px; background: transparent; color: var(--st-text-2); font-size: 12px; font-weight: 650; cursor: pointer; white-space: nowrap; }
+.st-vai__tabs button:hover { color: var(--st-text); }
+.st-vai__tabs button.is-on { background: var(--st-raised); color: var(--st-text); }
+.st-vai__tabbody { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.st-qpanel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.st-qpanel .st-drawer__cols { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); overflow: hidden; padding: 0 8px 4px; }
+.st-qpanel .st-dcol { flex: initial; min-height: 0; }
+.st-qpanel .st-dcol__list { flex: 1; min-height: 0; overflow-y: auto; }
+.st-qpanel .st-dcol__sub { display: none; }
+.st-dock.st-dock--bare { border: 0; background: transparent; border-radius: 0; }
+
+/* Verse AI: the level meter only while listening, so the tabs sit right under the status. */
+.st-vai .st-meter { height: 18px; }
+.st-vai .st-meter:not(.is-on) { display: none; }
+
+/* ── Verse AI panel: compact (12px text, tighter spacing) ── */
+.st-vai { gap: 6px; padding-top: 8px; font-size: 12px; }
+.st-vai__head { gap: 8px; padding: 0 10px; }
+.st-vai__icon { width: 26px; height: 26px; border-radius: 7px; }
+.st-vai__icon svg { width: 14px; height: 14px; }
+.st-vai__title strong { font-size: 13px; }
+.st-vai__title span { display: none; }
+.st-vai .st-listen { height: 32px; margin: 0 10px; gap: 7px; border-radius: 8px; font-size: 12.5px !important; box-shadow: none; }
+.st-vai .st-listen svg { width: 15px; height: 15px; }
+.st-vai .st-stopask { margin: 0 10px; padding: 5px 8px; gap: 6px; }
+.st-vai .st-stopask button { height: 26px; padding: 0 9px; font-size: 12px; }
+.st-vai__mic { padding: 0 10px; gap: 4px; }
+.st-vai__mic select { height: 28px; font-size: 12px; }
+.st-vai__mic .st-iconbtn { width: 28px; height: 28px; }
+.st-vai__gain { padding: 0 10px; font-size: 12px; }
+.st-vai__status { padding: 0 10px; font-size: 12px; }
+.st-vai .st-meter { margin: 0 10px; height: 14px; }
+.st-vai .st-alert { margin: 0 10px; font-size: 12px; }
+.st-vai__tabs { margin: 0 10px; padding: 2px; }
+.st-vai__tabs button { height: 24px; font-size: 12px; }
+.st-vai__search { margin: 0 10px; height: 26px; }
+.st-vai__search input { font-size: 12px !important; }
+.st-vai .st-tline { grid-template-columns: 44px 1fr; gap: 6px; padding: 4px 6px; font-size: 12px; line-height: 1.4; }
+.st-vai .st-tline__time { font-size: 10.5px; padding-top: 1px; }
+.st-vai__foot { padding: 6px 10px; gap: 6px; }
+.st-vai .st-autocard { padding: 5px 8px; border-radius: 8px; }
+.st-vai .st-autocard .st-switch__text strong { font-size: 12px; }
+.st-vai .st-autocard .st-switch__text small { font-size: 11px; line-height: 1.3; }
+.st-vai .st-empty { font-size: 12px; padding: 10px; }
+
+/* Queue / Suggestions rows: 12px, and Project / Queue as small icon buttons (the name is in the tooltip). */
+.st-qpanel .st-drawer__cols { gap: 6px; padding: 0 6px 4px; }
+.st-qpanel .st-dcol__head { gap: 6px; padding: 4px 8px; }
+.st-qpanel .st-dcol__head strong { font-size: 12px; }
+.st-qpanel .st-dcol__head .st-linkbtn { margin-left: auto; font-size: 11.5px; }
+.st-qpanel .st-dcol__list { padding: 4px; }
+.st-qpanel .st-qrow { gap: 6px; margin-bottom: 4px; padding: 4px 6px; border-radius: 7px; }
+.st-qpanel .st-qrow__grip { min-width: 26px; font-size: 11px; }
+.st-qpanel .st-qrow__grip svg { width: 12px; height: 12px; }
+.st-qpanel .st-qrow__main strong { font-size: 12px; gap: 4px; }
+.st-qpanel .st-qrow__text { font-size: 11.5px; }
+.st-qpanel .st-qrow__why { font-size: 10.5px; }
+.st-qrow__actions { gap: 4px; }
+.st-qrow__actions .st-qrow__lbl { display: none; }
+.st-qrow__actions .st-project,
+.st-qrow__actions .st-chip { width: 26px; height: 26px; min-width: 26px; padding: 0; gap: 0; justify-content: center; border-radius: 6px; }
+.st-qrow__actions .st-project svg,
+.st-qrow__actions .st-chip svg { width: 13px; height: 13px; }
+
+/* The folded rail is on the right now: its "Stop listening?" question opens to the left. */
+.st-col--vai .st-stopask--pop { left: auto; right: calc(100% + 8px); }
+
+/* Graphics cards: Project / Edit / More as small icon buttons (names in the tooltips), 12px text. */
+.st-bg__acts { gap: 4px; }
+.st-bg__acts .st-qrow__lbl { display: none; }
+.st-bg__acts .st-project,
+.st-bg__acts .st-chip { flex: none; width: 28px; height: 26px; min-width: 28px; padding: 0; gap: 0; justify-content: center; border-radius: 6px; }
+.st-bg__acts .st-project svg,
+.st-bg__acts .st-chip svg { width: 13px; height: 13px; }
+.st-bg__card { gap: 4px; padding: 5px; }
+.st-bg__meta strong { font-size: 12px; }
+.st-bg__meta span { font-size: 10.5px; }
+.st-bg__bar { gap: 6px; font-size: 12px; }
+.st-bg__bar input, .st-bg__bar select { font-size: 12px !important; }
+.st-bg__live { padding: 3px 4px 3px 8px; font-size: 12px; }
+.st-bg__closebtn { height: 24px; padding: 0 8px; font-size: 11.5px; }
+.st-leftgfx .st-bg { padding: 0 6px 6px; gap: 6px; }
+
+/* Schedule and History: 12px text, tighter rows. */
+.st-dock { font-size: 12px; }
+.st-dock__head { padding: 6px 8px; }
+.st-dock__sub { padding: 6px 10px 2px; }
+.st-dock__sub span { font-size: 11px; }
+.st-dock__search { padding: 6px 8px 2px; }
+.st-dock__search input, .st-dock__search select { font-size: 12px !important; }
+.st-dock__list { padding: 4px 6px 6px; }
+.st-dock__foot { padding: 6px 8px; }
+.st-dock__foot .studio-btn { height: 28px; font-size: 12px; }
+.st-sched { padding: 4px 6px; gap: 6px; }
+.st-sched__title { font-size: 12px; gap: 5px; }
+.st-sched__title svg { width: 12px; height: 12px; }
+.st-sched__sub { font-size: 11px; gap: 5px; }
+.st-sched__time { font-size: 10.5px; }

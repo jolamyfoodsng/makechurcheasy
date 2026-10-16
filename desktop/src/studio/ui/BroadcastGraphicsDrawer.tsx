@@ -415,8 +415,8 @@ export default function BroadcastGraphicsDrawer({ mode: initialMode = "all", liv
                   <span>{a.usable ? (GRAPHIC_CATEGORY_TABS.find((c) => c.key === entry.category)?.label ?? "Others") : a.reason === "paused" ? "Paused" : "Locked"}</span>
                 </div>
                 <div className="st-bg__acts">
-                  <button type="button" className="st-project" disabled={!a.usable} onClick={() => project(entry)} title="Show it on the screen now"><Send size={13} /> <span className="st-qrow__lbl">Project</span></button>
-                  <button type="button" className={`st-chip${editKey === entry.key ? " is-on" : ""}`} disabled={!a.usable} onClick={() => setEditKey(editKey === entry.key ? null : entry.key)} title="Edit the words, colours, position and time"><Pencil size={13} /> <span className="st-qrow__lbl">Edit</span></button>
+                  <button type="button" className="st-project" disabled={!a.usable} onClick={() => project(entry)} title="Project: show it on the screen now" aria-label={`Project ${entry.name}`}><Send size={13} /> <span className="st-qrow__lbl">Project</span></button>
+                  <button type="button" className={`st-chip${editKey === entry.key ? " is-on" : ""}`} disabled={!a.usable} onClick={() => setEditKey(editKey === entry.key ? null : entry.key)} title="Edit the words, colours, position and time" aria-label={`Edit ${entry.name}`}><Pencil size={13} /> <span className="st-qrow__lbl">Edit</span></button>
                   <button type="button" className="st-chip st-bg__more" aria-label="More" title="More" aria-expanded={menuKey === entry.key} onClick={() => setMenuKey(menuKey === entry.key ? null : entry.key)}><MoreHorizontal size={15} /></button>
                   {menuKey === entry.key && (
                     <div className="st-bg__menu" role="menu">

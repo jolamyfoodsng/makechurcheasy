@@ -126,6 +126,8 @@ interface PreviewPanelProps {
   liveCam?: CamOverlay;
   /** The camera card: sits under the Show Bible / Text card. */
   cameraCard?: React.ReactNode;
+  /** "What's on the screen" (Bible / Camera / Camera + lower third). Replaces the words switch and look tiles. */
+  scenePicker?: React.ReactNode;
   /** "Show Bible / Lyrics / Text": the words are on the screen or hidden. */
   wordsOn: boolean;
   /** The camera is off, so Show Bible / Text stays on and its switch is disabled. */
@@ -284,9 +286,9 @@ export default function PreviewPanel(props: PreviewPanelProps) {
       {props.playback}
 
       <div className="st-lo__stack">
-        <section className="st-lo__mini st-lo__words" aria-label={props.wordsLabel}>
+        <section className="st-lo__mini st-lo__words" aria-label={props.scenePicker ? "What's on the screen" : props.wordsLabel}>
           <div className="st-lo__minihead">
-            <strong>{props.wordsLabel}</strong>
+            <strong>{props.scenePicker ? "What's on the screen" : props.wordsLabel}</strong>
             <div className="st-lo__headright">
               {hasLook && (
                 <div className="st-lookopts" ref={optsRef}>
@@ -314,12 +316,13 @@ export default function PreviewPanel(props: PreviewPanelProps) {
                   )}
                 </div>
               )}
-              <button type="button" className={`st-cm__btn st-cm__toggle${shown ? " is-on" : " is-off"}`} disabled={props.wordsLocked} onClick={() => props.onWords(!shown)} aria-pressed={shown} aria-label={props.wordsLabel} title={props.wordsLocked ? "The camera is off, so the words stay on. Turn the camera on to be able to hide them." : props.wordsOn ? "Hide: take the words off the screen. Click again to show them." : "Show: put the words on the screen."}>
+              {!props.scenePicker && <button type="button" className={`st-cm__btn st-cm__toggle${shown ? " is-on" : " is-off"}`} disabled={props.wordsLocked} onClick={() => props.onWords(!shown)} aria-pressed={shown} aria-label={props.wordsLabel} title={props.wordsLocked ? "The camera is off, so the words stay on. Turn the camera on to be able to hide them." : props.wordsOn ? "Hide: take the words off the screen. Click again to show them." : "Show: put the words on the screen."}>
                 <span>{shown ? "Hide" : "Show"}</span>
-              </button>
+              </button>}
             </div>
           </div>
-          {hasLook && (
+          {props.scenePicker}
+          {!props.scenePicker && hasLook && (
             <div className={`st-lo__tiles2${wordsOff ? " is-dim" : ""}`} role="group" aria-label="How the words show" title={wordsOff ? "The words are hidden. Turn the switch on to use these." : undefined}>
               <button type="button" className={`st-lo__t${displayMode === "fullscreen" ? " is-on" : ""}`} disabled={wordsOff} onClick={() => props.onDisplayMode("fullscreen")} aria-pressed={displayMode === "fullscreen"} title="Full Screen: words fill the whole screen">
                 <Monitor size={18} />

@@ -9169,6 +9169,69 @@ fn append_update_log(app: tauri::AppHandle, line: String) -> Result<(), String> 
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// Opens a Presentation Studio projector window from Rust.
+///
+/// Windows created from JavaScript get WebView2 settings that differ from the
+/// main window's `additionalBrowserArgs`, and WebView2 refuses to run two
+/// differently-configured webviews on the same profile, so on some PCs the
+/// projector window died a second after opening. Building it here with the
+/// main window's exact browser arguments lets it share the main window's
+/// WebView2 profile and browser process (which also uses less memory).
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+async fn open_studio_projector(
+    app: tauri::AppHandle,
+    label: String,
+    url: String,
+    title: String,
+    width: f64,
+    height: f64,
+    x: Option<f64>,
+    y: Option<f64>,
+    decorations: bool,
+    visible: bool,
+    focus: bool,
+    always_on_top: bool,
+) -> Result<(), String> {
+    if !label.starts_with("studio-projector-") {
+        return Err("Invalid projector label".to_string());
+    }
+    let parsed: tauri::Url = url.parse().map_err(|e| format!("Bad projector URL: {e}"))?;
+    let mut builder =
+        tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::External(parsed))
+            .title(title)
+            .inner_size(width, height)
+            .min_inner_size(320.0, 180.0)
+            .resizable(true)
+            .decorations(decorations)
+            .visible(visible)
+            .focused(focus)
+            .always_on_top(always_on_top);
+    builder = match (x, y) {
+        (Some(x), Some(y)) => builder.position(x, y),
+        _ => builder.center(),
+    };
+    #[cfg(windows)]
+    {
+        let main_args = app
+            .config()
+            .app
+            .windows
+            .iter()
+            .find(|w| w.label == "main")
+            .and_then(|w| w.additional_browser_args.clone());
+        if let Some(args) = main_args {
+            builder = builder.additional_browser_args(&args);
+        }
+    }
+    builder.build().map_err(|e| {
+        eprintln!("[Studio] Projector window {} failed: {}", label, e);
+        format!("The projector could not be opened: {e}")
+    })?;
+    println!("[Studio] Projector window {} opened", label);
+    Ok(())
+}
+
 pub fn run() {
     // Load .env file so Rust commands can read env vars (e.g. OPENCODE_API_KEY)
     dotenvy::dotenv().ok();
@@ -9442,6 +9505,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             copy_to_clipboard,
+            open_studio_projector,
             save_bg_image,
             save_upload_file,
             delete_upload_file,
