@@ -42,7 +42,12 @@ if (!remote.replace(/\.git$/, "").endsWith(EXPECTED_REPO)) {
   process.exit(1);
 }
 
-const versionFiles = ["desktop/package.json", "desktop/package-lock.json", "desktop/src-tauri/tauri.conf.json"];
+const versionFiles = [
+  "desktop/package.json",
+  "desktop/package-lock.json",
+  "desktop/src-tauri/tauri.conf.json",
+  "desktop/beta-landing/index.html",
+];
 const releaseMetadataFiles = [".github/workflows/release.yml", "desktop/scripts/release.cjs"];
 const releaseFiles = [...versionFiles, ...releaseMetadataFiles];
 const dirty = execFileSync("git", ["-C", repoRoot, "status", "--porcelain"], { encoding: "utf8" })
