@@ -10,7 +10,7 @@
  *  Compare   (Bible) the previewed verse in every installed translation (button in the Bible bar).
  */
 import { useEffect, useRef, useState } from "react";
-import { CalendarPlus, Check, ChevronDown, ChevronLeft, ChevronRight, Eye, Zap, Expand, Image as ImageIcon, Minus, Monitor, MonitorOff, PanelBottom, Plus, SlidersHorizontal, Timer } from "lucide-react";
+import { CalendarPlus, Check, ChevronDown, ChevronLeft, ChevronRight, Eye, Zap, Expand, Image as ImageIcon, Minus, Monitor, MonitorOff, PanelBottom, Plus, SlidersHorizontal, Timer, X } from "lucide-react";
 import StudioModal from "./StudioModal";
 import StudioMenu, { menuAt, type StudioMenuState } from "./StudioMenu";
 import type { BibleTheme } from "../../bible/types";
@@ -128,6 +128,9 @@ interface PreviewPanelProps {
   cameraCard?: React.ReactNode;
   /** "What's on the screen" (Bible / Camera / Camera + lower third). Replaces the words switch and look tiles. */
   scenePicker?: React.ReactNode;
+  /** A broadcast graphic is on the screen: shown above the picker with a button to take it off. */
+  graphicLive?: { name: string } | null;
+  onCloseGraphic?: () => void;
   /** "Show Bible / Lyrics / Text": the words are on the screen or hidden. */
   wordsOn: boolean;
   /** The camera is off, so Show Bible / Text stays on and its switch is disabled. */
@@ -321,6 +324,15 @@ export default function PreviewPanel(props: PreviewPanelProps) {
               </button>}
             </div>
           </div>
+          {props.graphicLive && props.onCloseGraphic && (
+            <div className="st-lo__gfx" role="status">
+              <span className="st-lo__gfxdot" aria-hidden="true" />
+              <span className="st-lo__gfxname" title={props.graphicLive.name}><small>Graphic on the screen</small>{props.graphicLive.name}</span>
+              <button type="button" className="st-lo__gfxclose" onClick={props.onCloseGraphic} title="Take the graphic off the screen (Alt+G)">
+                <X size={14} /> Remove
+              </button>
+            </div>
+          )}
           {props.scenePicker}
           {!props.scenePicker && hasLook && (
             <div className={`st-lo__tiles2${wordsOff ? " is-dim" : ""}`} role="group" aria-label="How the words show" title={wordsOff ? "The words are hidden. Turn the switch on to use these." : undefined}>

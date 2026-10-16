@@ -1,59 +1,18 @@
-# Release notes: Presentation Studio update
+# MakeChurchEazy Release Highlights (v4.2.4)
 
-Date: 15 October 2026
+## 1. Easier Live Studio Controls
+- **Lead:** Choose what viewers see with one control: Full Screen, Lower Third, Camera, or Camera + Lower Third. The selection goes live straight away.
+- **Lead:** The camera stays off when Studio opens and starts only when you choose it or it is already live.
 
-## New and improved
+## 2. A More Organized Studio Workspace
+- **Lead:** Keep the service schedule on the left and Verse AI or Broadcast Graphics on the right, with Queue, Transcript, and History tabs.
+- **Lead:** Studio now shows which broadcast graphic is on screen and gives you a Remove button to take it off.
 
-### Broadcast graphics
-- Cards now have two buttons (Project, Edit) and a three-dots menu (Preview, Position and time, Delete).
-- Graphics can be placed on screen: position (dropdown, e.g. Bottom left), size, and how long they stay.
-- Category is a dropdown. The editor shows Content first, with labels on top and two columns.
-- "My graphics" sits inside Broadcast graphics, beside "All". Saved graphics can be viewed and edited there.
-- Fixed: a projected graphic now appears on the output screen.
+## 3. More Reliable Projector Windows
+- **Lead:** On Windows, projector windows now use the same browser settings as the main app, fixing cases where an output screen closed just after opening.
+- **Lead:** If an output screen closes unexpectedly, Studio now reports how long it stayed open and which screen it was opening.
 
-### Camera and Show Content
-- Camera card: smaller dropdown, a small live preview at the top right, and one Show/Hide button. Hover explains what it does.
-- Show Content has the same single Show/Hide button at the top.
+## 4. Windows Build Improvements
+- **Lead:** The Windows release build now handles OBS bundle links and build-tool paths more reliably.
 
-### Output screen
-- The output now fills taller screens instead of stopping at a 16:9 box (Bible, worship and notes overlays).
-- Switching between Lower Third and Full Screen no longer flashes the church logo. The logo appears only after a few seconds of nothing on screen, and a dark screen shows until then.
-- Phone link (studio-output): on phones the page loads lighter (layers load when needed, fewer camera updates). This is a best-guess fix for the "a problem repeatedly occurred" crash.
-
-### Logo and Compare
-- The logo you set now stays after a refresh, on disk and in the cloud backup.
-- Compare no longer turns itself on after a refresh.
-
-### Free plan limits
-- Camera: 3 turn-ons per day.
-- Project graphics: 5 per day.
-- Saved graphics: 3.
-- Limits are checked inside the app only.
-
-### Settings
-- The Share over Wi-Fi link is at the top, with an explanation (same Wi-Fi or hotspot). NDI is marked "coming soon".
-
-### Messages
-- Studio messages now appear as a toast at the bottom right, so the screen no longer moves.
-
-### Windows
-- The local speech-status endpoint now sends the private-network permission header. This is meant to keep the Dock LM tab from showing "Offline" on Windows. Untested on Windows.
-
-## Removed for now
-- Compare **Passages** is hidden. Save did nothing for you and the cause was not found. The code is still in the project. Translation compare is unchanged.
-
-## Known issues
-- Native camera error: "CameraFormat 1920x1080@15FPS YUYV" is not fixed.
-- Free plan limits can be bypassed by a determined user (no server check).
-- The phone crash fix and the Windows Dock LM fix are unconfirmed.
-- Multi-View page: no changes made (design options only).
-
-## Before you deploy
-1. `npx tsc --noEmit -p .`
-2. `npm run build`
-3. `cargo build` (or restart `tauri dev`) for the `lib.rs` change.
-4. Test the built app: camera card, Show Content, toast, Broadcast graphics (Project, Edit, ⋯, My graphics), logo after refresh, Wi-Fi link in Settings.
-5. Check that `OUTPUT_PAGE_REV` in `studioEngine.ts` matches `PAGE_REV` in `public/studio-output.html`, so open output windows reload once.
-6. Reload the output page on a phone, and test Dock LM once on Windows.
-
-All styles were added to `StudioShell.css`, which `StudioPage.tsx` already imports. No new CSS files were added.
+> **How to get it:** Install the update when MakeChurchEazy prompts you, or download it from makechurcheazy.com/downloads.

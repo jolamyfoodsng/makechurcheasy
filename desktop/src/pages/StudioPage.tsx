@@ -139,6 +139,7 @@ import {
   monitorLabel,
   onProjectorsChange,
   openProjector,
+  takeSurpriseCloseNote,
   pickDefaultMonitorKey,
   saveOutputMonitor,
   type OpenProjector,
@@ -667,7 +668,8 @@ export default function StudioPage() {
   // The projector window closing by itself (unplugged screen, crash) is worth a warning.
   useEffect(() => {
     if (hadOutputRef.current && !outputOpen && !closingOutputRef.current) {
-      say("The output screen closed. Your Preview and schedule are kept — open the output again under Outputs.", "error");
+      const why = takeSurpriseCloseNote();
+      say(`The output screen closed. ${why} Your Preview and schedule are kept — open the output again under Outputs.`.replace("  ", " "), "error");
     }
     if (!outputOpen) closingOutputRef.current = false;
     hadOutputRef.current = outputOpen;
@@ -2396,6 +2398,8 @@ export default function StudioPage() {
                 previewCam={{ enabled: camera.enabled, layout: camera.layout, stream: camera.stream }}
                 cameraCard={<SharedControls camera={camera} cameraHint={cameraHint} wordsOn={wordsOn} onCamera={setCameraOn} showToggle={false} />}
                 scenePicker={<ScenePicker active={activeScene} onChoose={(scene) => void chooseScene(scene)} />}
+                graphicLive={graphicLive}
+                onCloseGraphic={closeGraphic}
                 liveCam={{
                   enabled: Boolean(liveCamera?.enabled),
                   layout: liveCamera?.layout ?? "hidden",

@@ -1820,3 +1820,11 @@ html.st-resizing iframe { pointer-events: none !important; }
 .st-sched__title svg { width: 12px; height: 12px; }
 .st-sched__sub { font-size: 11px; gap: 5px; }
 .st-sched__time { font-size: 10.5px; }
+
+/* A graphic is on the screen: a strip above "What's on the screen" with a Remove button. */
+.st-lo__gfx { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 10px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--st-red) 55%, transparent); background: var(--st-red-soft); }
+.st-lo__gfxdot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--st-red); box-shadow: 0 0 0 3px var(--st-red-soft); }
+.st-lo__gfxname { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 650; color: var(--st-text); }
+.st-lo__gfxname small { font-size: 10.5px; font-weight: 600; color: var(--st-text-2); letter-spacing: 0.02em; }
+.st-lo__gfxclose { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border: 0; border-radius: 7px; background: var(--st-red); color: #fff; font-size: 12px; font-weight: 700; cursor: pointer; }
+.st-lo__gfxclose:hover { background: var(--st-red-2); }

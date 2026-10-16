@@ -142,7 +142,17 @@ async function destroyWindow(label: string): Promise<void> {
   }
 }
 
+const expectedClose = new Set<string>();
+/** Set when a projector disappears without the app asking for it: how long it lived and where it pointed. */
+let lastSurpriseClose = "";
+export function takeSurpriseCloseNote(): string {
+  const note = lastSurpriseClose;
+  lastSurpriseClose = "";
+  return note;
+}
+
 export async function closeProjector(label: string): Promise<void> {
+  expectedClose.add(label);
   await destroyWindow(label);
   if (projectors.delete(label)) notify();
 }
@@ -277,7 +287,12 @@ export async function openProjector(feed: ProjectorFeed, target: ProjectorTarget
   }
 
   projectors.set(label, entry);
+  const openedAt = Date.now();
   void win.once("tauri://destroyed", () => {
+    if (!expectedClose.delete(label)) {
+      lastSurpriseClose = `It closed itself ${((Date.now() - openedAt) / 1000).toFixed(1)}s after opening (${url}).`;
+      console.warn("[projector]", lastSurpriseClose);
+    }
     if (projectors.delete(label)) notify();
   });
   notify();
