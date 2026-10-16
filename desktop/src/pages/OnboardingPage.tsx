@@ -96,12 +96,32 @@ const ONBOARDING_TUTORIALS: Record<number, OnboardingTutorial> = {
 };
 
 /* ── Helpers ── */
+function readLocalValue(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+
+function writeLocalValue(key: string, value: string): void {
+  try { localStorage.setItem(key, value); } catch { /* Onboarding can continue for this session. */ }
+}
+
+function removeLocalValue(key: string): void {
+  try { localStorage.removeItem(key); } catch { /* Ignore unavailable browser storage. */ }
+}
+
+function readSessionValue(key: string): string | null {
+  try { return sessionStorage.getItem(key); } catch { return null; }
+}
+
+function writeSessionValue(key: string, value: string): void {
+  try { sessionStorage.setItem(key, value); } catch { /* Analytics must not block setup. */ }
+}
+
 function isOnboardingComplete(): boolean {
   return isOnboardingCompleted();
 }
 
 function getSavedStep(): number {
-  const raw = localStorage.getItem(STEP_KEY);
+  const raw = readLocalValue(STEP_KEY);
   let savedStep = 1;
   if (raw != null) {
     const n = parseInt(raw, 10);
@@ -110,7 +130,7 @@ function getSavedStep(): number {
 
   // Migrate earlier flow versions
   const savedVersion = parseInt(
-    localStorage.getItem(FLOW_VERSION_KEY) || "1",
+    readLocalValue(FLOW_VERSION_KEY) || "1",
     10,
   );
   if (raw != null && savedVersion < 2 && savedStep >= 3) {
@@ -124,25 +144,25 @@ function getSavedStep(): number {
   }
 
   const normalizedStep = Math.min(savedStep, TOTAL_STEPS);
-  localStorage.setItem(FLOW_VERSION_KEY, String(FLOW_VERSION));
-  localStorage.setItem(STEP_KEY, String(normalizedStep));
+  writeLocalValue(FLOW_VERSION_KEY, String(FLOW_VERSION));
+  writeLocalValue(STEP_KEY, String(normalizedStep));
   return normalizedStep;
 }
 
 function saveStep(step: number) {
-  localStorage.setItem(STEP_KEY, String(step));
-  localStorage.setItem(FLOW_VERSION_KEY, String(FLOW_VERSION));
+  writeLocalValue(STEP_KEY, String(step));
+  writeLocalValue(FLOW_VERSION_KEY, String(FLOW_VERSION));
 }
 
 function completeOnboarding() {
   completeWorkspaceOnboarding();
-  localStorage.removeItem(STORAGE_KEY + "-theme-id");
+  removeLocalValue(STORAGE_KEY + "-theme-id");
 
   // Guard: ensure backend complete endpoint is called only once
-  if (localStorage.getItem(STORAGE_KEY + "-api-reported") === "true") {
+  if (readLocalValue(STORAGE_KEY + "-api-reported") === "true") {
     return;
   }
-  localStorage.setItem(STORAGE_KEY + "-api-reported", "true");
+  writeLocalValue(STORAGE_KEY + "-api-reported", "true");
 
   try {
     const deviceId = getDeviceId();
@@ -165,10 +185,10 @@ function completeOnboarding() {
 function fireMilestone(milestone: string) {
   // Guard: ensure each milestone is only fired once per install
   const milestoneKey = `mce-milestone-${milestone}`;
-  if (localStorage.getItem(milestoneKey) === "true") {
+  if (readLocalValue(milestoneKey) === "true") {
     return;
   }
-  localStorage.setItem(milestoneKey, "true");
+  writeLocalValue(milestoneKey, "true");
 
   try {
     const deviceId = getDeviceId();
@@ -365,9 +385,9 @@ export default function OnboardingPage() {
     if (hasFinishedRef.current) return;
     hasFinishedRef.current = true;
 
-    const alreadyReported = localStorage.getItem("mce-onboarding-completed-reported") === "true";
+    const alreadyReported = readLocalValue("mce-onboarding-completed-reported") === "true";
     if (!alreadyReported) {
-      localStorage.setItem("mce-onboarding-completed-reported", "true");
+      writeLocalValue("mce-onboarding-completed-reported", "true");
       fireMilestone("desktopOnboardingCompletedAt");
       track("onboarding_completed");
       trackProductEvent("onboarding_completed");
@@ -380,9 +400,9 @@ export default function OnboardingPage() {
     if (hasFinishedRef.current) return;
     hasFinishedRef.current = true;
 
-    const alreadyReported = localStorage.getItem("mce-onboarding-completed-reported") === "true";
+    const alreadyReported = readLocalValue("mce-onboarding-completed-reported") === "true";
     if (!alreadyReported) {
-      localStorage.setItem("mce-onboarding-completed-reported", "true");
+      writeLocalValue("mce-onboarding-completed-reported", "true");
       track("onboarding_skipped");
       trackProductEvent("onboarding_skipped");
     }
@@ -402,9 +422,9 @@ export default function OnboardingPage() {
 
     if (hasFinishedRef.current) return;
     hasFinishedRef.current = true;
-    const alreadyReported = localStorage.getItem("mce-onboarding-completed-reported") === "true";
+    const alreadyReported = readLocalValue("mce-onboarding-completed-reported") === "true";
     if (!alreadyReported) {
-      localStorage.setItem("mce-onboarding-completed-reported", "true");
+      writeLocalValue("mce-onboarding-completed-reported", "true");
       fireMilestone("desktopOnboardingCompletedAt");
       track("onboarding_completed", { workspace: "studio" });
       trackProductEvent("onboarding_completed", { workspace: "studio" });
@@ -415,8 +435,8 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     const startedKey = "mce-onboarding-started-reported";
-    if (!sessionStorage.getItem(startedKey) && !localStorage.getItem(STORAGE_KEY)) {
-      sessionStorage.setItem(startedKey, "true");
+    if (!readSessionValue(startedKey) && !readLocalValue(STORAGE_KEY)) {
+      writeSessionValue(startedKey, "true");
       track("onboarding_started");
       trackProductEvent("onboarding_started");
       fireMilestone("desktopOnboardingStartedAt");
