@@ -552,7 +552,7 @@ function StepChooseWorkspace({ onChoose }: { onChoose: (workspace: PreferredWork
       <div className="ob-workspace-intro">
         <span className="ob-welcome-pill"><MonitorPlay size={13} /> Choose your workspace</span>
         <h1 id="ob-workspace-title">How would you like to get started?</h1>
-        <p>Choose your preferred production workspace. You can connect other tools later.</p>
+        <p>Choose your preferred production workspace to continue.</p>
       </div>
       <div className="ob-workspace-options">
         <article className="ob-workspace-option ob-workspace-option--recommended">

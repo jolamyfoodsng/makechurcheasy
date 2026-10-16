@@ -59,7 +59,6 @@ import type { ServicePlanItem } from "../service-planner/types";
 import { getChapter } from "../bible/bibleData";
 import { formatBiblePassageReference, parseBiblePassageReference } from "../dock/bibleMultiPassage";
 import { useAuth } from "../contexts/AuthContext";
-import { obsService, type ConnectionStatus } from "../services/obsService";
 import { getEffectivePlan } from "../services/licenseService";
 import {
   DEFAULT_MEDIA_CONTROL,
@@ -391,18 +390,6 @@ const WorshipSongModal = lazy(() => import("../worship/WorshipSongModal"));
 export default function StudioPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [obsConnectionStatus, setObsConnectionStatus] = useState<ConnectionStatus>(obsService.status);
-  const [integrationBannerDismissed, setIntegrationBannerDismissed] = useState(() => {
-    try { return localStorage.getItem("mce-studio-integration-banner-dismissed") === "true"; } catch { return false; }
-  });
-  useEffect(() => obsService.onStatusChange((status) => setObsConnectionStatus(status)), []);
-  const openObsConnection = useCallback(() => {
-    window.dispatchEvent(new Event("showOBSConnectPanel"));
-  }, []);
-  const dismissIntegrationBanner = useCallback(() => {
-    setIntegrationBannerDismissed(true);
-    try { localStorage.setItem("mce-studio-integration-banner-dismissed", "true"); } catch { /* banner can still be dismissed for this session */ }
-  }, []);
   const [layout, setLayout] = useState<StudioLayout>(readLayout);
   const section = layout.section;
   // Text has two tabs: Worship (songs) and Notes. `view` is what is really open.
@@ -2414,26 +2401,6 @@ export default function StudioPage() {
         </div>
       </header>
 
-      {!integrationBannerDismissed && (
-        <aside className="st-integration-banner" aria-label="Production tool connections">
-          <div className="st-integration-banner__status">
-            <span className={`st-integration-banner__dot${obsConnectionStatus === "connected" ? " is-connected" : ""}`} />
-            <span>Studio <strong>Ready</strong></span>
-          </div>
-          <div className="st-integration-banner__copy">
-            <strong>{obsConnectionStatus === "connected" ? "OBS is connected" : "Want to connect a production tool?"}</strong>
-            <span>{obsConnectionStatus === "connected" ? "Your Studio and OBS features are ready." : "Studio works on its own. Connect OBS for additional production capabilities."}</span>
-          </div>
-          <div className="st-integration-banner__actions">
-            <button type="button" className="st-integration-banner__setup" onClick={openObsConnection}>
-              {obsConnectionStatus === "connected" ? "OBS settings" : "Set up OBS"}
-            </button>
-            <button type="button" className="st-integration-banner__soon" disabled title="vMix integration is coming soon">vMix · Soon</button>
-          </div>
-          <button type="button" className="st-integration-banner__close" onClick={dismissIntegrationBanner} aria-label="Dismiss integration information" title="Dismiss"><X size={16} /></button>
-        </aside>
-      )}
-
       {message && (
         <div className={`studio-message st-message${message.tone === "error" ? " is-error" : ""}`} role={message.tone === "error" ? "alert" : "status"}>
           {message.text}
@@ -2753,8 +2720,6 @@ export default function StudioPage() {
       {settingsPanel && (
         <SettingsModal
           initialTab={settingsTab}
-          obsConnected={obsConnectionStatus === "connected"}
-          onSetupObs={openObsConnection}
           previewFirst={previewFirst}
           onPreviewFirst={setPreviewFirst}
           transition={transition}

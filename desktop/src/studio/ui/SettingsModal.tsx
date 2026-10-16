@@ -3,7 +3,7 @@
  * change between slides, text size) and the Output (projector / TV, Wi-Fi link, NDI).
  */
 import { useState } from "react";
-import { Check, Copy, Image as ImageIcon, Minus, Monitor, MonitorOff, Plus, Radio, RotateCcw, Wifi, Link2 } from "lucide-react";
+import { Check, Copy, Image as ImageIcon, Minus, Monitor, MonitorOff, Plus, Radio, RotateCcw, Wifi } from "lucide-react";
 import type { StudioTransition } from "../studioEngine";
 import { monitorLabel, type StudioMonitor } from "../studioOutputWindow";
 import StudioModal from "./StudioModal";
@@ -75,8 +75,6 @@ interface SettingsModalProps {
   textScale: number;
   onTextScale: (percent: number) => void;
   onResetLayout: () => void;
-  obsConnected: boolean;
-  onSetupObs: () => void;
   output: SettingsOutputProps;
   /** Which tab opens first (Ctrl/Cmd+/ opens the shortcuts one). */
   initialTab?: SettingsTab;
@@ -97,16 +95,6 @@ export default function SettingsModal(props: SettingsModalProps) {
       {tab === "shortcuts" && <ShortcutsPanel />}
 
       {tab === "general" && (<>
-      <section className="st-set">
-        <h3><Link2 size={14} /> Integrations</h3>
-        <div className="st-set__row">
-          <span>OBS Studio</span>
-          <button type="button" className="studio-btn" onClick={props.onSetupObs}>
-            {props.obsConnected ? "Connection settings" : "Set up OBS"}
-          </button>
-        </div>
-        <p className="st-set__hint">Studio works on its own. Connect OBS to use additional production controls.</p>
-      </section>
       <section className="st-set">
         <h3>Quick controls</h3>
         <div className="st-set__row">
