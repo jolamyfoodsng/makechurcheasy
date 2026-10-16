@@ -13,6 +13,8 @@ import {
   CalendarPlus,
   Check,
   CheckSquare,
+  Copy,
+  FolderSearch,
   Eye,
   Film,
   Grid3x3,
@@ -27,6 +29,7 @@ import {
   RotateCcw,
   Search,
   Square,
+  Trash2,
   Upload,
   Volume2,
   VolumeX,
@@ -36,7 +39,9 @@ import type { MediaItem } from "../../library/libraryTypes";
 import { DOCK_MEDIA_ACCEPT } from "../../services/mediaValidation";
 import type { StudioMediaControl, StudioSlide } from "../studioEngine";
 import { isDocumentPage, mediaPath } from "../studioSlides";
+import { isReferenceMediaItem } from "../../library/mediaReferences";
 import StudioMenu, { menuAt, type StudioMenuState } from "./StudioMenu";
+import StudioModal from "./StudioModal";
 
 type Kind = "all" | "image" | "video" | "audio";
 type Origin = "all" | "local" | "templates";
@@ -50,7 +55,19 @@ interface MediaWorkspaceProps {
   onPick: (id: string) => void;
   onProject: (id: string) => void;
   onSchedule: (id: string) => void;
+  /** Delete these items from the library (and their files). Shown after the operator confirms. */
+  onDelete?: (ids: string[]) => Promise<void> | void;
   onImport: (files: FileList) => void;
+  /** Desktop app: open the native picker (files are referenced by path, not copied). */
+  onImportClick?: () => void;
+  /** A file is being dragged over the window. */
+  dropActive?: boolean;
+  /** Referenced items whose original file can't be found. */
+  missingIds?: Set<string>;
+  /** Point a referenced item at its file again. */
+  onRelink?: (id: string) => void;
+  /** Keep a copy of a referenced item in the MakeChurchEazy folder. */
+  onMakeCopy?: (id: string) => void;
   importing: string;
   /** Kept so the page can still pass it; the Overlays tab was removed, so it is not shown. */
   overlays?: React.ReactNode;
@@ -172,6 +189,32 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
   const resumeAt = ticked.length > 1 ? props.resumeIndexFor?.(ticked) ?? null : null;
   const running = new Set(props.slideshowIds ?? []);
 
+  // Delete (always asks first). Something on the screen or in a running slideshow can't be deleted.
+  const [pendingDelete, setPendingDelete] = useState<MediaItem[]>([]);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const askDelete = (items: MediaItem[]) => {
+    if (!props.onDelete || items.length === 0) return;
+    setDeleteError("");
+    setPendingDelete(items);
+  };
+  const closeDelete = () => { if (!deleting) setPendingDelete([]); };
+  const deleteBlocked = pendingDelete.filter((item) => item.id === liveId || running.has(item.id));
+  const confirmDelete = async () => {
+    if (!props.onDelete || pendingDelete.length === 0 || deleteBlocked.length > 0) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await props.onDelete(pendingDelete.map((item) => item.id));
+      setTicked((cur) => cur.filter((id) => !pendingDelete.some((item) => item.id === id)));
+      setPendingDelete([]);
+    } catch (error) {
+      setDeleteError(error instanceof Error && error.message ? error.message : "Could not delete. Please try again.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <section className="st-media" aria-label="Media">
       <div className="st-media__bar">
@@ -209,7 +252,7 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
                 <CheckSquare size={14} /> {showChecks ? "Done" : "Select"}
               </button>
             )}
-            <button type="button" className="studio-btn studio-btn--primary" onClick={() => fileRef.current?.click()} disabled={Boolean(props.importing)}>
+            <button type="button" className="studio-btn studio-btn--primary" onClick={() => (props.onImportClick ? props.onImportClick() : fileRef.current?.click())} disabled={Boolean(props.importing)}>
               {props.importing ? <Loader2 size={14} className="st-spin" /> : <Upload size={14} />} Import Media
             </button>
             <input
@@ -224,6 +267,7 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
         )}
       </div>
       {props.importing && <div className="st-banner" role="status">{props.importing}</div>}
+      {props.dropActive && !props.importing && <div className="st-banner" role="status">Drop to add to your media library</div>}
 
       {props.previewFirst && list.some((item) => item.type === "video") && !showChecks && (
         <div className="st-media__hint" role="status">
@@ -245,6 +289,16 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
             Select all {(tickedKind ?? (kind === "video" ? "video" : "image")) === "video" ? "videos" : "pictures"}
           </button>
           {ticked.length > 0 && <button type="button" className="studio-btn" onClick={() => { setTicked([]); setTickNote(""); }}>Clear</button>}
+          {props.onDelete && ticked.length > 0 && (
+            <button
+              type="button"
+              className="studio-btn studio-btn--danger"
+              onClick={() => askDelete(ticked.map((id) => byId.get(id)).filter((m): m is MediaItem => Boolean(m)))}
+              title="Delete the selected items from your media library"
+            >
+              <Trash2 size={14} /> Delete
+            </button>
+          )}
           {resumeAt !== null && (
             <button type="button" className="studio-btn" onClick={() => props.onSlideshow?.(ticked, tickedKind ?? "image", resumeAt)} title="Carry on from where the slideshow stopped">
               <RotateCcw size={14} /> Resume at {resumeAt + 1}
@@ -273,6 +327,8 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
             const isLive = item.id === liveId;
             const tickAt = ticked.indexOf(item.id);
             const canTick = Boolean(props.onSlideshow) && (item.type === "image" || item.type === "video");
+            const isReference = isReferenceMediaItem(item) && Boolean(item.referenceId);
+            const isMissing = Boolean(props.missingIds?.has(item.id));
             return (
               <div
                 key={item.id}
@@ -296,6 +352,9 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
                     { label: "Project", icon: <Play size={14} />, onSelect: () => props.onProject(item.id) },
                     { label: "Add to Schedule", icon: <CalendarPlus size={14} />, divider: true, onSelect: () => props.onSchedule(item.id) },
                     ...(canTick ? [{ label: tickAt >= 0 ? "Untick (slideshow)" : "Tick for a slideshow", icon: <CheckSquare size={14} />, onSelect: () => toggleTick(item) }] : []),
+                    ...(isReference && props.onRelink ? [{ label: isMissing ? "Locate missing file…" : "Locate file…", icon: <FolderSearch size={14} />, divider: true, onSelect: () => props.onRelink?.(item.id) }] : []),
+                    ...(isReference && props.onMakeCopy && item.storage !== "copy" && !isMissing ? [{ label: "Make a local copy", icon: <Copy size={14} />, onSelect: () => props.onMakeCopy?.(item.id) }] : []),
+                    ...(props.onDelete ? [{ label: "Delete…", icon: <Trash2 size={14} />, danger: true, divider: true, onSelect: () => askDelete([item]) }] : []),
                   ]));
                 }}
                 title={item.name}
@@ -304,6 +363,17 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
                   {thumb ? <img src={thumb} alt="" loading="lazy" /> : item.type === "video" && mediaPath(item) ? <VideoFrame src={videoUrlOf(item, base)} fallback={<Icon size={22} />} /> : <Icon size={22} />}
                   {item.type !== "image" && <span className="st-mitem__kind"><Icon size={11} /> {duration(item.durationSec)}</span>}
                   {isLive && <span className="st-tag st-tag--live">LIVE</span>}
+                  {isMissing && (
+                    <button
+                      type="button"
+                      className="st-tag st-mitem__missing"
+                      onClick={(e) => { e.stopPropagation(); props.onRelink?.(item.id); }}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                      title="The original file was moved or deleted. Click to locate it."
+                    >
+                      File missing
+                    </button>
+                  )}
                   {running.has(item.id) && !isLive && <span className="st-tag st-mitem__inshow">In slideshow</span>}
                   {canTick && (
                     <button
@@ -316,6 +386,18 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
                       title={tickAt >= 0 ? `Number ${tickAt + 1} in the slideshow` : "Tick for a slideshow"}
                     >
                       {tickAt >= 0 ? <span>{tickAt + 1}</span> : <Check size={12} />}
+                    </button>
+                  )}
+                  {props.onDelete && (
+                    <button
+                      type="button"
+                      className="st-mitem__del"
+                      onClick={(e) => { e.stopPropagation(); askDelete([item]); }}
+                      onDoubleClick={(e) => e.stopPropagation()}
+                      aria-label={`Delete ${item.name}`}
+                      title="Delete"
+                    >
+                      <Trash2 size={13} />
                     </button>
                   )}
                 </span>
@@ -341,6 +423,37 @@ export default function MediaWorkspace(props: MediaWorkspaceProps) {
         </div>
       )}
       <StudioMenu menu={menu} onClose={() => setMenu(null)} />
+      {pendingDelete.length > 0 && (
+        <StudioModal
+          title={pendingDelete.length === 1 ? "Delete this media?" : `Delete ${pendingDelete.length} items?`}
+          onClose={closeDelete}
+        >
+          <div className="st-confirm">
+            <p className="st-confirm__text">
+              {pendingDelete.every((item) => isReferenceMediaItem(item) && item.storage !== "copy")
+                ? (pendingDelete.length === 1
+                  ? <><strong>{pendingDelete[0].name}</strong> will be removed from your media library. The original file stays where it is on this computer.</>
+                  : <>These {pendingDelete.length} items will be removed from your media library. The original files stay where they are on this computer.</>)
+                : pendingDelete.length === 1
+                  ? <><strong>{pendingDelete[0].name}</strong> will be removed from your media library and its file deleted from this computer.</>
+                  : <>These {pendingDelete.length} items will be removed from your media library and their files deleted from this computer.</>}
+              {" "}This can't be undone.
+            </p>
+            {deleteBlocked.length > 0 && (
+              <p className="st-confirm__warn" role="alert">
+                {deleteBlocked.length === 1 ? `“${deleteBlocked[0].name}” is` : `${deleteBlocked.length} of these are`} on the screen or in a running slideshow. Clear it from the screen first, then delete.
+              </p>
+            )}
+            {deleteError && <p className="st-confirm__warn" role="alert">{deleteError}</p>}
+            <div className="st-confirm__actions">
+              <button type="button" className="studio-btn" onClick={closeDelete} disabled={deleting} autoFocus>Cancel</button>
+              <button type="button" className="studio-btn studio-btn--danger" onClick={() => void confirmDelete()} disabled={deleting || deleteBlocked.length > 0}>
+                {deleting ? <Loader2 size={14} className="st-spin" /> : <Trash2 size={14} />} Delete
+              </button>
+            </div>
+          </div>
+        </StudioModal>
+      )}
     </section>
   );
 }

@@ -979,6 +979,45 @@
   text-transform: uppercase;
 }
 
+/* Missing referenced file */
+.lib-media-badge-missing {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: #b45309;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.lib-media-badge-missing:hover,
+.lib-media-badge-missing:focus-visible {
+  background: #92400e;
+}
+
+/* "Copy into library" import preference */
+.lib-media-copy-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 8px;
+  color: var(--text-secondary, #6b7280);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.lib-media-copy-toggle input {
+  margin: 0;
+  cursor: pointer;
+}
+
 /* Duration badge */
 .lib-media-badge-dur {
   position: absolute;

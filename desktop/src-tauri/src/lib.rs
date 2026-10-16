@@ -27,6 +27,7 @@ mod dock_settings;
 mod local_llm;
 #[cfg(not(target_os = "macos"))]
 mod local_llm_stub;
+mod media_refs;
 mod mobile_companion;
 mod obs_move_plugin;
 mod overlay_relay;
@@ -1507,7 +1508,7 @@ fn copy_to_clipboard(text: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         use std::process::{Command, Stdio};
-        let mut child = Command::new("clip")
+        let mut child = hide_console(&mut Command::new("clip"))
             .stdin(Stdio::piped())
             .spawn()
             .map_err(|e| format!("Failed to spawn clip: {}", e))?;
@@ -1643,6 +1644,18 @@ fn studio_ffmpeg_path(app: &tauri::AppHandle, executable: &str) -> Result<PathBu
     Err(format!("The bundled FFmpeg runtime is missing ({platform_dir}/{executable}). Reinstall or update MakeChurchEazy, then try again."))
 }
 
+/// Keep helper processes (PowerShell, clip, wmic, …) from flashing a console
+/// window on Windows. No-op elsewhere.
+fn hide_console(command: &mut std::process::Command) -> &mut std::process::Command {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
 fn studio_video_cache_name(file_name: &str) -> String {
     let digest = Sha256::digest(file_name.as_bytes());
     let hex = format!("{digest:x}");
@@ -1684,7 +1697,10 @@ fn studio_video_is_browser_compatible(ffprobe: &Path, input: &Path) -> bool {
         .and_then(|value| value.get("format_name"))
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default();
-    let is_mp4 = format.split(',').any(|name| name == "mp4");
+    // MP4/MOV, WebM and Matroska containers all play directly in the webview.
+    let is_mp4 = format
+        .split(',')
+        .any(|name| matches!(name, "mp4" | "webm" | "matroska"));
     let streams = metadata.get("streams").and_then(serde_json::Value::as_array);
     let Some(streams) = streams else { return false };
     let video = streams.iter().find(|stream| {
@@ -1697,12 +1713,20 @@ fn studio_video_is_browser_compatible(ffprobe: &Path, input: &Path) -> bool {
     let video_codec = video.get("codec_name").and_then(serde_json::Value::as_str);
     let pixel_format = video.get("pix_fmt").and_then(serde_json::Value::as_str);
     let audio_supported = audio
-        .map(|stream| stream.get("codec_name").and_then(serde_json::Value::as_str) == Some("aac"))
+        .map(|stream| {
+            matches!(
+                stream.get("codec_name").and_then(serde_json::Value::as_str),
+                Some("aac" | "mp3" | "opus" | "vorbis" | "flac")
+            )
+        })
         .unwrap_or(true);
 
     is_mp4
-        && video_codec == Some("h264")
-        && matches!(pixel_format, Some("yuv420p" | "yuvj420p"))
+        && match video_codec {
+            Some("h264") => matches!(pixel_format, Some("yuv420p" | "yuvj420p")),
+            Some("vp8" | "vp9" | "av1") => true,
+            _ => false,
+        }
         && audio_supported
 }
 
@@ -1712,7 +1736,13 @@ fn prepare_studio_video(
     ffmpeg: &Path,
     ffprobe: &Path,
 ) -> Result<StudioVideoPreparation, String> {
-    let input = uploads_dir.join(file_name);
+    let input = if media_refs::is_reference_name(file_name) {
+        media_refs::resolve_reference_name(file_name).ok_or_else(|| {
+            "The original video file could not be found. Locate it again from the Media library, then try once more.".to_string()
+        })?
+    } else {
+        uploads_dir.join(file_name)
+    };
     if !input.is_file() {
         return Err("The selected video file is no longer in the media library. Import it again, then try once more.".to_string());
     }
@@ -1807,6 +1837,8 @@ fn delete_upload_file(file_name: String) -> Result<(), String> {
         fs::remove_file(&prepared_video)
             .map_err(|error| format!("Failed to delete prepared Studio video: {error}"))?;
     }
+    // Referenced media: drop the pointer only. The original stays put.
+    media_refs::unregister_reference_name(&safe_file_name)?;
     println!("[Tauri] Deleted upload: {}", file_path.display());
     Ok(())
 }
@@ -2643,7 +2675,7 @@ fn detect_gpu_name() -> String {
     #[cfg(target_os = "windows")]
     {
         // Try wmic for GPU name on Windows
-        if let Ok(output) = std::process::Command::new("wmic")
+        if let Ok(output) = hide_console(&mut std::process::Command::new("wmic"))
             .args(["path", "win32_videocontroller", "get", "name"])
             .output()
         {
@@ -4877,7 +4909,7 @@ fn extract_text_from_pdf(file_data: Vec<u8>) -> Result<String, String> {
     if let Some(path_str) = path.to_str() {
         for candidate in pdftotext_candidates {
             eprintln!("[pdf-extract] trying: {} on file {}", candidate, path_str);
-            match std::process::Command::new(candidate)
+            match hide_console(&mut std::process::Command::new(candidate))
                 .arg("-layout")
                 .arg("-enc")
                 .arg("UTF-8")
@@ -5567,7 +5599,7 @@ fn kill_process_on_port(port: u16) {
     #[cfg(windows)]
     {
         let cmd = format!("Get-NetTCPConnection -LocalPort {} -ErrorAction SilentlyContinue | Where-Object {{ $_.OwningProcess -ne {} }} | ForEach-Object {{ Stop-Process -Id $_.OwningProcess -Force }}", port, current_pid);
-        let _ = std::process::Command::new("powershell")
+        let _ = hide_console(&mut std::process::Command::new("powershell"))
             .args(["-NoProfile", "-Command", &cmd])
             .output();
     }
@@ -8401,8 +8433,8 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                         }
                         #[cfg(target_os = "windows")]
                         {
-                            std::process::Command::new("cmd")
-                                .args(["/c", "start", &url])
+                            hide_console(&mut std::process::Command::new("cmd"))
+                                .args(["/c", "start", "", &url])
                                 .spawn()
                                 .is_ok()
                         }
@@ -8724,7 +8756,10 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                         let _ = request.respond(resp);
                         continue;
                     }
-                    udir.join(rel_path)
+                    match media_refs::resolve_reference_name(rel) {
+                        Some(original) if media_refs::is_reference_name(rel) => original,
+                        _ => udir.join(rel_path),
+                    }
                 } else {
                     resource_dir.join(clean)
                 }
@@ -8811,7 +8846,11 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                     respond_overlay_auth_blocked(request);
                     continue;
                 }
-                respond_overlay_file_request(request, &file_path, content_type);
+                // Stream on its own thread: a playing video keeps its response
+                // open for minutes and must not stall every other request.
+                std::thread::spawn(move || {
+                    respond_overlay_file_request(request, &file_path, content_type);
+                });
             } else if Path::new(clean).extension().is_some() {
                 // Request has a file extension (e.g. .json, .png) but the
                 // file doesn't exist — return 404 instead of SPA fallback.
@@ -9717,6 +9756,13 @@ pub fn run() {
             save_upload_file,
             prepare_studio_video_for_program,
             delete_upload_file,
+            media_refs::register_media_references,
+            media_refs::unregister_media_reference,
+            media_refs::relink_media_reference,
+            media_refs::check_media_references,
+            media_refs::get_media_reference,
+            media_refs::copy_media_reference_into_library,
+            media_refs::probe_media_reference,
             save_share_temp_file,
             get_local_share_file_metadata,
             discover_local_share_devices,

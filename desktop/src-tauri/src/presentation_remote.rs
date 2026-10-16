@@ -346,6 +346,10 @@ fn safe_upload_path(uploads_dir: &Option<PathBuf>, clean: &str) -> Option<PathBu
         return None;
     }
 
+    if crate::media_refs::is_reference_name(&decoded) {
+        return crate::media_refs::resolve_reference_name(&decoded);
+    }
+
     Some(uploads_dir.join(rel_path))
 }
 
@@ -636,11 +640,12 @@ pub fn start_presentation_http_server(uploads_dir: Option<PathBuf>) -> u16 {
                             .and_then(|value| value.to_str())
                             .unwrap_or_default()
                             .to_ascii_lowercase();
-                        respond_file_request(
-                            request,
-                            &file_path,
-                            content_type_for_extension(&extension),
-                        );
+                        // Stream on its own thread so a playing video can't stall
+                        // the presentation remote's other requests.
+                        let content_type = content_type_for_extension(&extension);
+                        std::thread::spawn(move || {
+                            respond_file_request(request, &file_path, content_type);
+                        });
                     }
                     Some(_) => {
                         let _ = request

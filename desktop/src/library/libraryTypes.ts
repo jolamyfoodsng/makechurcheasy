@@ -46,7 +46,16 @@ export interface MediaItem {
   /** ISO date string for when a remote-backed asset was saved locally */
   downloadedAt?: string;
   /** Optional origin marker for remote-backed/generated assets saved locally */
-  source?: "local" | "template-cloudflare" | "document-conversion";
+  source?: "local" | "template-cloudflare" | "document-conversion" | "reference";
+  /**
+   * Registry id for referenced media. The library points at the user's
+   * original file instead of copying it into uploads/.
+   */
+  referenceId?: string;
+  /** Where the user's file lives. Differs from `filePath` once a library copy exists. */
+  originalPath?: string;
+  /** "reference" plays the original file; "copy" plays a copy in the library folder. */
+  storage?: "reference" | "copy";
   /** Original document name when this item is a rendered PDF/DOCX/PPTX page. */
   documentSourceName?: string;
   /** Stable id shared by all rendered pages from one document import. */

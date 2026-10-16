@@ -1897,6 +1897,24 @@ html.st-resizing iframe { pointer-events: none !important; }
 .st-mitem.is-ticked { border-color: var(--st-blue-2); box-shadow: 0 0 0 2px var(--st-blue-2); }
 .st-mitem__inshow { position: absolute; top: 5px; right: 5px; background: var(--st-blue-2); color: #fff; }
 
+/* ── Media: delete ─────────────────────────────────────────────────────── */
+.st-mitem__del {
+  position: absolute; bottom: 5px; right: 5px; z-index: 2;
+  display: none; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.35); background: rgba(0, 0, 0, 0.55); color: #fff; cursor: pointer;
+}
+.st-mitem:hover .st-mitem__del,
+.st-mitem__del:focus-visible { display: inline-flex; }
+.st-mitem__del:hover { background: var(--st-red); border-color: var(--st-red); }
+.studio-btn--danger { background: var(--st-red); border-color: var(--st-red); color: #fff; }
+.studio-btn--danger:hover:not(:disabled) { filter: brightness(1.1); }
+.studio-btn--danger:disabled { opacity: 0.5; cursor: not-allowed; }
+.st-confirm { display: flex; flex-direction: column; gap: 12px; padding: 4px 2px 2px; }
+.st-confirm__text { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--st-text); overflow-wrap: anywhere; }
+.st-confirm__warn { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--st-red); }
+.st-confirm__actions { display: flex; justify-content: flex-end; gap: 8px; }
+
 /* ── Slideshow bar (centre, under Preview) ─────────────────────────────── */
 .st-show {
   display: flex; flex-direction: column; gap: 6px; padding: 8px 10px;
@@ -2119,3 +2137,11 @@ html.st-resizing iframe { pointer-events: none !important; }
 .st-mitem__vframe { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
 .st-mitem__vframe video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; pointer-events: none; }
 .st-mitem__vframe video.is-ready { opacity: 1; }
+
+/* ── Media: referenced file is missing ─────────────────────────────────── */
+.st-mitem__missing {
+  position: absolute; top: 5px; left: 32px; z-index: 2;
+  border: 0; background: var(--st-orange); color: #1a1205; cursor: pointer;
+}
+.st-mitem__missing:hover,
+.st-mitem__missing:focus-visible { background: #fbbf24; }
