@@ -1649,6 +1649,14 @@ fn studio_video_cache_name(file_name: &str) -> String {
     format!("studio_video_{}.mp4", &hex[..24])
 }
 
+#[cfg(target_os = "windows")]
+fn studio_ffmpeg_command(executable: &Path) -> std::process::Command {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    std::process::Command::new(executable).creation_flags(CREATE_NO_WINDOW)
+}
+
+#[cfg(not(target_os = "windows"))]
 fn studio_ffmpeg_command(executable: &Path) -> std::process::Command {
     std::process::Command::new(executable)
 }

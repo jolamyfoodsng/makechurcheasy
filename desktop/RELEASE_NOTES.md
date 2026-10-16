@@ -1,4 +1,13 @@
-# MakeChurchEazy Release Highlights (v4.3.3)
+# MakeChurchEazy Release Highlights (v4.3.4)
+
+## 1. Studio Video Preparation Stays in the Background
+- **Lead:** On Windows, preparing a video for Studio no longer opens a separate command window.
+
+> **How to get it:** Install the update when MakeChurchEazy prompts you, or download it from makechurcheazy.com/downloads.
+
+---
+
+## Previous Release Highlights (v4.3.3)
 
 ## 1. Cleaner Studio Screen
 - **Lead:** Removed the Live Output heading, air-status badge, connection dot, and elapsed timer from the Studio panel. The screen preview and its controls remain available.
