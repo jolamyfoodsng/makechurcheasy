@@ -3,6 +3,7 @@ import { obsService, type ConnectionStatus } from "../services/obsService";
 import { loadData, updateData } from "../services/store";
 import { getDefaultOBSUrl } from "../services/desktopConfig";
 import Icon from "./Icon";
+import { shouldAutoConnectObs } from "../services/workspacePreference";
 
 interface Props {
   children: React.ReactNode;
@@ -43,6 +44,13 @@ export function OBSConnectGate({ children }: Props) {
   useEffect(() => {
     if (autoConnectRef.current) return;
     autoConnectRef.current = true;
+
+    // Studio starts without probing OBS. OBS-selected and migrated installs
+    // retain the previous automatic reconnect behavior.
+    if (!shouldAutoConnectObs()) {
+      setAutoConnectTried(true);
+      return;
+    }
 
     (async () => {
       try {

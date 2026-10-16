@@ -1,7 +1,7 @@
 /**
  * OnboardingPage — Desktop onboarding wizard for MakeChurchEazy.
  *
- * Flow: Welcome → Connect OBS → Install Dock → Run Diagnostics → Ready
+ * Flow: Choose workspace → Connect OBS (when selected) → Install Dock → Ready
  *
  * Every step fires a milestone to the backend.
  * Persisted in localStorage so future launches skip straight to dashboard.
@@ -25,8 +25,8 @@ import {
   LayoutDashboard,
   LogOut,
   Church,
-  BookOpen,
-  Zap,
+  MonitorPlay,
+  Clapperboard,
   Tv,
 } from "lucide-react";
 import { obsService } from "../services/obsService";
@@ -40,13 +40,19 @@ import {
 } from "../services/tracking";
 import { getDefaultOBSPort } from "../services/desktopConfig";
 import { persistOBSWebSocketConfig } from "../services/obsConnectionSettings";
+import {
+  completeWorkspaceOnboarding,
+  isOnboardingCompleted,
+  setPreferredWorkspace,
+  type PreferredWorkspace,
+} from "../services/workspacePreference";
 import "./OnboardingPage.css";
 
 /* ── Constants ── */
 const STORAGE_KEY = "mce-onboarding-complete";
 const STEP_KEY = "mce-onboarding-step";
 const FLOW_VERSION_KEY = "mce-onboarding-flow-version";
-const FLOW_VERSION = 4;
+const FLOW_VERSION = 5;
 const TOTAL_STEPS = 4;
 
 const API_BASE =
@@ -54,9 +60,9 @@ const API_BASE =
   "https://api.makechurcheazy.com";
 
 const STEP_NAMES = [
-  "Welcome",
-  "OBS",
-  "Dock",
+  "Workspace",
+  "OBS Connection",
+  "OBS Docks",
   "Ready",
 ];
 
@@ -91,7 +97,7 @@ const ONBOARDING_TUTORIALS: Record<number, OnboardingTutorial> = {
 
 /* ── Helpers ── */
 function isOnboardingComplete(): boolean {
-  return localStorage.getItem(STORAGE_KEY) === "true";
+  return isOnboardingCompleted();
 }
 
 function getSavedStep(): number {
@@ -129,7 +135,7 @@ function saveStep(step: number) {
 }
 
 function completeOnboarding() {
-  localStorage.setItem(STORAGE_KEY, "true");
+  completeWorkspaceOnboarding();
   localStorage.removeItem(STORAGE_KEY + "-theme-id");
 
   // Guard: ensure backend complete endpoint is called only once
@@ -326,6 +332,7 @@ export function OnboardingResumeBanner() {
 /* ── Main Component ── */
 export default function OnboardingPage() {
   const { logout } = useAuth();
+  const navigate = useNavigate();
   const [step, setStep] = useState(() => getSavedStep());
   const [showSkipModal, setShowSkipModal] = useState(false);
   const showTutorial = step === 2 || step === 3;
@@ -366,8 +373,8 @@ export default function OnboardingPage() {
       trackProductEvent("onboarding_completed");
     }
     completeOnboarding();
-    window.location.href = "/";
-  }, []);
+    navigate("/", { replace: true });
+  }, [navigate]);
 
   const skip = useCallback(() => {
     if (hasFinishedRef.current) return;
@@ -380,8 +387,31 @@ export default function OnboardingPage() {
       trackProductEvent("onboarding_skipped");
     }
     completeOnboarding();
-    window.location.href = "/";
-  }, []);
+    navigate("/", { replace: true });
+  }, [navigate]);
+
+  const chooseWorkspace = useCallback((choice: PreferredWorkspace) => {
+    setPreferredWorkspace(choice);
+    if (choice === "obs") {
+      setStep(2);
+      saveStep(2);
+      track("onboarding_step_completed", { step: "Workspace" });
+      trackProductEvent("onboarding_step_completed", { step: "Workspace" });
+      return;
+    }
+
+    if (hasFinishedRef.current) return;
+    hasFinishedRef.current = true;
+    const alreadyReported = localStorage.getItem("mce-onboarding-completed-reported") === "true";
+    if (!alreadyReported) {
+      localStorage.setItem("mce-onboarding-completed-reported", "true");
+      fireMilestone("desktopOnboardingCompletedAt");
+      track("onboarding_completed", { workspace: "studio" });
+      trackProductEvent("onboarding_completed", { workspace: "studio" });
+    }
+    completeOnboarding();
+    navigate("/studio", { replace: true });
+  }, [navigate]);
 
   useEffect(() => {
     const startedKey = "mce-onboarding-started-reported";
@@ -407,7 +437,9 @@ export default function OnboardingPage() {
           </div>
         </div>
 
-        <nav className="ob-step-nav" aria-label="Setup steps">
+        {step === 1 ? (
+          <div className="ob-workspace-progress">Step 1 of 2 <span>·</span> Workspace setup</div>
+        ) : <nav className="ob-step-nav" aria-label="Setup steps">
           {STEP_NAMES.map((name, i) => {
             const s = i + 1;
             const isDone = s < step;
@@ -425,7 +457,7 @@ export default function OnboardingPage() {
               </div>
             );
           })}
-        </nav>
+        </nav>}
 
         <div className="ob-navbar-actions">
           <button
@@ -445,7 +477,7 @@ export default function OnboardingPage() {
       <div className="ob-content">
         <div className={`ob-layout${showTutorial ? " ob-layout--with-tutorial" : ""}${step === 3 ? " ob-layout--dock-step" : ""}`}>
           <main className="ob-step-stage">
-            {step === 1 && <StepWelcome onNext={goNext} />}
+            {step === 1 && <StepChooseWorkspace onChoose={chooseWorkspace} />}
             {step === 2 && (
               <StepConnectOBS onNext={goNext} onBack={goPrev} />
             )}
@@ -489,113 +521,50 @@ export default function OnboardingPage() {
 }
 
 /* ══════════════════════════════════════════════════════════════
-   Step 1 — Welcome
+   Step 1 — Choose a workspace
    ══════════════════════════════════════════════════════════════ */
 
-function StepWelcome({
-  onNext,
-}: {
-  onNext: () => void;
-}) {
+function StepChooseWorkspace({ onChoose }: { onChoose: (workspace: PreferredWorkspace) => void }) {
   return (
-    <div className="ob-welcome-split">
-      {/* Left Column: Concise Copy & Action */}
-      <div className="ob-welcome-left">
-        <div className="ob-welcome-pill">
-          <Zap size={12} className="ob-welcome-pill-icon" />
-          <span>OBS Studio Integration</span>
-        </div>
-
-        <h1 className="ob-welcome-title">
-          Present Scriptures & Worship Native in OBS
-        </h1>
-
-        <p className="ob-welcome-subtitle">
-          Control live Bible verses, lower thirds, and worship lyrics directly from your OBS workspace.
-        </p>
-
-        {/* Highlights */}
-        <div className="ob-welcome-highlights">
-          <div className="ob-welcome-highlight-item">
-            <div className="ob-highlight-icon">
-              <BookOpen size={16} />
-            </div>
-            <div className="ob-highlight-content">
-              <strong>Instant Scripture Search</strong>
-              <p>Find any chapter and verse in milliseconds with broadcast lower thirds.</p>
-            </div>
+    <section className="ob-workspace-step" aria-labelledby="ob-workspace-title">
+      <div className="ob-workspace-intro">
+        <span className="ob-welcome-pill"><MonitorPlay size={13} /> Choose your workspace</span>
+        <h1 id="ob-workspace-title">How would you like to get started?</h1>
+        <p>Choose your preferred production workspace. You can connect other tools later.</p>
+      </div>
+      <div className="ob-workspace-options">
+        <article className="ob-workspace-option ob-workspace-option--recommended">
+          <div className="ob-workspace-option__top">
+            <span className="ob-workspace-option__icon"><MonitorPlay size={22} /></span>
+            <span className="ob-workspace-option__badge">Recommended</span>
           </div>
-
-          <div className="ob-welcome-highlight-item">
-            <div className="ob-highlight-icon">
-              <Zap size={16} />
-            </div>
-            <div className="ob-highlight-content">
-              <strong>Verse AI Assistant</strong>
-              <p>Live speech-to-scripture detects and cues verses while preaching.</p>
-            </div>
-          </div>
-
-          <div className="ob-welcome-highlight-item">
-            <div className="ob-highlight-icon">
-              <Tv size={16} />
-            </div>
-            <div className="ob-highlight-content">
-              <strong>Seamless OBS Dock</strong>
-              <p>Integrated inside OBS Studio. Zero window juggling, zero latency.</p>
-            </div>
-          </div>
-        </div>
-
-        {/* CTA */}
-        <div className="ob-welcome-actions">
-          <button
-            className="ob-btn ob-btn--primary ob-btn--welcome-next"
-            onClick={onNext}
-            title="Next: Connect OBS"
-          >
-            <span>Next: Connect OBS</span>
-            <ArrowRight size={16} />
+          <h2>MakeChurchEazy Studio</h2>
+          <p>Run your church presentation directly. No OBS required.</p>
+          <button type="button" className="ob-btn ob-btn--primary ob-workspace-option__action" onClick={() => onChoose("studio")}>
+            Continue with Studio <ArrowRight size={16} />
           </button>
-          <span className="ob-welcome-quick-note">
-            Quick 2-min setup • 100% offline capable
-          </span>
-        </div>
+        </article>
+        <article className="ob-workspace-option">
+          <div className="ob-workspace-option__top">
+            <span className="ob-workspace-option__icon"><Clapperboard size={22} /></span>
+          </div>
+          <h2>OBS Studio</h2>
+          <p>Connect to OBS for livestreaming and production control.</p>
+          <button type="button" className="ob-btn ob-btn--secondary ob-workspace-option__action" onClick={() => onChoose("obs")}>
+            Set up OBS <ArrowRight size={16} />
+          </button>
+        </article>
+        <article className="ob-workspace-option ob-workspace-option--disabled" aria-disabled="true">
+          <div className="ob-workspace-option__top">
+            <span className="ob-workspace-option__icon"><Tv size={22} /></span>
+            <span className="ob-workspace-option__badge ob-workspace-option__badge--soon">Coming soon</span>
+          </div>
+          <h2>vMix</h2>
+          <p>Professional video production integration.</p>
+          <button type="button" className="ob-btn ob-btn--secondary ob-workspace-option__action" disabled>Coming soon</button>
+        </article>
       </div>
-
-      {/* Right Column: Visual OBS Preview Showcase */}
-      <div className="ob-welcome-right">
-        <div className="ob-welcome-preview-card">
-          <div className="ob-preview-card-header">
-            <div className="ob-preview-card-label">
-              <Tv size={13} />
-              <span>OBS Studio • MakeChurchEazy</span>
-            </div>
-            <span className="ob-showcase-tag">Live Output</span>
-          </div>
-
-          <div className="ob-preview-card-body">
-            <img
-              src="/obs-studio-preview.png"
-              alt="MakeChurchEazy inside OBS Studio"
-              className="ob-preview-card-img"
-            />
-          </div>
-
-          <div className="ob-preview-card-badges">
-            <span className="ob-preview-mini-badge">
-              <Check size={11} /> Control Dock
-            </span>
-            <span className="ob-preview-mini-badge">
-              <Check size={11} /> Lower Third
-            </span>
-            <span className="ob-preview-mini-badge">
-              <Check size={11} /> Church Screen
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
+    </section>
   );
 }
 

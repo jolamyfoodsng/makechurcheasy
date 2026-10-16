@@ -2203,3 +2203,42 @@
   font-weight: 600;
   color: var(--success);
 }
+
+/* Workspace choice is the first decision in onboarding. */
+.ob-workspace-progress {
+  color: #e2e8f0;
+  font-size: 13px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.ob-workspace-progress span { color: #64748b; padding: 0 4px; }
+.ob-workspace-step { display: flex; flex-direction: column; gap: 28px; }
+.ob-workspace-intro { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.ob-workspace-intro .ob-welcome-pill { margin-bottom: 4px; }
+.ob-workspace-intro h1 { margin: 0; color: #f8fafc; font-size: clamp(24px, 3vw, 32px); line-height: 1.2; letter-spacing: -.025em; }
+.ob-workspace-intro p { margin: 0; color: #aab7cb; font-size: 14px; line-height: 1.55; }
+.ob-workspace-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.ob-workspace-option { display: flex; flex-direction: column; align-items: flex-start; min-height: 242px; padding: 20px; background: #1b2433; border: 1px solid #354156; border-radius: 12px; }
+.ob-workspace-option--recommended { background: #202443; border-color: #7664f5; box-shadow: inset 0 0 0 1px rgba(118, 100, 245, .16); }
+.ob-workspace-option--disabled { opacity: .62; }
+.ob-workspace-option__top { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 38px; margin-bottom: 16px; }
+.ob-workspace-option__icon { display: inline-flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 10px; background: rgba(148, 163, 184, .12); color: #bfccdf; }
+.ob-workspace-option--recommended .ob-workspace-option__icon { color: #c4baff; background: rgba(124, 103, 255, .18); }
+.ob-workspace-option__badge { padding: 4px 9px; border: 1px solid rgba(167, 139, 250, .45); border-radius: 999px; background: rgba(124, 58, 237, .16); color: #d1c6ff; font-size: 11px; font-weight: 700; }
+.ob-workspace-option__badge--soon { border-color: #45536a; color: #9aa8bd; background: rgba(148, 163, 184, .08); }
+.ob-workspace-option h2 { margin: 0 0 7px; color: #f8fafc; font-size: 16px; line-height: 1.3; }
+.ob-workspace-option p { margin: 0 0 20px; color: #aab7cb; font-size: 13px; line-height: 1.5; }
+.ob-workspace-option__action { width: 100%; min-height: 44px; margin-top: auto; }
+.ob-workspace-option__action:disabled { cursor: not-allowed; opacity: .7; }
+@media (max-width: 860px) {
+  .ob-workspace-options { grid-template-columns: 1fr; }
+  .ob-workspace-option { min-height: 0; }
+  .ob-workspace-option__top { margin-bottom: 12px; }
+}
+@media (max-width: 620px) {
+  .ob-workspace-progress { font-size: 11px; }
+  .ob-navbar { padding: 0 12px; }
+  .ob-navbar-actions .ob-logout-btn span { display: none; }
+  .ob-content { padding: 16px; }
+  .ob-layout { padding: 24px 18px; }
+}

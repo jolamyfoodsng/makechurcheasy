@@ -34,6 +34,7 @@ import {
 } from "../../services/interfaceLanguage";
 import { canUseMobileControl, getEffectivePlan, getTrialDaysRemaining, getUserPlan, isInTrial } from "../../services/licenseService";
 import { obsService } from "../../services/obsService";
+import { resetWorkspaceOnboarding } from "../../services/workspacePreference";
 import { persistOBSWebSocketConfig } from "../../services/obsConnectionSettings";
 import { normalizeOBSWebSocketUrl } from "../../services/obsWebSocketUrl";
 import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
@@ -972,6 +973,7 @@ export function MVSettings() {
     // Also reset the desktop onboarding wizard so it re-runs on next launch
     try {
       localStorage.removeItem("mce-onboarding-complete");
+      resetWorkspaceOnboarding();
       localStorage.removeItem("mce-onboarding-step");
     } catch { /* ignore */ }
     // Hard-reload so App.tsx re-reads the cleared localStorage flag.

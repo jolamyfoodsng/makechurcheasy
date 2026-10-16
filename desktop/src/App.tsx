@@ -18,6 +18,7 @@ import { ADMIN_FEATURE_OFF_MESSAGES } from "./services/desktopConfig";
 import { Routes, Route, Navigate, useParams, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { OBSConnectGate } from "./components/OBSConnectGate";
+import { getPreferredWorkspace, isOnboardingCompleted } from "./services/workspacePreference";
 import AuthGate from "./components/AuthGate";
 import LicenseGuard from "./components/LicenseGuard";
 import FeatureGuard from "./components/FeatureGuard";
@@ -366,8 +367,8 @@ function App() {
   useAppTheme();
   const { user, setUser } = useAuth();
   const { lockReason: licenseLockReason } = useLicenseGuardState();
-  const mceOnboardingDone =
-    localStorage.getItem("mce-onboarding-complete") === "true";
+  const mceOnboardingDone = isOnboardingCompleted();
+  const preferredWorkspace = getPreferredWorkspace();
   const [globalMediaDragging, setGlobalMediaDragging] = useState(false);
   const [globalMediaUploading, setGlobalMediaUploading] = useState(false);
   const [showTrialModal, setShowTrialModal] = useState(false);
@@ -1565,11 +1566,13 @@ function App() {
                                     {!mceOnboardingDone && (
                                       <Route path="onboarding" element={<OnboardingPage />} />
                                     )}
-                                    <Route element={<AppShell />}>
+                                    <Route element={mceOnboardingDone ? <AppShell /> : <Navigate to="/onboarding" replace />}>
                                       <Route
                                         index
                                         element={
-                                          mceOnboardingDone ? <ProductionHomePage /> : <Navigate to="/onboarding" replace />
+                                          preferredWorkspace === "studio"
+                                            ? <Navigate to="/studio" replace />
+                                            : <ProductionHomePage />
                                         }
                                       />
                                       <Route path="live-tools" element={<Navigate to="/" replace />} />
