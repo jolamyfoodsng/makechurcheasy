@@ -362,6 +362,9 @@ function DesktopReceiverNotification() {
 }
 
 function App() {
+  // Re-read the workspace and onboarding flags after route changes. Onboarding
+  // writes these values immediately before navigating into the selected app.
+  useLocation();
   const { t } = useTranslation();
   // ── Global theme (dark/light) ──
   useAppTheme();
