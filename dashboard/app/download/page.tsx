@@ -59,7 +59,7 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
 }
 
-const REPO_URL = "https://github.com/jolamyfoodsng/makechurcheasy-v2/releases";
+const REPO_URL = "https://github.com/jolamyfoodsng/makechurcheasy/releases";
 
 function getPlatformKey(filename: string): PlatformKey | null {
   const lower = filename.toLowerCase();

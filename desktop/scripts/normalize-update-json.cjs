@@ -12,10 +12,9 @@
 const fs = require("fs");
 const path = require("path");
 
-const DEFAULT_SOURCE_REPO = "jolamyfoodsng/makechurcheasy-v2";
-// Releases built before the move to makechurcheasy-v2 point here; keep rewriting them.
-const LEGACY_SOURCE_REPO = "jolamyfoodsng/makechurcheasy";
-const DEFAULT_TARGET_REPO = "jolamyfoodsng/makechurcheasy-v2";
+const DEFAULT_SOURCE_REPO = "jolamyfoodsng/makechurcheasy";
+const LEGACY_SOURCE_REPO = "jolamyfoodsng/makechurcheasy-releases";
+const DEFAULT_TARGET_REPO = "jolamyfoodsng/makechurcheasy";
 
 const args = process.argv.slice(2);
 if (args.length < 1) {

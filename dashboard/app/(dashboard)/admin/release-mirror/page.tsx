@@ -36,7 +36,7 @@ type MirrorResponse = {
   logs: string[];
 };
 
-const DEFAULT_SOURCE_REPO = "jolamyfoodsng/makechurcheasy-v2";
+const DEFAULT_SOURCE_REPO = "jolamyfoodsng/makechurcheasy";
 const DEFAULT_TARGET_REPO = "jolamyfoodsng/makechurcheasy-releases";
 
 function formatBytes(size: number): string {

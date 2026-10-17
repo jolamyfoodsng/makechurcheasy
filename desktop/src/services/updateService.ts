@@ -476,8 +476,8 @@ export async function downloadAndInstallUpdate(
 
 // ── Published release source ──
 
-export const LATEST_MANIFEST_URL = "https://github.com/jolamyfoodsng/makechurcheasy-v2/releases/latest/download/latest.json";
-export const RELEASES_API = "https://api.github.com/repos/jolamyfoodsng/makechurcheasy-v2/releases/latest";
+export const LATEST_MANIFEST_URL = "https://github.com/jolamyfoodsng/makechurcheasy/releases/latest/download/latest.json";
+export const RELEASES_API = "https://api.github.com/repos/jolamyfoodsng/makechurcheasy/releases/latest";
 
 export interface PublishedReleaseAsset {
   name: string;

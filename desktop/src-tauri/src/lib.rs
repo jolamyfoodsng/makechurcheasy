@@ -9676,12 +9676,17 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             let tray_icon = Image::from_bytes(include_bytes!("../icons/16x16.png"))
                 .expect("bundled MakeChurchEazy tray icon must be valid PNG");
-            #[cfg(not(target_os = "windows"))]
+            // macOS template icons keep only the alpha channel, so the opaque app
+            // icon would show as a solid white square. Use the glyph-only version.
+            #[cfg(target_os = "macos")]
+            let tray_icon = Image::from_bytes(include_bytes!("../icons/tray-template.png"))
+                .expect("bundled MakeChurchEazy tray icon must be valid PNG");
+            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
             let tray_icon = Image::from_bytes(include_bytes!("../icons/32x32.png"))
                 .expect("bundled MakeChurchEazy tray icon must be valid PNG");
             let _tray = tauri::tray::TrayIconBuilder::with_id("makechurcheasy-tray")
                 .icon(tray_icon)
-                .icon_as_template(true)
+                .icon_as_template(cfg!(target_os = "macos"))
                 .tooltip("MakeChurchEazy")
                 .menu(&tray_menu)
                 .show_menu_on_left_click(true)

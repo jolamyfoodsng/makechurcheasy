@@ -1,6 +1,7 @@
-# MakeChurchEazy Release Highlights (v4.3.8)
+# MakeChurchEazy Release Highlights (v4.3.10)
 
-## 1. Project Directly with Studio Mode
-- **Lead:** Open the new Studio Mode card from the dashboard and send scripture, worship lyrics, and media straight to a projector or TV—no OBS required.
+## Public updates
+- Update checks and downloads now use the public MakeChurchEazy releases repository.
 
-> **How to get it:** Install the update when MakeChurchEazy prompts you, or download it from makechurcheazy.com/downloads.
+## macOS menu bar icon
+- The menu bar now uses a dedicated template icon for a clearer native appearance.

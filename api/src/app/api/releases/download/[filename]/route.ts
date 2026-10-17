@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const REPO = "jolamyfoodsng/makechurcheasy-v2";
+const REPO = "jolamyfoodsng/makechurcheasy";
 const GITHUB_API_URL = `https://api.github.com/repos/${REPO}/releases/latest`;
 
 export async function GET(

@@ -593,7 +593,7 @@ jobs:
           node scripts/normalize-update-json.cjs /tmp/mce-release/latest.json \
             --out /tmp/mce-release/latest.json \
             --source-repo "${{ github.repository }}" \
-            --target-repo "jolamyfoodsng/makechurcheasy-v2" \
+            --target-repo "jolamyfoodsng/makechurcheasy" \
             --tag "${{ steps.release-tag.outputs.tag }}"
 
       - name: Upload normalized latest.json

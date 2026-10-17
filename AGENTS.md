@@ -25,3 +25,10 @@ When referring to in-person spaces, church venues, or physical displays:
 ## 📡 Live Broadcast & OBS Stream Settings
 - Never expose internal cloud infrastructure vendors (e.g. Cloudflare) to the end user. Frame as Make Church Eazy's built-in cloud broadcasting engine.
 - For YouTube stream destinations, allow server options matching OBS Studio (`auto`, `Primary YouTube ingest server`, `Backup YouTube ingest server`).
+
+## Release Repository Policy
+- Keep automatic update checks enabled unless the user explicitly asks to change that behavior.
+- The updater's approved public sources are `jolamyfoodsng/makechurcheasy` and `jolamyfoodsng/makechurcheasy-releases`; the current source of truth is `jolamyfoodsng/makechurcheasy`.
+- AI agents must preserve the current updater source and automatic update-check behavior. Never change, disable, remove, or reroute them unless the user explicitly requests that change.
+- Never configure update checks or user downloads to use `jolamyfoodsng/makechurcheasy-v2`, including as a fallback. Do not add it to an updater source list.
+- Before editing updater or release-feed code, verify that the manifest and signed updater asset URLs point only to an approved public source. Do not change release publishing or repository settings unless the user asks.

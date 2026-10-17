@@ -6,7 +6,7 @@ import { getUserId } from "@/lib/userId";
 import { AlertTriangle, CheckCircle2, Command, Download, ExternalLink, Info, Loader2, Monitor, Server } from "lucide-react";
 import { useEffect, useState } from "react";
 
-const REPO = "jolamyfoodsng/makechurcheasy-v2";
+const REPO = "jolamyfoodsng/makechurcheasy";
 const INSTALL_GUIDE_URL = "https://www.youtube.com/playlist?list=PLRua6gJfgC0o";
 
 interface GitHubAsset {

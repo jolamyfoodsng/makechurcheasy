@@ -95,7 +95,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg4QUQxNTRDNDlFOUREREUKUldUZTNlbEpUQld0aU5nRzUvU0JuWnQ0b1VNRUR5VVhYQmtvRjIyK2tYbXNxMUZwdnF4bGVkVXUK",
       "endpoints": [
-        "https://github.com/jolamyfoodsng/makechurcheasy-v2/releases/latest/download/latest.json"
+        "https://github.com/jolamyfoodsng/makechurcheasy/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"
