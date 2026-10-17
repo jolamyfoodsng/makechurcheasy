@@ -21527,6 +21527,23 @@ html.mv-theme-light .tc-editor .canvas-area {
   color: #ffffff;
 }
 
+/* A linked video or picture whose file is no longer where it was. */
+.tc-media-thumb--missing::after {
+  content: "!";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #f59e0b;
+  color: #1a1204;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+}
+
 /* ── Theme library tabs ── */
 .tc-library-tabs {
   display: flex;

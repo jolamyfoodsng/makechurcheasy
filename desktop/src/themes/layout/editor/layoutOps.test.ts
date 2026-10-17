@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { addLayer, duplicateLayer, moveLayer, nudgeLayer, removeLayer, roleForContent, updateLayerStyle } from "./layoutOps";
+import { addLayer, duplicateLayer, isBackdropLayer, moveLayer, nudgeLayer, removeLayer, roleForContent, updateLayerStyle } from "./layoutOps";
+import { BLANK_FULLSCREEN } from "../blankTheme";
 import { SCRIPTURE_TAB } from "../presets";
 
 describe("layoutOps", () => {
@@ -32,5 +33,16 @@ describe("layoutOps", () => {
     const next = updateLayerStyle(SCRIPTURE_TAB, "label", { color: "#ff0000" });
     expect(next.layers.find((l) => l.id === "label")?.style.color).toBe("#ff0000");
     expect(SCRIPTURE_TAB.layers.find((l) => l.id === "label")?.style.color).toBe("#ffffff");
+  });
+});
+
+describe("isBackdropLayer", () => {
+  it("is the full-screen background, not text or nested boxes", () => {
+    const [bg, ref, verse] = BLANK_FULLSCREEN.layers;
+    expect(isBackdropLayer(bg)).toBe(true);
+    expect(isBackdropLayer(ref)).toBe(false);
+    expect(isBackdropLayer(verse)).toBe(false);
+    expect(isBackdropLayer({ ...bg, parentId: "x" })).toBe(false);
+    expect(isBackdropLayer({ ...bg, w: 600, h: 200 })).toBe(false);
   });
 });

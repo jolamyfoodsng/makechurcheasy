@@ -17,6 +17,7 @@ import {
   TEXT_ROLES,
   updateLayer,
   updateLayerStyle,
+  isBackdropLayer,
   type AlignHow,
 } from "./layoutOps";
 import { headingLayers, hasHeading, isHeadingShown } from "../heading";
@@ -84,6 +85,15 @@ interface Props {
   onImportMedia?: (file: File) => Promise<void> | void;
   /** Move the selected layer to a side or the middle of the screen (or of the box it sits in). */
   onAlign?: (how: AlignHow) => void;
+  /**
+   * Desktop app: pick pictures or videos with the system file dialog and link them (no copy into
+   * the app's folders, which would use the church's disk space). Returns the items added.
+   */
+  onPickMedia?: (kind: "image" | "video") => Promise<LayerMediaItem[]>;
+  /** Library items whose original file can no longer be found. */
+  missingMediaIds?: ReadonlySet<string>;
+  /** Ask the person to locate a moved file again. */
+  onRelinkMedia?: (id: string) => Promise<void> | void;
 }
 
 type BgKind = "colour" | "image" | "video" | "pattern";
@@ -104,12 +114,15 @@ export function findThemeBackground(layout: ThemeLayout): ThemeLayer | null {
 }
 
 /** Colour / picture / video / pattern and darkness for a box — e.g. the theme background. */
-function BoxBackground({ layer, onStyle, mediaItems, mediaPreviewSrc, onImportMedia }: {
+function BoxBackground({ layer, onStyle, mediaItems, mediaPreviewSrc, onImportMedia, onPickMedia, missingMediaIds, onRelinkMedia }: {
   layer: ThemeLayer;
   onStyle: (patch: Partial<ThemeLayer["style"]>) => void;
   mediaItems: LayerMediaItem[];
   mediaPreviewSrc: (item: LayerMediaItem) => string;
   onImportMedia?: (file: File) => Promise<void> | void;
+  onPickMedia?: (kind: "image" | "video") => Promise<LayerMediaItem[]>;
+  missingMediaIds?: ReadonlySet<string>;
+  onRelinkMedia?: (id: string) => Promise<void> | void;
 }) {
   const s = layer.style;
   const isPattern = Boolean(s.src) && !s.videoSrc && BACKGROUND_PATTERNS.some((p) => p.src === s.src);
@@ -120,6 +133,24 @@ function BoxBackground({ layer, onStyle, mediaItems, mediaPreviewSrc, onImportMe
   const shown: BgKind = picking ?? kind;
   const items = mediaItems.filter((m) => m.type === (shown === "video" ? "video" : "image"));
   const current = shown === "video" ? s.videoSrc : s.src;
+  const missingCurrent = current ? mediaItems.find((m) => missingMediaIds?.has(m.id) && themeMediaUrl(m) === current) : undefined;
+  /** Desktop: link the chosen files (no copy) and use the first one right away. */
+  const pickFiles = async () => {
+    if (!onPickMedia) { fileRef.current?.click(); return; }
+    setImporting(true);
+    try {
+      const kindToPick = shown === "video" ? "video" : "image";
+      const added = await onPickMedia(kindToPick);
+      const first = added[0];
+      if (first) {
+        const url = themeMediaUrl(first);
+        setPicking(null);
+        onStyle(kindToPick === "video" ? { videoSrc: url, src: undefined, fit: s.fit ?? "cover" } : { src: url, videoSrc: undefined, fit: s.fit ?? "cover" });
+      }
+    } finally {
+      setImporting(false);
+    }
+  };
   const importFile = async (file: File | undefined) => {
     if (!file || !onImportMedia) return;
     setImporting(true);
@@ -177,8 +208,8 @@ function BoxBackground({ layer, onStyle, mediaItems, mediaPreviewSrc, onImportMe
                   <button
                     key={item.id}
                     type="button"
-                    className={`le-media${on ? " le-media--on" : ""}`}
-                    title={item.name}
+                    className={`le-media${on ? " le-media--on" : ""}${missingMediaIds?.has(item.id) ? " le-media--missing" : ""}`}
+                    title={missingMediaIds?.has(item.id) ? `${item.name} (file not found at its original location)` : item.name}
                     onClick={() => {
                       setPicking(null);
                       onStyle(shown === "video" ? { videoSrc: url, src: undefined, fit: s.fit ?? "cover" } : { src: url, videoSrc: undefined, fit: s.fit ?? "cover" });
@@ -195,11 +226,21 @@ function BoxBackground({ layer, onStyle, mediaItems, mediaPreviewSrc, onImportMe
               })}
             </div>
           )}
-          {onImportMedia && (
+          {missingCurrent && (
+            <div className="le-warning" role="alert">
+              <span>
+                This {shown === "video" ? "video" : "picture"} isn't at its original location any more (moved, renamed, or on a drive that isn't connected).
+                Nothing was copied into the app, so put the file back or point to it again. It won't show in OBS until then.
+              </span>
+              {onRelinkMedia && <button type="button" className="le-btn" onClick={() => void onRelinkMedia(missingCurrent.id)}>Locate file…</button>}
+            </div>
+          )}
+          {(onImportMedia || onPickMedia) && (
             <>
-              <button type="button" className="le-btn" disabled={importing} onClick={() => fileRef.current?.click()}>
+              <button type="button" className="le-btn" disabled={importing} onClick={() => void pickFiles()}>
                 {importing ? "Adding…" : shown === "video" ? "Add a video from this computer" : "Add a picture from this computer"}
               </button>
+              {onPickMedia && <p className="le-hint">Your file stays where it is. The theme links to it, so it uses no extra disk space.</p>}
               <input ref={fileRef} type="file" accept={shown === "video" ? "video/*" : "image/*"} style={{ display: "none" }} onChange={(e) => void importFile(e.target.files?.[0])} />
             </>
           )}
@@ -385,7 +426,7 @@ function TimerBoxControls({ s, onStyle }: { s: LayerStyle; onStyle: StylePatch }
   );
 }
 
-export default function LayerPanel({ layout, selectedId, onSelect, onChange, mediaItems = [], mediaPreviewSrc = (item) => item.url || "", onImportMedia, onAlign }: Props) {
+export default function LayerPanel({ layout, selectedId, onSelect, onChange, mediaItems = [], mediaPreviewSrc = (item) => item.url || "", onImportMedia, onAlign, onPickMedia, missingMediaIds, onRelinkMedia }: Props) {
   const isCountdown = layout.kind === "countdown";
   const roles = isCountdown ? COUNTDOWN_TEXT_ROLES : TEXT_ROLES;
   const fonts = isCountdown ? COUNTDOWN_FONTS : FONTS;
@@ -427,6 +468,9 @@ export default function LayerPanel({ layout, selectedId, onSelect, onChange, med
             mediaItems={mediaItems}
             mediaPreviewSrc={mediaPreviewSrc}
             onImportMedia={onImportMedia}
+            onPickMedia={onPickMedia}
+            missingMediaIds={missingMediaIds}
+            onRelinkMedia={onRelinkMedia}
           />
         </div>
       )}
@@ -565,24 +609,30 @@ export default function LayerPanel({ layout, selectedId, onSelect, onChange, med
             </>
           )}
 
-          <div className="le-subtitle">Position & size</div>
-          {onAlign && !layer.locked && (
-            <div className="le-align" role="group" aria-label="Align">
-              {([["left", "Left"], ["center", "Center"], ["right", "Right"], ["top", "Top"], ["middle", "Middle"], ["bottom", "Bottom"]] as const).map(([how, label]) => (
-                <button key={how} type="button" className="le-btn" title={`Align ${label.toLowerCase()}`} onClick={() => onAlign(how)}>{label}</button>
-              ))}
-            </div>
+          {isBackdropLayer(layer) ? (
+            <p className="le-hint">This is the theme background. It always fills the whole screen. Change it in Theme background above.</p>
+          ) : (
+            <>
+              <div className="le-subtitle">Position & size</div>
+              {onAlign && !layer.locked && (
+                <div className="le-align" role="group" aria-label="Align">
+                  {([["left", "Left"], ["center", "Center"], ["right", "Right"], ["top", "Top"], ["middle", "Middle"], ["bottom", "Bottom"]] as const).map(([how, label]) => (
+                    <button key={how} type="button" className="le-btn" title={`Align ${label.toLowerCase()}`} onClick={() => onAlign(how)}>{label}</button>
+                  ))}
+                </div>
+              )}
+              <div className="le-grid-2">
+                <Num label="X" value={layer.x} onChange={(v) => set({ x: v })} />
+                <Num label="Y" value={layer.y} onChange={(v) => set({ y: v })} />
+                <Num label="Width" value={layer.w} min={1} onChange={(v) => set({ w: v })} />
+                {layer.h === "auto" ? (
+                  <label className="le-field"><span>Height</span><input className="tc-input" value="Fits text" disabled /></label>
+                ) : (
+                  <Num label="Height" value={layer.h} min={1} onChange={(v) => set({ h: v })} />
+                )}
+              </div>
+            </>
           )}
-          <div className="le-grid-2">
-            <Num label="X" value={layer.x} onChange={(v) => set({ x: v })} />
-            <Num label="Y" value={layer.y} onChange={(v) => set({ y: v })} />
-            <Num label="Width" value={layer.w} min={1} onChange={(v) => set({ w: v })} />
-            {layer.h === "auto" ? (
-              <label className="le-field"><span>Height</span><input className="tc-input" value="Fits text" disabled /></label>
-            ) : (
-              <Num label="Height" value={layer.h} min={1} onChange={(v) => set({ h: v })} />
-            )}
-          </div>
           <Num label="Opacity (0–1)" value={layer.opacity ?? 1} step={0.05} min={0} max={1} onChange={(v) => set({ opacity: Math.min(1, Math.max(0, v)) })} />
 
           {layer.type === "text" && (
@@ -671,7 +721,7 @@ export default function LayerPanel({ layout, selectedId, onSelect, onChange, med
               {layer.type === "box" && themeBg && layer.id === themeBg.id ? (
                 <p className="le-hint">This is the theme background. Change it in the Theme background box at the top.</p>
               ) : layer.type === "box" ? (
-                <BoxBackground layer={layer} onStyle={style} mediaItems={mediaItems} mediaPreviewSrc={mediaPreviewSrc} onImportMedia={onImportMedia} />
+                <BoxBackground layer={layer} onStyle={style} mediaItems={mediaItems} mediaPreviewSrc={mediaPreviewSrc} onImportMedia={onImportMedia} onPickMedia={onPickMedia} missingMediaIds={missingMediaIds} onRelinkMedia={onRelinkMedia} />
               ) : (
                 <>
                   <ColorField label="Fill" value={s.gradient ? undefined : s.fill} allowNone onChange={(v) => style({ fill: v, gradient: undefined })} />

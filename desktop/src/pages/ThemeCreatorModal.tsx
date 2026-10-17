@@ -65,7 +65,7 @@ import {
   type TemplateVideoAsset,
 } from "../services/templateVideos";
 import { saveLibraryMediaFile, MEDIA_FILE_ACCEPT } from "../library/MediaTab";
-import { getCopyImportedMediaPreference, importMediaPaths, isTauriRuntime, pickMediaPaths } from "../library/mediaReferences";
+import { findMissingReferenceItems, getCopyImportedMediaPreference, importMediaPaths, isTauriRuntime, pickMediaPaths, relinkReferenceItem } from "../library/mediaReferences";
 import { COMMON_IMAGE_EXTENSIONS, COMMON_VIDEO_EXTENSIONS } from "../services/mediaValidation";
 import { resolveOverlayAssetUrl } from "../services/overlayUrl";
 import { getBibleThemePreviewHtml } from "../bible/bibleThemes";
@@ -75,7 +75,7 @@ import { fullscreenFromLowerThird, lowerThirdFromFullscreen } from "../themes/la
 import ThemeLayoutPreview from "../themes/layout/ThemeLayoutPreview";
 import LayerPanel from "../themes/layout/editor/LayerPanel";
 import LayerCanvasOverlay from "../themes/layout/editor/LayerCanvasOverlay";
-import { alignLayerPatch, getLayer, nudgeLayer, removeLayer, updateLayer, type AlignHow } from "../themes/layout/editor/layoutOps";
+import { alignLayerPatch, getLayer, isBackdropLayer, nudgeLayer, removeLayer, updateLayer, type AlignHow } from "../themes/layout/editor/layoutOps";
 import type { ThemeContent, ThemeLayer, ThemeLayout } from "../themes/layout/types";
 
 // ---------------------------------------------------------------------------
@@ -1044,6 +1044,11 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
       const layer = getLayer(activeLayout, selectedLayerId);
       if (!layer) return;
+      // The background stays put and stays there: no nudging, no delete key.
+      if (isBackdropLayer(layer)) {
+        if (e.key === "Escape") setSelectedLayerId(null);
+        return;
+      }
       const step = e.shiftKey ? 10 : 1;
       const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
       if (moves[e.key]) {
@@ -1063,10 +1068,13 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     return () => window.removeEventListener("keydown", onKey);
   }, [activeLayout, selectedLayerId, commitLayout]);
 
+  const [missingMediaIds, setMissingMediaIds] = useState<Set<string>>(() => new Set());
   const refreshBackgroundMediaLibrary = useCallback(async () => {
     try {
       const items = await getAllMedia();
       setBackgroundMediaLibrary(items);
+      // Linked files (not copied) can be moved or deleted: flag the ones that are gone.
+      setMissingMediaIds(await findMissingReferenceItems(items));
     } catch { /* silent */ }
   }, []);
 
@@ -1136,18 +1144,14 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   }, [bgTab, showBackgroundModal]);
   useEffect(() => () => window.clearTimeout(previewTimerRef.current), []);
 
-  /** Desktop: pick by path and keep a reference to the original file (no copy, no memory load). */
-  const handleBgImportClick = useCallback(async (kind: "image" | "video") => {
-    if (!isTauriRuntime()) {
-      bgImportInputRef.current?.click();
-      return;
-    }
+  /** Desktop: pick by path and keep a reference to the original file (no copy, no memory load). Returns what was added. */
+  const importLinkedMedia = useCallback(async (kind: "image" | "video"): Promise<MediaItem[]> => {
     try {
       const paths = await pickMediaPaths({
         multiple: true,
         extensions: [...(kind === "video" ? COMMON_VIDEO_EXTENSIONS : COMMON_IMAGE_EXTENSIONS)],
       });
-      if (paths.length === 0) return;
+      if (paths.length === 0) return [];
       setBgImporting(true);
       const result = await importMediaPaths(paths, {
         copyIntoLibrary: getCopyImportedMediaPreference(),
@@ -1155,12 +1159,33 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
       });
       for (const failure of result.failed) console.warn("[ThemeCreator] Import failed:", failure);
       await refreshBackgroundMediaLibrary();
+      return result.saved;
     } catch (err) {
       console.error("[ThemeCreator] Import failed:", err);
+      return [];
     } finally {
       setBgImporting(false);
     }
   }, [refreshBackgroundMediaLibrary]);
+
+  const handleBgImportClick = useCallback(async (kind: "image" | "video") => {
+    if (!isTauriRuntime()) {
+      bgImportInputRef.current?.click();
+      return;
+    }
+    await importLinkedMedia(kind);
+  }, [importLinkedMedia]);
+
+  const handleRelinkMedia = useCallback(async (id: string) => {
+    const item = backgroundMediaLibrary.find((m) => m.id === id);
+    if (!item) return;
+    try {
+      await relinkReferenceItem(item);
+    } catch (err) {
+      console.error("[ThemeCreator] Could not locate the file:", err);
+    }
+    await refreshBackgroundMediaLibrary();
+  }, [backgroundMediaLibrary, refreshBackgroundMediaLibrary]);
 
   const handleBgImportFile = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1643,6 +1668,9 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                 mediaItems={backgroundMediaLibrary}
                 mediaPreviewSrc={(item) => resolveMediaPreviewSrc(item as MediaItem)}
                 onAlign={handleAlignLayer}
+                onPickMedia={isTauriRuntime() ? importLinkedMedia : undefined}
+                missingMediaIds={missingMediaIds}
+                onRelinkMedia={handleRelinkMedia}
                 onImportMedia={async (file) => {
                   try {
                     await saveLibraryMediaFile(file);
@@ -2042,7 +2070,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                     <span>{bgImporting ? "Importing…" : "Upload image"}</span>
                   </button>
                   {backgroundMediaLibrary.filter((item) => item.type === "image").map((item) => (
-                    <button key={item.id} className="tc-media-thumb" onClick={() => handleBgSelectImage(item.url)}>
+                    <button key={item.id} className={`tc-media-thumb${missingMediaIds.has(item.id) ? " tc-media-thumb--missing" : ""}`} title={missingMediaIds.has(item.id) ? `${item.name}: file not found at its original location` : item.name} onClick={() => handleBgSelectImage(item.url)}>
                       <img src={resolveMediaPreviewSrc(item)} alt={item.name} />
                     </button>
                   ))}
@@ -2055,7 +2083,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                     <span>{bgImporting ? "Importing…" : "Upload video"}</span>
                   </button>
                   {backgroundMediaLibrary.filter((item) => item.type === "video").map((item) => (
-                    <button key={item.id} className="tc-media-thumb tc-media-thumb--video" onClick={() => handleBgSelectVideo(item.url)} title={item.name}>
+                    <button key={item.id} className={`tc-media-thumb tc-media-thumb--video${missingMediaIds.has(item.id) ? " tc-media-thumb--missing" : ""}`} onClick={() => handleBgSelectVideo(item.url)} title={missingMediaIds.has(item.id) ? `${item.name}: file not found at its original location` : item.name}>
                       {item.thumbnailUrl ? (
                         <img src={item.thumbnailUrl} alt={item.name} loading="lazy" decoding="async" />
                       ) : (

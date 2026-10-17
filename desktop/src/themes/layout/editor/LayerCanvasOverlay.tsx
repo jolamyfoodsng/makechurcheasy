@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { ThemeLayer, ThemeLayout } from "../types";
-import { nudgeLayer } from "./layoutOps";
+import { isBackdropLayer, nudgeLayer } from "./layoutOps";
 import { snapRect, type SnapGap } from "./snapGuides";
 
 interface Rect { x: number; y: number; w: number; h: number }
@@ -67,7 +67,8 @@ export default function LayerCanvasOverlay({ canvasRef, layout, scale, selectedI
     e.stopPropagation();
     e.preventDefault();
     onSelect(layer.id);
-    if (layer.locked) return;
+    // The background is only selected (to open its settings); it never moves or resizes here.
+    if (layer.locked || isBackdropLayer(layer)) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     dragRef.current = { id: layer.id, mode, startX: e.clientX, startY: e.clientY, layer, start: rects[layer.id] ?? null, last: null };
   };
@@ -135,10 +136,11 @@ export default function LayerCanvasOverlay({ canvasRef, layout, scale, selectedI
         const r = rects[layer.id];
         if (!r || layer.hidden) return null;
         const selected = layer.id === selectedId;
+        const backdrop = isBackdropLayer(layer);
         return (
           <div
             key={layer.id}
-            className={`le-box${selected ? " le-box--selected" : ""}${layer.locked ? " le-box--locked" : ""}`}
+            className={`le-box${selected ? " le-box--selected" : ""}${layer.locked ? " le-box--locked" : ""}${backdrop ? " le-box--backdrop" : ""}`}
             style={{
               position: "absolute",
               left: r.x,
@@ -146,12 +148,12 @@ export default function LayerCanvasOverlay({ canvasRef, layout, scale, selectedI
               width: Math.max(r.w, 6),
               height: Math.max(r.h, 6),
               outlineWidth: stroke,
-              zIndex: selected ? 3 : 1,
+              zIndex: backdrop ? 0 : selected ? 3 : 1,
             }}
-            title={layer.name}
+            title={backdrop ? "Background (change it in Theme background)" : layer.name}
             onPointerDown={(e) => startDrag(e, layer, "move")}
           >
-            {selected && !layer.locked && (
+            {selected && !layer.locked && !backdrop && (
               <span
                 className="le-handle"
                 style={{ width: handle, height: handle, right: -handle / 2, bottom: -handle / 2 }}

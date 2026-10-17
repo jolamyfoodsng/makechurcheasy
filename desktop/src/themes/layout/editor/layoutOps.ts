@@ -181,3 +181,16 @@ export function alignLayerPatch(
   else dy = container.y + container.h - rect.h - rect.y;
   return nudgeLayer(layer, dx, dy);
 }
+
+/**
+ * The theme background: a top-level box or picture that covers (nearly) the whole
+ * screen. It is chosen in the Background settings, never dragged or resized on
+ * the canvas, so it can't cover the text or leave the screen half empty.
+ */
+export function isBackdropLayer(layer: ThemeLayer): boolean {
+  return !layer.parentId
+    && (layer.type === "box" || layer.type === "image")
+    && layer.w >= 1728
+    && typeof layer.h === "number"
+    && layer.h >= 972;
+}
