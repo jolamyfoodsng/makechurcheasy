@@ -11,11 +11,11 @@
  *   5. Main app is always accessible — updates never block workflow
  */
 
-import { Suspense, useState, useEffect, useCallback, useRef } from "react";
+import { Suspense, useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { useAdminControls } from "./hooks/useAdminControls";
 import { DOCK_ADMIN_CONTROLS_FILE } from "./dock/dockAdminControls";
 import { ADMIN_FEATURE_OFF_MESSAGES } from "./services/desktopConfig";
-import { Routes, Route, Navigate, useParams, useNavigate, useLocation } from "react-router-dom";
+import { Routes, Route, Navigate, useParams, useNavigate, useLocation, type Location } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { OBSConnectGate } from "./components/OBSConnectGate";
 import { getPreferredWorkspace, isOnboardingCompleted } from "./services/workspacePreference";
@@ -158,6 +158,38 @@ let lmDockServicePromise: Promise<LmDockService> | null = null;
 function loadLmDockService(): Promise<LmDockService> {
   lmDockServicePromise ??= import("./services/lmDockService").then(({ lmDockService }) => lmDockService);
   return lmDockServicePromise;
+}
+
+const SettingsModal = safeLazy(() => import("./components/SettingsModal"));
+
+/**
+ * The app's routes, with Settings drawn as a dialog over the page you were on.
+ * On /settings the routes keep showing the last other page behind the dialog.
+ */
+function SettingsOverlayRoutes({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isSettings = location.pathname === "/settings";
+  const behindRef = useRef<Location>({ pathname: "/", search: "", hash: "", state: null, key: "default" });
+  if (!isSettings) behindRef.current = location;
+  const closeSettings = useCallback(() => {
+    const behind = behindRef.current;
+    navigate(`${behind.pathname}${behind.search}${behind.hash}`);
+  }, [navigate]);
+  return (
+    <>
+      <Routes location={isSettings ? behindRef.current : location}>{children}</Routes>
+      {isSettings && (
+        <Suspense fallback={null}>
+          <SettingsModal onClose={closeSettings}>
+            <Suspense fallback={<AppRouteFallback />}>
+              <MVSettings />
+            </Suspense>
+          </SettingsModal>
+        </Suspense>
+      )}
+    </>
+  );
 }
 
 function AppRouteFallback() {
@@ -1565,7 +1597,7 @@ function App() {
                             <VerificationGate>
                               <LicenseGuard>
                                 <LowerThirdProvider>
-                                  <Routes>
+                                  <SettingsOverlayRoutes>
                                     {/* Onboarding — standalone layout, no sidebar */}
                                     {!mceOnboardingDone && (
                                       <Route path="onboarding" element={<OnboardingPage />} />
@@ -1628,7 +1660,7 @@ function App() {
                                     </Route>
 
                                     <Route path="*" element={<Navigate to="/" replace />} />
-                                  </Routes>
+                                  </SettingsOverlayRoutes>
                                 </LowerThirdProvider>
                               </LicenseGuard>
                             </VerificationGate>

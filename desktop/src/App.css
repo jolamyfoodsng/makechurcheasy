@@ -23878,3 +23878,62 @@ video:not([controls])::-webkit-media-controls-panel,
 video:not([controls])::-webkit-media-controls-overlay-play-button,
 video:not([controls])::-webkit-media-controls-start-playback-button,
 video:not([controls])::-webkit-media-controls-play-button { display: none !important; opacity: 0 !important; visibility: hidden !important; -webkit-appearance: none !important; pointer-events: none !important; }
+
+/* ── Settings as a dialog over the current page ── */
+.settings-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: linear-gradient(180deg, rgba(12, 12, 15, 0.72) 0%, rgba(0, 0, 0, 0.92) 100%);
+}
+
+.settings-modal {
+  position: relative;
+  width: min(1120px, 100%);
+  height: min(780px, 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #18181b;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+}
+
+.settings-modal__body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-modal__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary, #a1a1aa);
+  cursor: pointer;
+}
+
+.settings-modal__close:hover {
+  color: var(--text-primary, #fff);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Theme Creator: unsaved changes prompt */
+.tc-confirm-panel { width: min(420px, 92vw); }
+.tc-confirm-text { margin: 0; font-size: 13px; line-height: 1.5; color: var(--tc-on-surface-variant, #a1a1aa); }
+.tc-confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }

@@ -74,7 +74,7 @@ export default function LiveStatusBar() {
       label: "OBS Connected",
       ...COLORS.green,
       animate: "pulse",
-      navigateTo: "/settings",
+      navigateTo: "/settings?tab=obs",
     });
   } else if (obsStatus === "connecting") {
     items.push({
@@ -83,7 +83,7 @@ export default function LiveStatusBar() {
       label: "OBS Connecting",
       ...COLORS.orange,
       animate: "glow",
-      navigateTo: "/settings",
+      navigateTo: "/settings?tab=obs",
     });
   } else if (obsStatus === "error") {
     items.push({
@@ -91,7 +91,7 @@ export default function LiveStatusBar() {
       icon: "error",
       label: "OBS Error",
       ...COLORS.red,
-      navigateTo: "/settings",
+      navigateTo: "/settings?tab=obs",
     });
   }
 

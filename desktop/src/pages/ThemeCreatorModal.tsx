@@ -620,6 +620,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
 
   // ── Core state ──
   const [saving, setSaving] = useState(false);
+  const [baselineEpoch, setBaselineEpoch] = useState(0);
   const [name, setName] = useState(editTheme?.name || "");
   const [description] = useState(editTheme?.description || "");
   const [categories, setCategories] = useState<BibleThemeCategory[]>(
@@ -770,6 +771,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
       redoStackRef.current = [];
       setCanUndo(false);
       setCanRedo(false);
+      setBaselineEpoch((n) => n + 1);
       return;
     }
     const incomingSettings = normalizeThemeSettings({ ...DEFAULT_THEME_SETTINGS, ...theme.settings });
@@ -790,6 +792,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     redoStackRef.current = [];
     setCanUndo(false);
     setCanRedo(false);
+    setBaselineEpoch((n) => n + 1);
   }, [activeVariant]);
 
   const handleNewTheme = useCallback(() => {
@@ -804,6 +807,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     redoStackRef.current = [];
     setCanUndo(false);
     setCanRedo(false);
+    setBaselineEpoch((n) => n + 1);
   }, []);
 
   const handleDeleteTheme = useCallback(async (themeId: string) => {
@@ -1249,6 +1253,28 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     void guardNewTheme().then((ok) => { if (ok) void saveTheme(true); });
   }, [saveTheme, guardNewTheme]);
 
+  // ── Unsaved changes ──
+  // The theme as it was opened (or last loaded / saved); closing with anything different asks first.
+  const themeSnapshot = useMemo(
+    () => JSON.stringify([name, categories, fullscreenSettings, lowerThirdSettings, fullscreenRawTemplate, lowerThirdRawTemplate]),
+    [name, categories, fullscreenSettings, lowerThirdSettings, fullscreenRawTemplate, lowerThirdRawTemplate],
+  );
+  const baselineSnapshotRef = useRef<string | null>(null);
+  const latestSnapshotRef = useRef(themeSnapshot);
+  latestSnapshotRef.current = themeSnapshot;
+  useEffect(() => {
+    baselineSnapshotRef.current = latestSnapshotRef.current;
+    // The editor normalises a few settings right after it opens or loads a theme: that is not an edit.
+    const settle = window.setTimeout(() => { baselineSnapshotRef.current = latestSnapshotRef.current; }, 500);
+    return () => window.clearTimeout(settle);
+  }, [baselineEpoch]);
+  const [confirmClose, setConfirmClose] = useState(false);
+  const requestClose = useCallback(() => {
+    const dirty = baselineSnapshotRef.current !== null && baselineSnapshotRef.current !== latestSnapshotRef.current;
+    if (dirty && !saving) setConfirmClose(true);
+    else onClose();
+  }, [onClose, saving]);
+
   const handleDelete = useCallback(async () => {
     if (isEditing && editTheme) {
       await handleDeleteTheme(editTheme.id);
@@ -1379,7 +1405,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
             <Save size={16} />
             {saving ? "Saving\u2026" : "Save"}
           </button>
-          <button className="tc-toolbar-btn tc-close-btn" onClick={onClose} title="Close">
+          <button className="tc-toolbar-btn tc-close-btn" onClick={requestClose} title="Close">
             <X size={20} />
           </button>
         </div>
@@ -2033,6 +2059,26 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
       </div>
 
       {/* Background Picker Modal */}
+      {confirmClose && (
+        <div className="tc-modal-overlay" onClick={() => setConfirmClose(false)}>
+          <div className="tc-modal-panel tc-confirm-panel" role="alertdialog" aria-labelledby="tc-confirm-title" onClick={(e) => e.stopPropagation()}>
+            <div className="tc-modal-header">
+              <span id="tc-confirm-title">Do you want to save?</span>
+            </div>
+            <div className="tc-modal-body">
+              <p className="tc-confirm-text">You have unsaved changes to this theme. If you close without saving, you might lose them.</p>
+            </div>
+            <div className="tc-modal-footer tc-confirm-actions">
+              <button className="tc-toolbar-btn" onClick={() => setConfirmClose(false)}>Keep editing</button>
+              <button className="tc-toolbar-btn" onClick={onClose}>Don't save</button>
+              <button className="tc-toolbar-btn tc-toolbar-btn--save" onClick={() => { setConfirmClose(false); handleSave(); }}>
+                <Save size={16} />
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showBackgroundModal && (
         <div className="tc-modal-overlay" onClick={() => setShowBackgroundModal(false)}>
           <div className="tc-modal-panel" onClick={(e) => e.stopPropagation()}>
