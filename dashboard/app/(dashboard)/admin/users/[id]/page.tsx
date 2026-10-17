@@ -276,6 +276,21 @@ interface UserDetail {
     stoppedAt?: string;
     stoppedReason?: string;
   } | null;
+  trialEligibility?: {
+    status: "used_on_device" | "desktop_required";
+    updatedAt?: string | null;
+  } | null;
+  possibleTrialAccounts?: Array<{
+    id: string;
+    name: string;
+    email: string;
+    plan: string;
+    trialStatus: string;
+    createdAt: string | null;
+    lastLogin: string | null;
+    trialStartedAt: string | null;
+    matchSignals: string[];
+  }> | null;
   ambassador?: {
     active: boolean;
     grantedBy?: string;
@@ -2414,6 +2429,86 @@ export default function AdminUserDetailPage() {
             </div>
           </div>
         )}
+
+        {/* Possible linked trial accounts */}
+        <section className="bg-gray-900 border border-slate-700 rounded-2xl p-6 md:col-span-2" aria-labelledby="linked-trial-accounts-title">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
+              <Fingerprint className="w-4 h-4 text-amber-400" />
+            </div>
+            <div className="min-w-0">
+              <h2 id="linked-trial-accounts-title" className="text-sm font-semibold text-slate-50">Possible linked trial accounts</h2>
+              <p className="mt-1 text-xs text-slate-500">Accounts that match this user's saved email or desktop signals. A shared computer may belong to different people.</p>
+            </div>
+          </div>
+
+          {user.trialEligibility?.status === "used_on_device" && (
+            <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-800/60 bg-amber-950/30 px-3 py-2.5 text-xs text-amber-200">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>This account could not start a trial because an existing claim matched one of its recorded signup or device signals.</span>
+            </div>
+          )}
+
+          {user.possibleTrialAccounts === null ? (
+            <p className="mt-4 rounded-xl border border-slate-800 bg-slate-950/40 px-4 py-5 text-center text-sm text-slate-500">
+              Linked account records could not be checked right now.
+            </p>
+          ) : user.possibleTrialAccounts?.length ? (
+            <div className="mt-4 divide-y divide-slate-800 border-y border-slate-800">
+              {user.possibleTrialAccounts.map((account) => (
+                <div key={account.id} className="flex flex-col gap-3 py-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <Link href={`/admin/users/${account.id}`} className="text-sm font-semibold text-indigo-300 hover:text-indigo-200">
+                        {account.name || "Unnamed account"}
+                      </Link>
+                      <span className="text-xs text-slate-500">{account.email || "No email on file"}</span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {account.matchSignals.map((signal) => (
+                        <span key={`${account.id}-${signal}`} className="inline-flex rounded-full border border-slate-700 bg-slate-800/70 px-2 py-0.5 text-[10px] text-slate-300">
+                          {signal}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-xs sm:grid-cols-3 lg:w-[520px] lg:shrink-0 lg:grid-cols-5">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Plan</p>
+                      <p className="mt-0.5 font-medium capitalize text-slate-200">{account.plan}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Trial</p>
+                      <p className="mt-0.5 font-medium capitalize text-slate-200">{account.trialStatus}</p>
+                      {account.trialStartedAt && (
+                        <p className="mt-0.5 text-[10px] text-slate-500">Started {new Date(account.trialStartedAt).toLocaleDateString()}</p>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Trial began</p>
+                      <p className="mt-0.5 font-medium text-slate-200">{account.trialStartedAt ? new Date(account.trialStartedAt).toLocaleDateString() : "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Signed up</p>
+                      <p className="mt-0.5 font-medium text-slate-200">{account.createdAt ? new Date(account.createdAt).toLocaleDateString() : "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-slate-500">Last login</p>
+                      <p className="mt-0.5 font-medium text-slate-200">{account.lastLogin ? new Date(account.lastLogin).toLocaleDateString() : "—"}</p>
+                    </div>
+                  </div>
+                  <Link href={`/admin/users/${account.id}`} className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-slate-700 px-3 text-xs font-medium text-slate-300 hover:bg-gray-800">
+                    Open account <ExternalLink className="h-3.5 w-3.5" />
+                  </Link>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-4 rounded-xl border border-dashed border-slate-700 px-4 py-5 text-center text-sm text-slate-500">
+              No linked trial accounts found from the available account and device records.
+            </p>
+          )}
+        </section>
 
         {/* Temporary Plan Card */}
         <details className="bg-gray-900 border border-slate-700 rounded-2xl p-6 md:col-span-2">
@@ -5832,4 +5927,3 @@ function Modal({ onClose, title, children }: { onClose: () => void; title: strin
     </div>
   );
 }
-

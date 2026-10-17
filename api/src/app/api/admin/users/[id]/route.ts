@@ -7,6 +7,7 @@ import { checkAndExpireAdminTemporaryPlan } from "@/lib/adminTemporaryPlan";
 import { getEffectivePlan } from "@/lib/trial";
 import { logAuditEvent } from "@/lib/auditLog";
 import { loadUserEngagement, scoreUserEngagement } from "@/lib/userEngagement";
+import { findPossibleTrialAccounts } from "@/lib/adminTrialAccountLinks";
 
 export async function GET(
   req: NextRequest,
@@ -173,6 +174,10 @@ export async function GET(
 
     const creditResult = await calculateUserCredits(id, user);
     const effectivePlan = getEffectivePlan(user);
+    const possibleTrialAccounts = await findPossibleTrialAccounts(db, userIdString, user).catch((error) => {
+      console.error("Admin linked trial account lookup failed:", error);
+      return null;
+    });
     const subscription = await db
       .collection("subscriptions")
       .findOne({ userId: id }, { sort: { createdAt: -1 } });
@@ -297,6 +302,10 @@ export async function GET(
       appId: user.appId || "",
       trialId: user.trialId || null,
       trial: trialResponse,
+      trialEligibility: ["used_on_device", "desktop_required"].includes(String(user.trialEligibility?.status))
+        ? { status: user.trialEligibility.status, updatedAt: user.trialEligibility.updatedAt || null }
+        : null,
+      possibleTrialAccounts,
       activationMilestones: user.activationMilestones || null,
       ambassador: user.ambassador || null,
       adminTemporaryPlan: user.adminTemporaryPlan || null,
