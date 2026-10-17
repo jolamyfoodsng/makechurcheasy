@@ -39,6 +39,11 @@ const FONTS = [
   "Caveat", "Dancing Script", "Great Vibes", "Satisfy", "Arial",
 ];
 
+/** Font weights by the names people know (CSS number first). */
+const FONT_WEIGHTS: ReadonlyArray<readonly [number, string]> = [
+  [300, "Light"], [400, "Regular"], [500, "Medium"], [600, "Semibold"], [700, "Bold"], [800, "Extra bold"], [900, "Black"],
+];
+
 /** Extra fonts the built-in countdown designs ship (public/fonts/countdown-fonts.css). */
 const COUNTDOWN_FONTS = [...FONTS.slice(0, -1), "Anton", "Kaushan Script", "Archivo Black", "Arial"];
 
@@ -595,7 +600,8 @@ export default function LayerPanel({ layout, selectedId, onSelect, onChange, med
                 <label className="le-field">
                   <span>Weight</span>
                   <select className="tc-input tc-select" value={String(s.fontWeight ?? 400)} onChange={(e) => style({ fontWeight: Number(e.target.value) })}>
-                    {[300, 400, 500, 600, 700, 800, 900].map((w) => <option key={w} value={w}>{w}</option>)}
+                    {FONT_WEIGHTS.map(([w, label]) => <option key={w} value={w}>{label}</option>)}
+                    {!FONT_WEIGHTS.some(([w]) => w === (s.fontWeight ?? 400)) && <option value={s.fontWeight ?? 400}>Custom ({s.fontWeight})</option>}
                   </select>
                 </label>
                 <Num label="Max lines" value={s.maxLines} min={1} onChange={(v) => style({ maxLines: v })} />

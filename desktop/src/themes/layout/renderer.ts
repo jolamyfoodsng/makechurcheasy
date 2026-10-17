@@ -213,9 +213,9 @@ function finished(anims: Animation[]): Promise<void> {
  * Starts a muted background video and keeps it going (after load, after the window was hidden, after a
  * pause). The video has no autoplay attribute and no controls, so the web view never shows its play button.
  */
-function keepPlaying(video: HTMLVideoElement): void {
+function keepPlaying(video: HTMLVideoElement, shouldPlay: () => boolean = () => true): void {
   const kick = () => {
-    if (!video.isConnected || !video.paused || video.ended) return;
+    if (!video.isConnected || !video.paused || video.ended || !shouldPlay()) return;
     try {
       const started = video.play();
       if (started && typeof started.catch === "function") started.catch(() => undefined);
@@ -235,6 +235,53 @@ function keepPlaying(video: HTMLVideoElement): void {
   kick();
 }
 
+/**
+ * Loops a background video without the blank frame a single `<video loop>` can show
+ * when it restarts (OBS's browser shows the scene behind it for a moment). A twin
+ * video waits at the start; just before the end it takes over, then the first one
+ * rewinds. Very short clips keep the plain loop.
+ */
+const SEAMLESS_LEAD_S = 0.45;
+function seamlessLoop(primary: HTMLVideoElement, twin: HTMLVideoElement): void {
+  let active = primary;
+  let idle = twin;
+  let swapping = false;
+  const swap = () => {
+    if (swapping) return;
+    swapping = true;
+    const next = idle;
+    const prev = active;
+    const done = () => { swapping = false; };
+    const go = () => {
+      next.style.opacity = "1";
+      prev.style.opacity = "0";
+      active = next;
+      idle = prev;
+      setTimeout(() => {
+        try { prev.pause(); prev.currentTime = 0; } catch { /* not seekable yet */ }
+        done();
+      }, 150);
+    };
+    try { next.currentTime = 0; } catch { /* starts from the beginning anyway */ }
+    try {
+      const started = next.play();
+      if (started && typeof started.then === "function") started.then(go, done);
+      else go();
+    } catch {
+      done();
+    }
+  };
+  const win = primary.ownerDocument.defaultView;
+  const timer = win?.setInterval(() => {
+    if (!primary.isConnected) { win.clearInterval(timer); return; }
+    if (swapping) return;
+    const d = active.duration;
+    if (d > 0 && Number.isFinite(d) && (active.ended || d - active.currentTime <= SEAMLESS_LEAD_S)) swap();
+  }, 100);
+  keepPlaying(primary, () => active === primary);
+  keepPlaying(twin, () => active === twin);
+}
+
 export class ThemeRenderer {
   private host: HTMLElement;
   private doc: Document;
@@ -245,6 +292,8 @@ export class ThemeRenderer {
   private layout: ThemeLayout | null = null;
   private hash = "";
   private preload: Promise<void> = Promise.resolve();
+  /** First frames of the background videos in the current layout. */
+  private mediaReady: Promise<void>[] = [];
   private visibleState = false;
   private running: Animation[] = [];
   private queue: Promise<void> = Promise.resolve();
@@ -305,6 +354,7 @@ export class ThemeRenderer {
     this.nodes = [];
     this.layout = layout;
     this.hash = nextHash;
+    this.mediaReady = [];
     this.build(layout);
     if (this.opts.fillViewport) this.rescale();
     this.preload = this.preloadAssets(layout);
@@ -618,24 +668,48 @@ export class ThemeRenderer {
     const videoSrc = resolve(s.videoSrc || "");
     const src = resolve(s.src || "");
     if (videoSrc) {
-      const video = d.createElement("video");
-      video.className = "mtl-img mtl-media";
-      video.muted = true;
-      video.defaultMuted = true;
-      video.loop = true;
-      // No autoplay attribute: when a web view blocks it, WebKit shows its own big play button. We start it ourselves.
-      video.autoplay = false;
-      video.playsInline = true;
-      video.preload = "auto";
-      video.controls = false;
-      video.disablePictureInPicture = true;
-      video.setAttribute("muted", "");
-      video.setAttribute("disablepictureinpicture", "");
-      video.setAttribute("disableremoteplayback", "");
-      video.src = videoSrc;
-      video.style.objectFit = s.fit || "cover";
+      const makeVideo = () => {
+        const video = d.createElement("video");
+        video.className = "mtl-img mtl-media";
+        video.muted = true;
+        video.defaultMuted = true;
+        // No autoplay attribute: when a web view blocks it, WebKit shows its own big play button. We start it ourselves.
+        video.autoplay = false;
+        video.playsInline = true;
+        video.preload = "auto";
+        video.controls = false;
+        video.disablePictureInPicture = true;
+        video.setAttribute("muted", "");
+        video.setAttribute("disablepictureinpicture", "");
+        video.setAttribute("disableremoteplayback", "");
+        video.src = videoSrc;
+        video.style.objectFit = s.fit || "cover";
+        return video;
+      };
+      const video = makeVideo();
       el.appendChild(video);
-      keepPlaying(video);
+      // The first frame must be ready before the layer fades in, or the scene behind shows through.
+      this.mediaReady.push(new Promise<void>((resolveReady) => {
+        const done = () => resolveReady();
+        if (video.readyState >= 2) done();
+        video.addEventListener("loadeddata", done, { once: true });
+        video.addEventListener("error", done, { once: true });
+      }));
+      // Clips over 2 s loop through a twin video (no blank frame at the restart); short ones keep the plain loop.
+      const decideLoop = () => {
+        if (this.opts.static || !(video.duration > 2)) {
+          video.loop = true;
+          keepPlaying(video);
+          return;
+        }
+        video.loop = false;
+        const twin = makeVideo();
+        twin.style.opacity = "0";
+        el.appendChild(twin);
+        seamlessLoop(video, twin);
+      };
+      if (video.readyState >= 1) decideLoop();
+      else video.addEventListener("loadedmetadata", decideLoop, { once: true });
       return true;
     }
     if (src) {
@@ -1100,6 +1174,7 @@ export class ThemeRenderer {
   /** Waits for fonts and images so the first "in" never shows fallback fonts. */
   private async preloadAssets(layout: ThemeLayout): Promise<void> {
     const doc = this.doc;
+    const mediaReady = this.mediaReady;
     const linkLoads: Promise<unknown>[] = [];
     for (const href of layout.fontImports || []) {
       const url = safeUrl(href);
@@ -1129,6 +1204,7 @@ export class ThemeRenderer {
         }
       }
     }
+    loads.push(...mediaReady);
     await Promise.all(loads);
     await nextFrame();
     // Fonts may have changed metrics: refit what's on screen.
