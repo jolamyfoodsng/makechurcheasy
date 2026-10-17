@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { ThemeLayer, ThemeLayout } from "../types";
 import { nudgeLayer } from "./layoutOps";
-import { snapRect } from "./snapGuides";
+import { snapRect, type SnapGap } from "./snapGuides";
 
 interface Rect { x: number; y: number; w: number; h: number }
 
@@ -32,7 +32,7 @@ type DragMode = "move" | "resize";
 
 export default function LayerCanvasOverlay({ canvasRef, layout, scale, selectedId, contentKey, onSelect, onDraft, onCommit }: Props) {
   const [rects, setRects] = useState<Record<string, Rect>>({});
-  const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
+  const [guides, setGuides] = useState<{ x: number[]; y: number[]; gaps: SnapGap[] }>({ x: [], y: [], gaps: [] });
   const dragRef = useRef<{ id: string; mode: DragMode; startX: number; startY: number; layer: ThemeLayer; start: Rect | null; last: Partial<ThemeLayer> | null } | null>(null);
 
   const measure = useCallback(() => {
@@ -101,10 +101,11 @@ export default function LayerCanvasOverlay({ canvasRef, layout, scale, selectedI
         threshold: Math.min(20, Math.max(6, 6 / (scale || 1))),
         edgesX: moving ? undefined : ["end"],
         edgesY: moving ? undefined : ["end"],
+        spacing: moving,
       });
       dx += snap.dx;
       dy += snap.dy;
-      setGuides({ x: snap.guidesX, y: snap.guidesY });
+      setGuides({ x: snap.guidesX, y: snap.guidesY, gaps: snap.gaps });
     }
     const patch = d.mode === "move" ? nudgeLayer(d.layer, dx, dy) : nudgeLayer(d.layer, 0, 0, dx, dy);
     d.last = patch;
@@ -114,7 +115,7 @@ export default function LayerCanvasOverlay({ canvasRef, layout, scale, selectedI
   const endDrag = () => {
     const d = dragRef.current;
     dragRef.current = null;
-    setGuides({ x: [], y: [] });
+    setGuides({ x: [], y: [], gaps: [] });
     if (d?.last) onCommit(d.id, d.last);
   };
 
@@ -163,6 +164,46 @@ export default function LayerCanvasOverlay({ canvasRef, layout, scale, selectedI
       {guides.x.map((x) => (
         <div key={`gx${x}`} className="le-guide" style={{ position: "absolute", left: x - stroke / 2, top: 0, width: stroke, height: 1080 }} />
       ))}
+      {guides.gaps.map((g, i) => {
+        const len = g.to - g.from;
+        if (len < 1) return null;
+        const tick = 14 / (scale || 1);
+        const font = 13 / (scale || 1);
+        const horizontal = g.axis === "x";
+        return (
+          <div key={`gap${i}`} className="le-gap" style={{ position: "absolute", pointerEvents: "none", zIndex: 6 }}>
+            <div
+              className="le-guide"
+              style={horizontal
+                ? { position: "absolute", left: g.from, top: g.cross - stroke / 2, width: len, height: stroke }
+                : { position: "absolute", top: g.from, left: g.cross - stroke / 2, height: len, width: stroke }}
+            />
+            {[g.from, g.to].map((p) => (
+              <div
+                key={p}
+                className="le-guide"
+                style={horizontal
+                  ? { position: "absolute", left: p - stroke / 2, top: g.cross - tick / 2, width: stroke, height: tick }
+                  : { position: "absolute", top: p - stroke / 2, left: g.cross - tick / 2, height: stroke, width: tick }}
+              />
+            ))}
+            <span
+              className="le-gap-label"
+              style={{
+                position: "absolute",
+                left: horizontal ? g.from + len / 2 : g.cross + tick,
+                top: horizontal ? g.cross - tick - font : g.from + len / 2,
+                transform: horizontal ? "translateX(-50%)" : "translateY(-50%)",
+                fontSize: font,
+                padding: `${font * 0.12}px ${font * 0.4}px`,
+                borderRadius: font * 0.25,
+              }}
+            >
+              {Math.round(len)}
+            </span>
+          </div>
+        );
+      })}
       {guides.y.map((y) => (
         <div key={`gy${y}`} className="le-guide" style={{ position: "absolute", top: y - stroke / 2, left: 0, height: stroke, width: 1920 }} />
       ))}

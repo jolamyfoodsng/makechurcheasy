@@ -104,3 +104,4 @@
 
 .le-guide { background: #ff3d8b; pointer-events: none; z-index: 6; }
 .le-align { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.le-gap-label { background: #ff3d8b; color: #fff; font-weight: 700; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; }

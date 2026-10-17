@@ -17,7 +17,7 @@ describe("snapRect", () => {
 
   it("does nothing outside the threshold", () => {
     const r = snapRect({ x: 500, y: 300, w: 800, h: 400 }, [], { canvas, threshold: 8 });
-    expect(r).toEqual({ dx: 0, dy: 0, guidesX: [], guidesY: [] });
+    expect(r).toEqual({ dx: 0, dy: 0, guidesX: [], guidesY: [], gaps: [] });
   });
 
   it("snaps to canvas edges and to other layers", () => {
@@ -31,6 +31,40 @@ describe("snapRect", () => {
     // Start edge is near 0 but only the end edge may snap.
     const r = snapRect({ x: 4, y: 0, w: 1000, h: 100 }, [], { canvas, threshold: 8, edgesX: ["end"], edgesY: ["end"] });
     expect(r.dx).toBe(0);
+  });
+});
+
+describe("equal spacing", () => {
+  const top = { x: 600, y: 100, w: 700, h: 100 };
+  const bottom = { x: 600, y: 700, w: 700, h: 100 };
+
+  it("snaps between two layers so both gaps match", () => {
+    // Gap space is 200..700 (500). A 100 tall box centred there starts at 400; start it 5px low.
+    const r = snapRect({ x: 700, y: 405, w: 400, h: 100 }, [top, bottom], { canvas, threshold: 8 });
+    expect(r.dy).toBe(-5);
+    expect(r.gaps.map((g) => [g.axis, Math.round(g.to - g.from)])).toEqual([["y", 200], ["y", 200]]);
+  });
+
+  it("repeats the gap between two layers after the last one", () => {
+    // top→bottom is 500 apart; the next one sits 500 below `bottom` (y = 800 + 500 = 1300 is off-canvas),
+    // so use a tighter pair: 100 gap, box 4px short of repeating it.
+    const a = { x: 600, y: 100, w: 700, h: 100 };
+    const b = { x: 600, y: 300, w: 700, h: 100 };
+    const r = snapRect({ x: 700, y: 496, w: 400, h: 100 }, [a, b], { canvas, threshold: 8 });
+    expect(r.dy).toBe(4);
+    expect(r.gaps.map((g) => Math.round(g.to - g.from))).toEqual([100, 100]);
+  });
+
+  it("ignores layers it does not overlap on the other axis", () => {
+    const aside = { x: 0, y: 100, w: 100, h: 100 };
+    const aside2 = { x: 0, y: 700, w: 100, h: 100 };
+    const r = snapRect({ x: 700, y: 405, w: 400, h: 100 }, [aside, aside2], { canvas, threshold: 8 });
+    expect(r.gaps).toEqual([]);
+  });
+
+  it("is off while resizing", () => {
+    const r = snapRect({ x: 700, y: 405, w: 400, h: 100 }, [top, bottom], { canvas, threshold: 8, spacing: false });
+    expect(r.gaps).toEqual([]);
   });
 });
 
