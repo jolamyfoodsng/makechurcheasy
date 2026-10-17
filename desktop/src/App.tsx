@@ -15,6 +15,7 @@ import { Suspense, useState, useEffect, useCallback, useRef, type ReactNode } fr
 import { useAdminControls } from "./hooks/useAdminControls";
 import { DOCK_ADMIN_CONTROLS_FILE } from "./dock/dockAdminControls";
 import { ADMIN_FEATURE_OFF_MESSAGES } from "./services/desktopConfig";
+import { SettingsOverlayContext } from "./components/SettingsModalSlot";
 import { Routes, Route, Navigate, useParams, useNavigate, useLocation, type Location } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { OBSConnectGate } from "./components/OBSConnectGate";
@@ -160,11 +161,10 @@ function loadLmDockService(): Promise<LmDockService> {
   return lmDockServicePromise;
 }
 
-const SettingsModal = safeLazy(() => import("./components/SettingsModal"));
-
 /**
  * The app's routes, with Settings drawn as a dialog over the page you were on.
- * On /settings the routes keep showing the last other page behind the dialog.
+ * On /settings the routes keep showing the last other page behind the dialog;
+ * the app shell draws the dialog itself (SettingsModalSlot) inside its providers.
  */
 function SettingsOverlayRoutes({ children }: { children: ReactNode }) {
   const location = useLocation();
@@ -177,18 +177,9 @@ function SettingsOverlayRoutes({ children }: { children: ReactNode }) {
     navigate(`${behind.pathname}${behind.search}${behind.hash}`);
   }, [navigate]);
   return (
-    <>
+    <SettingsOverlayContext.Provider value={{ open: isSettings, close: closeSettings }}>
       <Routes location={isSettings ? behindRef.current : location}>{children}</Routes>
-      {isSettings && (
-        <Suspense fallback={null}>
-          <SettingsModal onClose={closeSettings}>
-            <Suspense fallback={<AppRouteFallback />}>
-              <MVSettings />
-            </Suspense>
-          </SettingsModal>
-        </Suspense>
-      )}
-    </>
+    </SettingsOverlayContext.Provider>
   );
 }
 

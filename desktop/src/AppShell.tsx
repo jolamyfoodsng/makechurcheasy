@@ -25,6 +25,7 @@ import { useServiceStore } from "./hooks/useServiceStore";
 import { ServiceCompletedModal } from "./components/ServiceCompletedModal";
 import BibleCommandPalette from "./components/BibleCommandPalette";
 import { BibleProvider } from "./bible/bibleStore";
+import SettingsModalSlot from "./components/SettingsModalSlot";
 import Icon from "./components/Icon";
 import DashboardSidebar from "./components/DashboardSidebar";
 import AppStatusStrip from "./components/AppStatusStrip";
@@ -219,7 +220,14 @@ export function AppShell() {
   }, [navigate]);
 
   if (isEditorRoute) {
-    return <Outlet />;
+    return (
+      <>
+        <Outlet />
+        <BibleProvider>
+          <SettingsModalSlot />
+        </BibleProvider>
+      </>
+    );
   }
 
   return (
@@ -383,6 +391,8 @@ export function AppShell() {
           </div>
         </div>
       )}
+
+        <SettingsModalSlot />
 
         {/* ── Global Command Palette ── */}
         <BibleCommandPalette
