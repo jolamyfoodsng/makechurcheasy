@@ -17,6 +17,7 @@ import {
   TEXT_ROLES,
   updateLayer,
   updateLayerStyle,
+  type AlignHow,
 } from "./layoutOps";
 import { headingLayers, hasHeading, isHeadingShown } from "../heading";
 import { themeMediaUrl, type MediaRef } from "./mediaUrl";
@@ -76,6 +77,8 @@ interface Props {
   mediaPreviewSrc?: (item: LayerMediaItem) => string;
   /** Save a picture or video from this computer into the Media Library (the list then refreshes). */
   onImportMedia?: (file: File) => Promise<void> | void;
+  /** Move the selected layer to a side or the middle of the screen (or of the box it sits in). */
+  onAlign?: (how: AlignHow) => void;
 }
 
 type BgKind = "colour" | "image" | "video" | "pattern";
@@ -377,7 +380,7 @@ function TimerBoxControls({ s, onStyle }: { s: LayerStyle; onStyle: StylePatch }
   );
 }
 
-export default function LayerPanel({ layout, selectedId, onSelect, onChange, mediaItems = [], mediaPreviewSrc = (item) => item.url || "", onImportMedia }: Props) {
+export default function LayerPanel({ layout, selectedId, onSelect, onChange, mediaItems = [], mediaPreviewSrc = (item) => item.url || "", onImportMedia, onAlign }: Props) {
   const isCountdown = layout.kind === "countdown";
   const roles = isCountdown ? COUNTDOWN_TEXT_ROLES : TEXT_ROLES;
   const fonts = isCountdown ? COUNTDOWN_FONTS : FONTS;
@@ -558,6 +561,13 @@ export default function LayerPanel({ layout, selectedId, onSelect, onChange, med
           )}
 
           <div className="le-subtitle">Position & size</div>
+          {onAlign && !layer.locked && (
+            <div className="le-align" role="group" aria-label="Align">
+              {([["left", "Left"], ["center", "Center"], ["right", "Right"], ["top", "Top"], ["middle", "Middle"], ["bottom", "Bottom"]] as const).map(([how, label]) => (
+                <button key={how} type="button" className="le-btn" title={`Align ${label.toLowerCase()}`} onClick={() => onAlign(how)}>{label}</button>
+              ))}
+            </div>
+          )}
           <div className="le-grid-2">
             <Num label="X" value={layer.x} onChange={(v) => set({ x: v })} />
             <Num label="Y" value={layer.y} onChange={(v) => set({ y: v })} />

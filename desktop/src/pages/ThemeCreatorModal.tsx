@@ -75,7 +75,7 @@ import { fullscreenFromLowerThird, lowerThirdFromFullscreen } from "../themes/la
 import ThemeLayoutPreview from "../themes/layout/ThemeLayoutPreview";
 import LayerPanel from "../themes/layout/editor/LayerPanel";
 import LayerCanvasOverlay from "../themes/layout/editor/LayerCanvasOverlay";
-import { getLayer, nudgeLayer, removeLayer, updateLayer } from "../themes/layout/editor/layoutOps";
+import { alignLayerPatch, getLayer, nudgeLayer, removeLayer, updateLayer, type AlignHow } from "../themes/layout/editor/layoutOps";
 import type { ThemeContent, ThemeLayer, ThemeLayout } from "../themes/layout/types";
 
 // ---------------------------------------------------------------------------
@@ -1279,6 +1279,26 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   // RENDER
   // ════════════════════════════════════════════════════════════════════════
 
+  /** Align buttons: move the selected layer to a side / the middle of the screen (or of its parent box). */
+  const handleAlignLayer = useCallback((how: AlignHow) => {
+    const canvas = layerCanvasRef.current;
+    if (!activeLayout || !selectedLayerId || !canvas) return;
+    const layer = getLayer(activeLayout, selectedLayerId);
+    if (!layer) return;
+    const base = canvas.getBoundingClientRect();
+    const k = currentScale || 1;
+    const rectOf = (id: string) => {
+      const el = canvas.querySelector<HTMLElement>(`[data-layer-id="${id}"]`);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: (r.left - base.left) / k, y: (r.top - base.top) / k, w: r.width / k, h: r.height / k };
+    };
+    const rect = rectOf(layer.id);
+    if (!rect) return;
+    const container = (layer.parentId ? rectOf(layer.parentId) : null) ?? { x: 0, y: 0, w: 1920, h: 1080 };
+    commitLayout(updateLayer(activeLayout, layer.id, alignLayerPatch(layer, rect, container, how)));
+  }, [activeLayout, selectedLayerId, currentScale, commitLayout]);
+
   const modalContent = (
     <div className="tc-editor">
       {/* ── Top Toolbar ── */}
@@ -1622,6 +1642,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                 onChange={commitLayout}
                 mediaItems={backgroundMediaLibrary}
                 mediaPreviewSrc={(item) => resolveMediaPreviewSrc(item as MediaItem)}
+                onAlign={handleAlignLayer}
                 onImportMedia={async (file) => {
                   try {
                     await saveLibraryMediaFile(file);

@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { ThemeLayer, ThemeLayout } from "../types";
 import { nudgeLayer } from "./layoutOps";
+import { snapRect } from "./snapGuides";
 
 interface Rect { x: number; y: number; w: number; h: number }
 
@@ -31,7 +32,8 @@ type DragMode = "move" | "resize";
 
 export default function LayerCanvasOverlay({ canvasRef, layout, scale, selectedId, contentKey, onSelect, onDraft, onCommit }: Props) {
   const [rects, setRects] = useState<Record<string, Rect>>({});
-  const dragRef = useRef<{ id: string; mode: DragMode; startX: number; startY: number; layer: ThemeLayer; last: Partial<ThemeLayer> | null } | null>(null);
+  const [guides, setGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] });
+  const dragRef = useRef<{ id: string; mode: DragMode; startX: number; startY: number; layer: ThemeLayer; start: Rect | null; last: Partial<ThemeLayer> | null } | null>(null);
 
   const measure = useCallback(() => {
     const canvas = canvasRef.current;
@@ -67,7 +69,7 @@ export default function LayerCanvasOverlay({ canvasRef, layout, scale, selectedI
     onSelect(layer.id);
     if (layer.locked) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    dragRef.current = { id: layer.id, mode, startX: e.clientX, startY: e.clientY, layer, last: null };
+    dragRef.current = { id: layer.id, mode, startX: e.clientX, startY: e.clientY, layer, start: rects[layer.id] ?? null, last: null };
   };
 
   const onMove = (e: ReactPointerEvent) => {
@@ -85,6 +87,25 @@ export default function LayerCanvasOverlay({ canvasRef, layout, scale, selectedI
       dx = Math.round(dx / 8) * 8;
       dy = Math.round(dy / 8) * 8;
     }
+    // Smart guides: snap to the canvas centre / edges and to other layers (Alt/Option turns it off).
+    if (!e.altKey && d.start) {
+      const moving = d.mode === "move";
+      const box = moving
+        ? { x: d.start.x + dx, y: d.start.y + dy, w: d.start.w, h: d.start.h }
+        : { x: d.start.x, y: d.start.y, w: d.start.w + dx, h: d.start.h + dy };
+      const skip = new Set<string>([d.id]);
+      for (const l of layout.layers) if (l.parentId && skip.has(l.parentId)) skip.add(l.id);
+      const others = layout.layers.filter((l) => !l.hidden && !skip.has(l.id) && rects[l.id]).map((l) => rects[l.id]);
+      const snap = snapRect(box, others, {
+        canvas: { w: 1920, h: 1080 },
+        threshold: Math.min(20, Math.max(6, 6 / (scale || 1))),
+        edgesX: moving ? undefined : ["end"],
+        edgesY: moving ? undefined : ["end"],
+      });
+      dx += snap.dx;
+      dy += snap.dy;
+      setGuides({ x: snap.guidesX, y: snap.guidesY });
+    }
     const patch = d.mode === "move" ? nudgeLayer(d.layer, dx, dy) : nudgeLayer(d.layer, 0, 0, dx, dy);
     d.last = patch;
     onDraft(d.id, patch);
@@ -93,6 +114,7 @@ export default function LayerCanvasOverlay({ canvasRef, layout, scale, selectedI
   const endDrag = () => {
     const d = dragRef.current;
     dragRef.current = null;
+    setGuides({ x: [], y: [] });
     if (d?.last) onCommit(d.id, d.last);
   };
 
@@ -138,6 +160,12 @@ export default function LayerCanvasOverlay({ canvasRef, layout, scale, selectedI
           </div>
         );
       })}
+      {guides.x.map((x) => (
+        <div key={`gx${x}`} className="le-guide" style={{ position: "absolute", left: x - stroke / 2, top: 0, width: stroke, height: 1080 }} />
+      ))}
+      {guides.y.map((y) => (
+        <div key={`gy${y}`} className="le-guide" style={{ position: "absolute", top: y - stroke / 2, left: 0, height: stroke, width: 1920 }} />
+      ))}
     </div>
   );
 }

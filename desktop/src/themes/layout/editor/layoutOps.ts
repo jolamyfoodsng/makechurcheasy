@@ -157,3 +157,27 @@ export function nudgeLayer(layer: ThemeLayer, dx: number, dy: number, dw = 0, dh
   }
   return out;
 }
+
+export type AlignHow = "left" | "center" | "right" | "top" | "middle" | "bottom";
+
+/**
+ * Moves a layer to the left / centre / right or top / middle / bottom of its
+ * container (the canvas, or the box it is nested in). `rect` and `container` are
+ * the layer's and its container's boxes on the canvas, in design pixels.
+ */
+export function alignLayerPatch(
+  layer: ThemeLayer,
+  rect: { x: number; y: number; w: number; h: number },
+  container: { x: number; y: number; w: number; h: number },
+  how: AlignHow,
+): Partial<ThemeLayer> {
+  let dx = 0;
+  let dy = 0;
+  if (how === "left") dx = container.x - rect.x;
+  else if (how === "center") dx = container.x + (container.w - rect.w) / 2 - rect.x;
+  else if (how === "right") dx = container.x + container.w - rect.w - rect.x;
+  else if (how === "top") dy = container.y - rect.y;
+  else if (how === "middle") dy = container.y + (container.h - rect.h) / 2 - rect.y;
+  else dy = container.y + container.h - rect.h - rect.y;
+  return nudgeLayer(layer, dx, dy);
+}

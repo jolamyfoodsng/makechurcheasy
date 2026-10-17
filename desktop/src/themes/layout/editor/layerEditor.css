@@ -101,3 +101,6 @@
 /* Theme background card at the top of the layer panel */
 .le-themebg { display: flex; flex-direction: column; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--tc-outline-variant, #2a3242); }
 .le-themebg > .le-btn { align-self: flex-start; }
+
+.le-guide { background: #ff3d8b; pointer-events: none; z-index: 6; }
+.le-align { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
