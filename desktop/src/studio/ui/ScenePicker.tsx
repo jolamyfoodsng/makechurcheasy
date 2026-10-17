@@ -8,7 +8,7 @@
  *
  * Picking one puts it on the screen straight away. The camera only opens for the two camera choices.
  */
-import { Monitor, PanelBottom, Video } from "lucide-react";
+import { Monitor, PanelBottom, Video } from "../../components/icons/NativeIcons";
 import { comboLabel, useShortcutBindings, type ShortcutId } from "../shortcuts";
 
 export type StudioScene = "fullscreen" | "lower-third" | "camera" | "camera-lt";

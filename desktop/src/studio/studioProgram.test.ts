@@ -5,14 +5,14 @@ vi.mock("../services/productionSettings", () => ({ buildDockProductionSettingsPa
 vi.mock("../dock/dockOverlayBridge", () => ({ overlayBridge: { publish: vi.fn() } }));
 vi.mock("../dock/dockObsClient", () => ({
   dockObsClient: {
-    buildStudioOverlayPacket: ({ text, reference }: { text: string; reference: string }) => ({
-      data: { slide: { text, reference }, live: true, blanked: false },
+    buildStudioOverlayPacket: ({ text, reference, mode }: { text: string; reference: string; mode: string }) => ({
+      data: { slide: { text, reference }, mode, live: true, blanked: false },
       css: "",
     }),
   },
 }));
 
-import { clearProgram, getProgramState, goLive, setProgramMix, setProgramScreen, type StudioSlide } from "./studioEngine";
+import { clearProgram, getProgramState, goLive, setAltOutputMode, setProgramMix, setProgramScreen, type StudioSlide } from "./studioEngine";
 import { isBackdrop, type StudioMixLayer } from "./studioMix";
 
 const verse: StudioSlide = { key: "bible:John:3:16:KJV", module: "bible", label: "16", verse: 16, text: "For God so loved", reference: "John 3:16 (KJV)", itemTitle: "John 3" };
@@ -69,5 +69,43 @@ describe("studio program", () => {
     expect(getProgramState().mix?.map((l) => l.id)).toEqual(["v1", "b1"]);
     expect(isBackdrop(video)).toBe(true);
     expect(isBackdrop(banner)).toBe(false);
+  });
+
+  it("the alternate output shows the same item in its own look, and only while it is on", () => {
+    goLive(verse, null, "fullscreen", "fade");
+    expect(getProgramState().alt).toBeUndefined();
+    setAltOutputMode("lower-third");
+    const alt = getProgramState().alt;
+    expect(alt?.mode).toBe("lower-third");
+    expect((alt?.packets.bible as { mode: string; slide: { text: string } }).mode).toBe("lower-third");
+    expect((alt?.packets.bible as { slide: { text: string } }).slide.text).toBe("For God so loved");
+    goLive(chorus, null, "fullscreen", "fade");
+    const next = getProgramState();
+    expect((next.packets.worship as { mode: string }).mode).toBe("fullscreen");
+    expect((next.alt?.packets.worship as { mode: string }).mode).toBe("lower-third");
+    expect((next.alt?.packets.bible as { blanked: boolean }).blanked).toBe(true);
+    clearProgram("fullscreen");
+    expect((getProgramState().alt?.packets.worship as { blanked: boolean }).blanked).toBe(true);
+    setAltOutputMode(null);
+    expect(getProgramState().alt).toBeUndefined();
+  });
+
+  it("keeps the alternate look independent while the main output changes looks", async () => {
+    await goLive(verse, null, "fullscreen", "fade");
+    await setAltOutputMode("fullscreen");
+    const alternateBefore = getProgramState().alt;
+
+    await clearProgram("fullscreen", { preserveAlternate: true });
+    expect(getProgramState().alt).toEqual(alternateBefore);
+    expect(getProgramState().active).toBeNull();
+    expect(getProgramState().alt?.active).toBe("bible");
+
+    await goLive(verse, null, "lower-third", "fade");
+    const state = getProgramState();
+    expect((state.packets.bible as { mode: string }).mode).toBe("lower-third");
+    expect(state.alt?.mode).toBe("fullscreen");
+    expect((state.alt?.packets.bible as { mode: string }).mode).toBe("fullscreen");
+
+    await setAltOutputMode(null);
   });
 });

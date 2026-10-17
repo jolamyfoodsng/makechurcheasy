@@ -26,7 +26,18 @@ fn main() {
             .flag(&sdk_path)
             .compile("macos_icon");
 
+        // NDI out: snapshots of the hidden Studio output window (studio_ndi_out.rs).
+        cc::Build::new()
+            .file("ndi_out_snapshot.m")
+            .flag("-fobjc-arc")
+            .flag("-isysroot")
+            .flag(&sdk_path)
+            .compile("ndi_out_snapshot");
+        println!("cargo:rerun-if-changed=ndi_out_snapshot.m");
+
         // Link Cocoa framework at the linker stage (cc only compiles, not links).
         println!("cargo:rustc-link-lib=framework=Cocoa");
+        println!("cargo:rustc-link-lib=framework=WebKit");
+        println!("cargo:rustc-link-lib=framework=Accelerate");
     }
 }

@@ -17,7 +17,7 @@
 import { useEffect, useId } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { X } from "./icons/NativeIcons";
 import "./ModalDialog.css";
 
 export type ModalTone = "brand" | "info" | "warning" | "danger" | "success";

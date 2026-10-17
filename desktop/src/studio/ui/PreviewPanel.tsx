@@ -11,7 +11,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import QuickText from "./QuickText";
-import { CalendarPlus, Check, ChevronDown, ChevronLeft, ChevronRight, Eye, Zap, Expand, Image as ImageIcon, Monitor, MonitorOff, PanelBottom, Pencil, SlidersHorizontal, X } from "lucide-react";
+import { CalendarPlus, Check, ChevronDown, ChevronLeft, ChevronRight, Eye, Zap, Expand, Image as ImageIcon, Lock, Monitor, MonitorOff, MonitorPlay, PanelBottom, Pencil, SlidersHorizontal, X } from "../../components/icons/NativeIcons";
 import StudioModal from "./StudioModal";
 import StudioMenu, { menuAt, type StudioMenuState } from "./StudioMenu";
 import type { BibleTheme } from "../../bible/types";
@@ -67,7 +67,7 @@ export function ScaledFrame({ src, title, cam }: { src: string; title: string; c
   );
 }
 
-export type PreviewTab = "preview" | "output" | "compare";
+export type PreviewTab = "preview" | "output" | "alternate" | "compare";
 
 export interface CompareRow {
   translation: string;
@@ -79,6 +79,9 @@ interface PreviewPanelProps {
   onTab: (tab: PreviewTab) => void;
   previewUrl: string;
   outputUrl: string;
+  alternateUrl: string;
+  canUseAlternateOutput: boolean;
+  onUpgradeAlternate: () => void;
   previewSlide: StudioSlide | null;
   liveSlide: StudioSlide | null;
   screen: StudioScreen;
@@ -87,6 +90,8 @@ interface PreviewPanelProps {
   onUseTranslation: (translation: string) => void;
   displayMode: StudioMode;
   onDisplayMode: (mode: StudioMode) => void;
+  alternateMode: StudioMode;
+  onAlternateMode: (mode: StudioMode) => void;
   /** Bible / Worship / Notes have looks; pictures and videos don't. */
   hasLook: boolean;
   currentTheme: BibleTheme | null;
@@ -99,7 +104,7 @@ interface PreviewPanelProps {
   textItalic: boolean;
   onTextBold: (on: boolean) => void;
   onTextItalic: (on: boolean) => void;
-  onMonitorMenu: (feed: "preview" | "program", event: React.MouseEvent<HTMLDivElement>) => void;
+  onMonitorMenu: (feed: "preview" | "program" | "alt", event: React.MouseEvent<HTMLDivElement>) => void;
   /** Playback bars for the video / sound on the screen (shown under the screen). */
   playback?: React.ReactNode;
   /** A short line when something hides the words on the screen (e.g. Camera Only). */
@@ -213,7 +218,14 @@ export default function PreviewPanel(props: PreviewPanelProps) {
   // Words off: the look (Full Screen / Lower Third, Fade / Cut, text size) has nothing to do.
   const wordsOff = !props.wordsOn;
   const shown = props.wordsOn || Boolean(props.wordsLocked);
-  const showFrame = tab === "preview" || tab === "output";
+  const isMain = tab === "output";
+  const isAlternate = tab === "alternate";
+  const isLiveFeed = isMain || isAlternate;
+  const lockedAlternate = isAlternate && !props.canUseAlternateOutput;
+  const showFrame = tab === "preview" || isMain || (isAlternate && props.canUseAlternateOutput);
+  const frameUrl = isMain ? props.outputUrl : isAlternate ? props.alternateUrl : props.previewUrl;
+  const frameTitle = isMain ? "Main output" : isAlternate ? "Alternate output" : "Preview";
+  const contextFeed = isMain ? "program" : isAlternate ? "alt" : "preview";
 
   const openSendMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -228,6 +240,20 @@ export default function PreviewPanel(props: PreviewPanelProps) {
   return (
     <section className="st-preview st-lo" aria-label="Studio screen">
       <div className="st-lo__head">
+        <div className="st-lo__feedtabs" role="tablist" aria-label="Studio output preview">
+          <button type="button" role="tab" aria-selected={isMain} className={isMain ? "is-on" : ""} onClick={() => onTab("output")} title="Main output">
+            <Monitor size={14} /><span>Main</span>
+          </button>
+          <button type="button" role="tab" aria-selected={isAlternate} className={`${isAlternate ? "is-on" : ""}${!props.canUseAlternateOutput ? " is-locked" : ""}`} onClick={() => onTab("alternate")} title={props.canUseAlternateOutput ? "Alternate output" : "Alternate output is a Pro feature"}>
+            {props.canUseAlternateOutput ? <MonitorPlay size={14} /> : <Lock size={13} />}<span>Alternate</span>
+          </button>
+          <button type="button" role="tab" aria-selected={tab === "preview"} className={tab === "preview" ? "is-on" : ""} onClick={() => onTab("preview")} title="Preview the next slide">
+            <Eye size={14} /><span>Preview</span>
+          </button>
+          <button type="button" role="tab" aria-selected={tab === "compare"} className={tab === "compare" ? "is-on" : ""} onClick={() => onTab("compare")} title="Compare Bible translations">
+            <span>Compare</span>
+          </button>
+        </div>
         <div className="st-lo__logogrp">
           <button type="button" className={`st-lo__logo${props.logoOn ? " is-on" : ""}`} onClick={props.onLogo} aria-pressed={props.logoOn} title={props.logoOn ? "Hide the church logo" : "Show the church logo on the screen"}>
             <ImageIcon size={13} /> <span>Logo</span>
@@ -242,21 +268,40 @@ export default function PreviewPanel(props: PreviewPanelProps) {
 
       <div className="st-preview__stage">
         {showFrame && (
-          <div className={`st-monitor${tab === "output" ? " is-output" : ""}`} onWheel={props.onWheelScroll ? (e) => props.onWheelScroll?.(e.deltaY) : undefined} onContextMenu={(e) => props.onMonitorMenu(tab === "output" ? "program" : "preview", e)}>
-            <ScaledFrame title={tab === "output" ? "Output" : "Preview"} src={tab === "output" ? props.outputUrl : props.previewUrl} cam={tab === "output" ? props.liveCam : props.previewCam} />
+          <div className={`st-monitor${isLiveFeed ? " is-output" : ""}`} onWheel={props.onWheelScroll ? (e) => props.onWheelScroll?.(e.deltaY) : undefined} onContextMenu={(e) => props.onMonitorMenu(contextFeed, e)}>
+            <ScaledFrame title={frameTitle} src={frameUrl} cam={isLiveFeed ? props.liveCam : props.previewCam} />
             {props.pageScroll && <PageScroller value={props.pageScroll.value} onChange={props.pageScroll.onChange} />}
-            {tab === "output" && !hasLive && !props.liveCam?.enabled && (
+            {isLiveFeed && !hasLive && !props.liveCam?.enabled && (
               <span className="st-livemini__empty" aria-label="Nothing live yet"><MonitorOff size={22} /></span>
             )}
             <div className="st-monitor__label">
-              {tab === "output" ? <span className="st-tag st-tag--live">LIVE</span> : <span className="st-tag st-tag--prev">PREVIEW</span>}
-              <span className="st-monitor__name">{tab === "output" ? liveText : slideName(previewSlide) || "Click something to preview it"}</span>
+              {isLiveFeed ? <span className="st-tag st-tag--live">LIVE</span> : <span className="st-tag st-tag--prev">PREVIEW</span>}
+              <span className="st-monitor__name">{isLiveFeed ? liveText : slideName(previewSlide) || "Click something to preview it"}</span>
               {tab === "preview" && <em className="st-monitor__hint">next · not on the screen yet</em>}
               <span className="st-monitor__tools">
                 <button type="button" className="st-iconbtn st-iconbtn--sm" disabled={!props.canSchedule} onClick={props.onSchedule} title="Add to Schedule" aria-label="Add to Schedule"><CalendarPlus size={14} /></button>
                 <button type="button" className="st-iconbtn st-iconbtn--sm" onClick={() => setMax(true)} title="Bigger view" aria-label="Bigger view"><Expand size={14} /></button>
               </span>
             </div>
+          </div>
+        )}
+        {lockedAlternate && (
+          <div className="st-altlocked">
+            <Lock size={19} aria-hidden="true" />
+            <strong>Alternate outputs are a Pro feature</strong>
+            <p>Preview a separate look for your stream while the main output keeps its own screen layout.</p>
+            <button type="button" onClick={props.onUpgradeAlternate}>Unlock Alternate outputs</button>
+          </div>
+        )}
+        {isAlternate && props.canUseAlternateOutput && props.hasLook && (
+          <div className="st-altlook" role="group" aria-label="Alternate output look">
+            <span>Alternate look</span>
+            <button type="button" className={props.alternateMode === "fullscreen" ? "is-on" : ""} aria-pressed={props.alternateMode === "fullscreen"} onClick={() => props.onAlternateMode("fullscreen")} title="Use full screen words on the alternate output">
+              <Monitor size={14} /> Full Screen
+            </button>
+            <button type="button" className={props.alternateMode === "lower-third" ? "is-on" : ""} aria-pressed={props.alternateMode === "lower-third"} onClick={() => props.onAlternateMode("lower-third")} title="Use lower third words on the alternate output">
+              <PanelBottom size={14} /> Lower Third
+            </button>
           </div>
         )}
         {tab === "compare" && (
@@ -301,11 +346,11 @@ export default function PreviewPanel(props: PreviewPanelProps) {
       {max && showFrame && (
         <StudioModal
           big
-          title={tab === "output" ? `On the screen · ${liveText}` : `Preview · ${slideName(previewSlide) || "nothing chosen yet"}`}
+          title={isLiveFeed ? `${isAlternate ? "Alternate output" : "Main output"} · ${liveText}` : `Preview · ${slideName(previewSlide) || "nothing chosen yet"}`}
           onClose={() => setMax(false)}
         >
           <div className="st-bigview">
-            <ScaledFrame title={tab === "output" ? "Output (big)" : "Preview (big)"} src={tab === "output" ? props.outputUrl : props.previewUrl} cam={tab === "output" ? props.liveCam : props.previewCam} />
+            <ScaledFrame title={`${frameTitle} (big)`} src={frameUrl} cam={isLiveFeed ? props.liveCam : props.previewCam} />
           </div>
         </StudioModal>
       )}

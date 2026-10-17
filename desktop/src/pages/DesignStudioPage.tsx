@@ -24,7 +24,7 @@ import {
   Trash2,
   Type,
   Undo2,
-} from "lucide-react";
+} from "../components/icons/NativeIcons";
 import { nanoid } from "nanoid";
 import { GOOGLE_FONT_CATALOG } from "../templates/googleFontCatalog";
 import { ensureGoogleFontLoaded, ensureGoogleFontsLoaded } from "../templates/googleFonts";

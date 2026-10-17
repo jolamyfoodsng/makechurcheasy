@@ -6,7 +6,7 @@
   align-items: center;
   justify-content: center;
   background-color: rgba(15, 20, 16, 0.7);
-  backdrop-filter: blur(6px);
+  backdrop-filter: none;
   padding: 1rem;
 }
 
@@ -16,7 +16,7 @@
   max-width: 480px;
   background-color: #fcfaf4;
   border: 1px solid rgba(40, 45, 41, 0.15);
-  border-radius: 20px;
+  border-radius: var(--radius-lg, 6px);
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
   padding: 2rem;
   color: #282d29;
@@ -96,7 +96,7 @@
   padding: 0.75rem 1rem;
   background: rgba(125, 138, 66, 0.08);
   border: 1px solid rgba(125, 138, 66, 0.2);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
 }
 
 .ew-feature-icon {
@@ -158,7 +158,7 @@
   padding: 0.88rem;
   background: rgba(16, 185, 129, 0.08);
   border: 1px solid rgba(16, 185, 129, 0.2);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
 }
 
 .ew-summary-num {
@@ -217,7 +217,7 @@
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.2);
   color: #dc2626;
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   font-size: 0.82rem;
   margin-bottom: 1rem;
   text-align: left;

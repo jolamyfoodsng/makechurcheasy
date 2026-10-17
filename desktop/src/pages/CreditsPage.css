@@ -66,7 +66,7 @@
   padding: 4px 12px;
   border-radius: 9999px;
   background: var(--primary-soft, rgba(99, 102, 241, 0.16));
-  color: #a5b4fc;
+  color: var(--accent-blue);
   border: 1px solid var(--primary-soft-border, rgba(99, 102, 241, 0.35));
 }
 
@@ -86,7 +86,7 @@
   border-radius: 9999px;
   background: var(--surface-raised, rgba(255, 255, 255, 0.06));
   color: var(--text-muted, #a1a1aa);
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border: 1px solid var(--border, var(--border));
 }
 
 /* ── Header Buttons ────────────────────────────────────────────────────────── */
@@ -103,7 +103,7 @@
   align-items: center;
   gap: 8px;
   padding: 9px 18px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   font-size: 0.9375rem;
   font-weight: 600;
   cursor: pointer;
@@ -114,7 +114,7 @@
 .credits-btn--primary {
   background: var(--primary, #4F46E5);
   color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid var(--border);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
@@ -124,9 +124,9 @@
 }
 
 .credits-btn--secondary {
-  background: #1e293b;
-  color: #f8fafc;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
 }
 
 .credits-btn--secondary:hover {
@@ -137,7 +137,7 @@
 .credits-btn--ghost {
   background: transparent;
   color: var(--text-secondary, #d4d4d8);
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border: 1px solid var(--border, var(--border));
 }
 
 .credits-btn--ghost:hover {
@@ -159,8 +159,8 @@
   justify-content: space-between;
   padding: 22px 24px;
   background: var(--surface, rgba(255, 255, 255, 0.03));
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
-  border-radius: 12px;
+  border: 1px solid var(--border, var(--border));
+  border-radius: var(--radius, 4px);
   min-height: 136px;
   box-sizing: border-box;
 }
@@ -203,7 +203,7 @@
 
 .credits-metric-icon-wrap--accent {
   background: var(--primary-soft, rgba(99, 102, 241, 0.16));
-  color: #a5b4fc;
+  color: var(--accent-blue);
 }
 
 .credits-metric-icon-wrap--gold {
@@ -277,13 +277,13 @@
   padding: 0;
   font-size: 0.875rem;
   font-weight: 600;
-  color: #818cf8;
+  color: var(--accent-blue);
   cursor: pointer;
 }
 
 .credits-inline-link:hover {
   text-decoration: underline;
-  color: #a5b4fc;
+  color: var(--accent-blue);
 }
 
 /* ── Progress Bar ──────────────────────────────────────────────────────────── */
@@ -335,8 +335,8 @@
 
 .credits-card {
   background: var(--surface, rgba(255, 255, 255, 0.03));
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
-  border-radius: 12px;
+  border: 1px solid var(--border, var(--border));
+  border-radius: var(--radius, 4px);
   padding: 22px 24px;
   box-sizing: border-box;
 }
@@ -355,7 +355,7 @@
 }
 
 .credits-card-title-icon {
-  color: #818cf8;
+  color: var(--accent-blue);
 }
 
 .credits-card-title {
@@ -370,15 +370,15 @@
   font-size: 0.8rem;
   color: var(--text-secondary, #d4d4d8);
   background: var(--surface-raised, rgba(255, 255, 255, 0.05));
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border: 1px solid var(--border, var(--border));
   padding: 3px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   font-weight: 600;
 }
 
 .credits-card-tag--estimator {
   background: var(--primary-soft, rgba(99, 102, 241, 0.16));
-  color: #a5b4fc;
+  color: var(--accent-blue);
   border-color: var(--primary-soft-border, rgba(99, 102, 241, 0.3));
 }
 
@@ -405,7 +405,7 @@
   padding: 10px 14px;
   background: var(--surface-raised, rgba(255, 255, 255, 0.04));
   border: 1px solid var(--border, rgba(255, 255, 255, 0.07));
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
 }
 
 .credits-feature-left {
@@ -423,7 +423,7 @@
   height: 30px;
   border-radius: 6px;
   background: var(--primary-soft, rgba(99, 102, 241, 0.16));
-  color: #a5b4fc;
+  color: var(--accent-blue);
   flex-shrink: 0;
 }
 
@@ -517,8 +517,8 @@
   gap: 8px;
   background: var(--surface-raised, rgba(255, 255, 255, 0.05));
   padding: 4px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius, 4px);
+  border: 1px solid var(--border, var(--border));
 }
 
 .credits-stepper-btn {
@@ -529,7 +529,7 @@
   justify-content: center;
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-primary, #ffffff);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border);
   border-radius: 5px;
   cursor: pointer;
   font-weight: 700;
@@ -564,7 +564,7 @@
   font-size: 0.875rem;
   font-weight: 700;
   font-family: var(--font-mono, monospace);
-  color: #a5b4fc;
+  color: var(--accent-blue);
   min-width: 55px;
   text-align: right;
 }
@@ -625,7 +625,7 @@
   padding: 14px 18px;
   background: var(--primary-soft, rgba(79, 70, 229, 0.14));
   border: 1px solid var(--primary-soft-border, rgba(79, 70, 229, 0.35));
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
 }
 
 .credits-estimator-summary-left {
@@ -654,9 +654,9 @@
   font-weight: 700;
   padding: 5px 12px;
   background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid var(--border);
   border-radius: 9999px;
-  color: #a5b4fc;
+  color: var(--accent-blue);
 }
 
 /* ── Chart & Rate Card ─────────────────────────────────────────────────────── */
@@ -728,7 +728,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 0;
-  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  border-bottom: 1px solid var(--border-subtle, var(--border));
 }
 
 .credits-rate-info {
@@ -752,7 +752,7 @@
   font-size: 0.8125rem;
   font-weight: 700;
   font-family: var(--font-mono, monospace);
-  color: #a5b4fc;
+  color: var(--accent-blue);
   background: var(--primary-soft, rgba(99, 102, 241, 0.16));
   padding: 3px 9px;
   border-radius: 6px;
@@ -767,7 +767,7 @@
   padding: 12px 14px;
   background: var(--success-bg, rgba(16, 185, 129, 0.12));
   border: 1px solid var(--success-border, rgba(16, 185, 129, 0.3));
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   font-size: 0.875rem;
   color: #a7f3d0;
   line-height: 1.45;
@@ -792,7 +792,7 @@
   background: none;
   border: none;
   padding: 0;
-  color: #818cf8;
+  color: var(--accent-blue);
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
@@ -800,7 +800,7 @@
 
 .credits-view-all-btn:hover {
   text-decoration: underline;
-  color: #a5b4fc;
+  color: var(--accent-blue);
 }
 
 .credits-ledger-table-wrap {
@@ -822,12 +822,12 @@
   letter-spacing: 0.04em;
   color: var(--text-muted, #a1a1aa);
   padding: 10px 12px;
-  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-bottom: 1px solid var(--border, var(--border));
 }
 
 .credits-ledger-table td {
   padding: 12px;
-  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  border-bottom: 1px solid var(--border-subtle, var(--border));
   color: var(--text, #f4f4f5);
 }
 
@@ -875,7 +875,7 @@
   padding: 3px 9px;
   border-radius: 6px;
   text-transform: capitalize;
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--border, var(--border));
 }
 
 .credits-ledger-time {
@@ -906,7 +906,7 @@
   padding: 26px;
   background: var(--surface, rgba(255, 255, 255, 0.03));
   border: 1px solid var(--error-border, rgba(239, 68, 68, 0.35));
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
 }
 
 .credits-error-icon {

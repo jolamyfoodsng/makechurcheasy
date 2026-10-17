@@ -26,7 +26,7 @@
   border: 1px solid var(--border);
   background: var(--bg-dark);
   color: var(--text-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   width: 26px;
   height: 26px;
   display: inline-flex;
@@ -145,7 +145,7 @@
 .obs-scenes-panel-status-badge--off-air {
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-muted);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
 }
 
 .obs-scenes-panel-item-actions {
@@ -237,7 +237,7 @@
   inset: 0;
   z-index: 6500;
   background: rgba(0, 0, 0, 0.62);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -246,7 +246,7 @@
 
 .obs-scenes-modal {
   width: min(440px, 100%);
-  border-radius: 12px;
+  border-radius: var(--radius-lg, 6px);
   border: 1px solid var(--border);
   background: var(--surface-dark);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);

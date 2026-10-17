@@ -7,8 +7,9 @@
  * Nothing goes on the screen until Send to Screen (or Straight to screen is on).
  */
 import { useEffect, useRef, useState } from "react";
-import { CameraOff, RefreshCw, Video } from "lucide-react";
+import { CameraOff, RefreshCw, Video } from "../../components/icons/NativeIcons";
 import type { StudioCameraApi } from "../useStudioCamera";
+import { isNdiId } from "../nativeCamera";
 
 interface CameraCardProps {
   camera: StudioCameraApi;
@@ -80,10 +81,15 @@ export default function SharedControls(props: CameraCardProps) {
           onChange={(e) => camera.setDeviceId(e.target.value)}
           disabled={camera.devices.length === 0}
           aria-label="Which camera"
-          title="Which camera"
+          title={camera.ndiNote ? `Which camera. ${camera.ndiNote}` : "Which camera (cameras on this computer and NDI sources on the network)"}
         >
           {camera.devices.length === 0 && <option value="">No camera found</option>}
-          {camera.devices.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+          {camera.devices.filter((d) => !isNdiId(d.id)).map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+          {camera.devices.some((d) => isNdiId(d.id)) && (
+            <optgroup label="NDI sources on the network">
+              {camera.devices.filter((d) => isNdiId(d.id)).map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+            </optgroup>
+          )}
         </select>
         <button
           type="button"

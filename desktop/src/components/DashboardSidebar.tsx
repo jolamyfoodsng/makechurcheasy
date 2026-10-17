@@ -38,7 +38,7 @@ import {
   FileText,
   Radio,
   MonitorPlay,
-  Layers, Youtube, Lock, Star } from "lucide-react";
+  Layers, Youtube, Lock, Star } from "./icons/NativeIcons";
 import type { ConnectionStatus } from "../services/obsService";
 
 import { useAuth } from "../contexts/AuthContext";
@@ -554,7 +554,7 @@ export default function DashboardSidebar({
             style={{
               background: "var(--surface, #1e293b)",
               border: "1px solid var(--border, #334155)",
-              borderRadius: "16px",
+              borderRadius: "var(--radius)",
               padding: "24px",
               maxWidth: "480px",
               width: "90%",
@@ -568,7 +568,7 @@ export default function DashboardSidebar({
                 <div style={{
                   width: "36px",
                   height: "36px",
-                  borderRadius: "10px",
+                  borderRadius: "var(--radius)",
                   background: "rgba(16, 185, 129, 0.15)",
                   display: "flex",
                   alignItems: "center",
@@ -595,7 +595,7 @@ export default function DashboardSidebar({
                   color: "var(--text-muted, #94a3b8)",
                   cursor: "pointer",
                   padding: "4px",
-                  borderRadius: "6px",
+                  borderRadius: "var(--radius)",
                 }}
                 aria-label="Close"
               >
@@ -615,7 +615,7 @@ export default function DashboardSidebar({
                   alignItems: "center",
                   gap: "14px",
                   padding: "12px 16px",
-                  borderRadius: "12px",
+                  borderRadius: "var(--radius)",
                   background: "rgba(37, 211, 102, 0.08)",
                   border: "1px solid rgba(37, 211, 102, 0.25)",
                   color: "inherit",
@@ -654,7 +654,7 @@ export default function DashboardSidebar({
                   alignItems: "center",
                   gap: "14px",
                   padding: "12px 16px",
-                  borderRadius: "12px",
+                  borderRadius: "var(--radius)",
                   background: "rgba(0, 136, 204, 0.08)",
                   border: "1px solid rgba(0, 136, 204, 0.25)",
                   color: "inherit",
@@ -691,7 +691,7 @@ export default function DashboardSidebar({
                   alignItems: "center",
                   gap: "14px",
                   padding: "12px 16px",
-                  borderRadius: "12px",
+                  borderRadius: "var(--radius)",
                   background: "rgba(99, 102, 241, 0.08)",
                   border: "1px solid rgba(99, 102, 241, 0.25)",
                   color: "inherit",
@@ -704,7 +704,7 @@ export default function DashboardSidebar({
                   height: "36px",
                   borderRadius: "50%",
                   background: "rgba(99, 102, 241, 0.2)",
-                  color: "#818cf8",
+                  color: "var(--accent-blue)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -731,7 +731,7 @@ export default function DashboardSidebar({
                   alignItems: "center",
                   gap: "14px",
                   padding: "12px 16px",
-                  borderRadius: "12px",
+                  borderRadius: "var(--radius)",
                   background: "rgba(239, 68, 68, 0.08)",
                   border: "1px solid rgba(239, 68, 68, 0.25)",
                   color: "inherit",
@@ -768,7 +768,7 @@ export default function DashboardSidebar({
                   alignItems: "center",
                   gap: "14px",
                   padding: "12px 16px",
-                  borderRadius: "12px",
+                  borderRadius: "var(--radius)",
                   background: "rgba(245, 158, 11, 0.08)",
                   border: "1px solid rgba(245, 158, 11, 0.25)",
                   color: "inherit",

@@ -98,7 +98,7 @@ import "./dock.css";
 import "./dock-theme.css";
 import "../accessibility.css";
 import DockScheduleDrawer from "./components/DockScheduleDrawer";
-import { Globe } from "lucide-react";
+import { Globe } from "../components/icons/NativeIcons";
 import Icon from "./DockIcon";
 import {
   normalizeDockSearchPlacement,

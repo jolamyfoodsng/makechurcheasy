@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { Zap, ExternalLink, LogOut } from "lucide-react";
+import { Zap, ExternalLink, LogOut } from "./icons/NativeIcons";
 import { fetchCreditsResult, isProUnlocked } from "../services/credits";
 import { useAuth } from "../contexts/AuthContext";
 import LoadingScreen from "./LoadingScreen";

@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { setPreviewCamera, type StudioCameraLayout } from "./studioEngine";
-import { isNativeId, listNativeCameras, nativeCameraAvailable, nativeId, nativeIndex, openNativeStream, startNativeCamera, stopNativeCamera, waitNativePictures } from "./nativeCamera";
+import { isNativeId, isNdiId, listNativeCameras, nativeCameraAvailable, nativeOption, nativeTarget, openNativeStream, startNativeCamera, stopNativeCamera, waitNativePictures } from "./nativeCamera";
 
 export interface StudioCameraDevice {
   id: string;
@@ -27,6 +27,8 @@ export interface StudioCameraApi {
   native: boolean;
   /** Which camera path is in use and why, in plain words (shown under the thumbnail). */
   source: string;
+  /** Why no NDI sources can be listed ("" = NDI works, or the app camera is not in use). */
+  ndiNote: string;
   /** The operator's thumbnail stream (null while off). */
   stream: MediaStream | null;
   error: string;
@@ -106,6 +108,7 @@ export function useStudioCamera(initial: { deviceId: string; layout: StudioCamer
   const nativeRef = useRef(useNative);
   nativeRef.current = useNative;
   const [nativeNote, setNativeNote] = useState("");
+  const [ndiNote, setNdiNote] = useState("");
   useEffect(() => {
     let cancelled = false;
     void nativeCameraAvailable().then(async (ok) => {
@@ -113,9 +116,11 @@ export function useStudioCamera(initial: { deviceId: string; layout: StudioCamer
       if (!ok) { setNativeNote("this build has no app camera (rebuild the app)"); setNativeOk(false); return; }
       const list = await listNativeCameras();
       if (cancelled) return;
+      setNdiNote(list.ndiError);
       if (list.devices.length === 0) { setNativeNote(list.error || "no cameras listed yet"); setNativeOk(false); return; } // no access yet: the browser camera asks first
-      setDevices(list.devices.map((d) => ({ id: nativeId(d.index), label: d.name })));
-      setDeviceIdState((current) => (isNativeId(current) && list.devices.some((d) => nativeId(d.index) === current) ? current : nativeId(list.devices[0].index)));
+      const options = list.devices.map(nativeOption);
+      setDevices(options);
+      setDeviceIdState((current) => (isNativeId(current) && options.some((d) => d.id === current) ? current : options[0].id));
       setNativeOk(true);
     });
     return () => { cancelled = true; };
@@ -124,10 +129,12 @@ export function useStudioCamera(initial: { deviceId: string; layout: StudioCamer
   const refresh = useCallback(async () => {
     if (nativeOk === true) {
       const list = await listNativeCameras();
+      setNdiNote(list.ndiError);
       if (list.devices.length) {
-        setDevices(list.devices.map((d) => ({ id: nativeId(d.index), label: d.name })));
+        const options = list.devices.map(nativeOption);
+        setDevices(options);
         setError("");
-        setDeviceIdState((current) => (isNativeId(current) && list.devices.some((d) => nativeId(d.index) === current) ? current : nativeId(list.devices[0].index)));
+        setDeviceIdState((current) => (isNativeId(current) && options.some((d) => d.id === current) ? current : options[0].id));
         return;
       }
     }
@@ -173,11 +180,18 @@ export function useStudioCamera(initial: { deviceId: string; layout: StudioCamer
       }
       let cancelled = false;
       let handle: { stream: MediaStream; close: () => void } | null = null;
-      const index = isNativeId(deviceId) ? nativeIndex(deviceId) : 0;
-      void startNativeCamera(index).then((started) => {
+      const target = isNativeId(deviceId) ? nativeTarget(deviceId) : 0;
+      // An NDI source that fails is a network problem, not a reason to give up on the app camera:
+      // say why and stay on the app camera, so the operator can pick another source.
+      const ndi = isNdiId(deviceId);
+      void startNativeCamera(target).then((started) => {
         // A newer effect now owns the shared native camera. Its queued start/stop command
         // determines the final state; this stale effect must not stop that newer selection.
         if (cancelled) return;
+        if (!started.ok && ndi) {
+          setError(started.error || "The NDI source could not be opened.");
+          return;
+        }
         if (!started.ok) {
           // The native side said no: use the browser camera instead (it also asks the system for access).
           setNativeNote(started.error || "could not start");
@@ -186,8 +200,13 @@ export function useStudioCamera(initial: { deviceId: string; layout: StudioCamer
           return;
         }
         // Only trust it once a picture has really arrived; otherwise the thumbnail would just be black.
-        return waitNativePictures().then((seen) => {
+        return waitNativePictures(ndi ? 12000 : undefined).then((seen) => {
           if (cancelled) return;
+          if (!seen.ok && ndi) {
+            void stopNativeCamera();
+            setError(seen.error);
+            return;
+          }
           if (!seen.ok) {
             console.warn("[Studio] Native camera gave no picture, using the browser camera:", seen.error);
             void stopNativeCamera();
@@ -296,5 +315,5 @@ export function useStudioCamera(initial: { deviceId: string; layout: StudioCamer
     setEnabledState(next !== "hidden");
   }, []);
 
-  return { devices, deviceId, setDeviceId: setDeviceIdState, native: useNative, source: useNative ? "App camera" : `Browser camera${nativeNote ? ` (app camera: ${nativeNote})` : ""}`, enabled, setEnabled, layout, setLayout, stream, error, denied, requestAccess, refresh };
+  return { devices, deviceId, setDeviceId: setDeviceIdState, native: useNative, ndiNote: useNative ? ndiNote : "", source: useNative ? "App camera" : `Browser camera${nativeNote ? ` (app camera: ${nativeNote})` : ""}`, enabled, setEnabled, layout, setLayout, stream, error, denied, requestAccess, refresh };
 }

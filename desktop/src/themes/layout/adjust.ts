@@ -213,6 +213,121 @@ function stripLowerThirdBackground(layers: ThemeLayer[]): ThemeLayer[] {
   });
 }
 
+interface Rect { top: number; bottom: number; left: number; right: number }
+
+// Percent shift the renderer applies per anchor (mirrors ANCHOR_SHIFT in renderer.ts).
+const ANCHOR_SHIFT_Y: Record<string, number> = {
+  "top-left": 0, "top-center": 0, "top-right": 0,
+  "middle-left": -0.5, center: -0.5, "middle-right": -0.5,
+  "bottom-left": -1, "bottom-center": -1, "bottom-right": -1,
+};
+const ANCHOR_SHIFT_X: Record<string, number> = {
+  "top-left": 0, "middle-left": 0, "bottom-left": 0,
+  "top-center": -0.5, center: -0.5, "bottom-center": -0.5,
+  "top-right": -1, "middle-right": -1, "bottom-right": -1,
+};
+const SCREEN_MARGIN = 40;
+const GROW_GAP = 24;
+
+/** A layer's box on the 1920×1080 canvas. "auto" heights are estimated from the font size. */
+function absoluteRect(layer: ThemeLayer, byId: Map<string, ThemeLayer>, depth = 0): Rect {
+  const s = layer.style || {};
+  const [pt, , pb] = s.padding || [0, 0, 0, 0];
+  const h = typeof layer.h === "number"
+    ? layer.h
+    : (s.fontSize || 40) * (s.lineHeight || 1.3) * (s.maxLines || 1) + pt + pb;
+  const left = layer.x + (ANCHOR_SHIFT_X[layer.anchor] ?? 0) * layer.w;
+  const top = layer.y + (ANCHOR_SHIFT_Y[layer.anchor] ?? 0) * h;
+  const parent = layer.parentId ? byId.get(layer.parentId) : undefined;
+  const origin = parent && depth < 8 ? absoluteRect(parent, byId, depth + 1) : { top: 0, left: 0 };
+  return { top: origin.top + top, bottom: origin.top + top + h, left: origin.left + left, right: origin.left + left + layer.w };
+}
+
+function isInside(inner: Rect, outer: Rect): boolean {
+  return inner.top >= outer.top - 1 && inner.bottom <= outer.bottom + 1 && inner.left >= outer.left - 1 && inner.right <= outer.right + 1;
+}
+
+function isAncestor(layer: ThemeLayer, of: ThemeLayer, byId: Map<string, ThemeLayer>): boolean {
+  let p = of.parentId ? byId.get(of.parentId) : undefined;
+  for (let i = 0; p && i < 8; i++) {
+    if (p.id === layer.id) return true;
+    p = p.parentId ? byId.get(p.parentId) : undefined;
+  }
+  return false;
+}
+
+/**
+ * Bigger text (or line spacing) in a fixed-height verse box only auto-fits back
+ * down to the same size. Give the box the extra height instead, taken from the
+ * free space above and below it: never past the card it sits in, the screen
+ * edge, or another layer (reference, translation, heading boxes, logos).
+ */
+function growVerseBoxes(layers: ThemeLayer[], factor: number): ThemeLayer[] {
+  if (factor <= 1.001) return layers;
+  const visible = layers.filter((l) => !l.hidden);
+  const byId = new Map(visible.map((l) => [l.id, l]));
+  return layers.map((verse) => {
+    if (verse.hidden || verse.type !== "text" || typeof verse.h !== "number" || !isVerseTextPattern(verse.content)) return verse;
+    if (verse.rotation) return verse;
+    const v = absoluteRect(verse, byId);
+    const parent = verse.parentId ? byId.get(verse.parentId) : undefined;
+
+    // The space it may grow in: its parent, else the smallest card drawn around it, else the screen.
+    let bound: Rect = { top: SCREEN_MARGIN, bottom: DESIGN_HEIGHT - SCREEN_MARGIN, left: 0, right: DESIGN_WIDTH };
+    let container: Rect | null = parent ? absoluteRect(parent, byId) : null;
+    const containers = new Set<string>(parent ? [parent.id] : []);
+    if (!container) {
+      for (const l of visible) {
+        if (l.id === verse.id || (l.type !== "box" && l.type !== "image") || isBackgroundLayer(l)) continue;
+        const r = absoluteRect(l, byId);
+        if (!isInside(v, r)) continue;
+        containers.add(l.id);
+        if (!container || (r.bottom - r.top) < (container.bottom - container.top)) container = r;
+      }
+    }
+    if (container) {
+      const inset = clamp(Math.min(v.top - container.top, container.bottom - v.bottom), 0, GROW_GAP);
+      bound = { ...container, top: container.top + inset, bottom: container.bottom - inset };
+    }
+    let top = Math.min(v.top, bound.top);
+    let bottom = Math.max(v.bottom, bound.bottom);
+
+    // Other layers beside it (horizontally overlapping) stop the growth.
+    const vMid = (v.top + v.bottom) / 2;
+    for (const l of visible) {
+      if (l.id === verse.id || containers.has(l.id) || isBackgroundLayer(l) || isAncestor(l, verse, byId) || isAncestor(verse, l, byId)) continue;
+      const r = absoluteRect(l, byId);
+      if (r.right <= v.left + 1 || r.left >= v.right - 1) continue;
+      if (isInside(v, r)) continue;
+      const mid = (r.top + r.bottom) / 2;
+      if (mid < vMid) {
+        const gap = clamp(v.top - r.bottom, 0, GROW_GAP);
+        top = Math.max(top, Math.min(v.top, r.bottom + gap));
+      } else {
+        const gap = clamp(r.top - v.bottom, 0, GROW_GAP);
+        bottom = Math.min(bottom, Math.max(v.bottom, r.top - gap));
+      }
+    }
+
+    const height = v.bottom - v.top;
+    let extra = Math.round(height * (factor - 1));
+    const roomUp = Math.max(0, v.top - top);
+    const roomDown = Math.max(0, bottom - v.bottom);
+    extra = Math.min(extra, roomUp + roomDown);
+    if (extra < 2) return verse;
+    // Grow evenly, then let whichever side still has room take the rest.
+    let up = Math.min(roomUp, extra / 2);
+    let down = Math.min(roomDown, extra - up);
+    up = Math.min(roomUp, extra - down);
+    up = Math.round(up);
+    down = Math.round(down);
+    const newH = height + up + down;
+    const localTop = verse.y + (ANCHOR_SHIFT_Y[verse.anchor] ?? 0) * height - up;
+    const y = Math.round(localTop - (ANCHOR_SHIFT_Y[verse.anchor] ?? 0) * newH);
+    return { ...verse, y, h: newH };
+  });
+}
+
 /** The layout with the operator's size / position / background changes applied (same object when none). */
 export function applyLayoutAdjust(layout: ThemeLayout, source: unknown): ThemeLayout {
   const a = readLayoutAdjust(source);
@@ -249,11 +364,9 @@ export function applyLayoutAdjust(layout: ThemeLayout, source: unknown): ThemeLa
     if (offset && !layer.parentId) next = { ...next, y: layer.y + offset };
     return next;
   });
-  const finalLayers = backdropChanged && backdrop
-    ? applyBackdrop(layers, backdrop)
-    : ltOff
-      ? stripLowerThirdBackground(layers)
-      : layers;
+  const stripped = ltOff ? stripLowerThirdBackground(layers) : layers;
+  const grown = growVerseBoxes(stripped, textK * lineK);
+  const finalLayers = backdropChanged && backdrop ? applyBackdrop(grown, backdrop) : grown;
   const out: ThemeLayout = { ...layout, layers: finalLayers };
   if (titleChanged) {
     if (nextShowHeading === undefined) delete out.showHeading;

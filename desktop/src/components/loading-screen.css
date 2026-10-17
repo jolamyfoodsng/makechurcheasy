@@ -114,7 +114,7 @@
 }
 
 .mce-loading-screen--dock .mce-spinner {
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--border);
   border-top-color: var(--dock-accent, #4f46e5);
   border-right-color: rgba(79, 70, 229, 0.6);
 }
@@ -167,7 +167,7 @@
 
 /* ── Typography ── */
 .mce-loading-screen__label {
-  font-family: var(--font-body, "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-family: var(--font-body);
   font-size: 13px;
   font-weight: 600;
   color: var(--text, #f8fafc);
@@ -185,7 +185,7 @@
 }
 
 .mce-loading-screen__sublabel {
-  font-family: var(--font-body, "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  font-family: var(--font-body);
   font-size: 11px;
   color: var(--text-muted, #94a3b8);
   line-height: 1.35;

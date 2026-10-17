@@ -12,7 +12,7 @@ import {
   RefreshCw,
   Search,
   X,
-} from "lucide-react";
+} from "../components/icons/NativeIcons";
 import {
   fetchTutorialCatalog,
   getCachedTutorialCatalog,

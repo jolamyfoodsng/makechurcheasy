@@ -5,7 +5,7 @@
  */
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { Clock } from "lucide-react";
+import { Clock } from "./icons/NativeIcons";
 
 type Prompt = { active: boolean; remainingSeconds: number; intervalMinutes: number } | null;
 

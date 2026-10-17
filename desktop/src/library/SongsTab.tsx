@@ -34,7 +34,7 @@ import {
   X,
   Edit,
   Lock,
-} from "lucide-react";
+} from "../components/icons/NativeIcons";
 import { useAuth } from "../contexts/AuthContext";
 import {
   getEffectivePlan,

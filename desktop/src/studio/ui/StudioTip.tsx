@@ -4,7 +4,7 @@
  * The tip changes softly; with "reduce motion" on the system, it just changes.
  */
 import { useEffect, useMemo, useState } from "react";
-import { Lightbulb } from "lucide-react";
+import { Lightbulb } from "../../components/icons/NativeIcons";
 import { isMacPlatform } from "../shortcuts";
 
 /** How often the tip changes. */

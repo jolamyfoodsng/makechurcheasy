@@ -1,4 +1,4 @@
-import { ArrowRight, ChevronRight, Monitor } from "lucide-react";
+import { ArrowRight, ChevronRight, Monitor } from "./icons/NativeIcons";
 
 interface StudioModePromoBannerProps {
   onOpenStudio: () => void;

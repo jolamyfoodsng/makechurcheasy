@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, Copy, HelpCircle, Lock } from 'lucide-react';
+import { Link, Copy, HelpCircle, Lock } from 'src/components/icons/NativeIcons';
 import './ConnectionUrls.css';
 
 export function ConnectionUrls() {

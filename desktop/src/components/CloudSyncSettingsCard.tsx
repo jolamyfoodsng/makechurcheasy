@@ -9,7 +9,7 @@ import {
   ArrowDownToLine,
   Crown,
   UploadCloud,
-} from "lucide-react";
+} from "./icons/NativeIcons";
 import {
   fetchCloudSyncStatus,
   uploadSnapshotToCloud,
@@ -133,8 +133,8 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
         style={{
           marginBottom: "20px",
           background: "#18181c",
-          border: "1px solid rgba(255, 255, 255, 0.08)",
-          borderRadius: "12px",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius)",
           position: "relative",
           overflow: "hidden",
         }}
@@ -147,7 +147,7 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
                   width: 32,
                   height: 32,
                   borderRadius: 8,
-                  background: "#4f46e5",
+                  background: "var(--primary)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -162,7 +162,7 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
               <span
                 style={{
                   background: "rgba(99, 102, 241, 0.2)",
-                  color: "#a5b4fc",
+                  color: "var(--accent-blue)",
                   fontSize: "11px",
                   fontWeight: 700,
                   padding: "2px 8px",
@@ -173,7 +173,7 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
                 BASIC & GROWTH
               </span>
             </div>
-            <span className="switch-subtitle" style={{ color: "#94a3b8", lineHeight: 1.5, fontSize: "0.875rem" }}>
+            <span className="switch-subtitle" style={{ color: "var(--text-secondary)", lineHeight: 1.5, fontSize: "0.875rem" }}>
               {t(
                 "cloudSync.lockedDesc",
                 "Log in on any computer and immediately restore your complete worship catalog, broadcast channels, stream keys, and preacher notes without copying files or credentials manually."
@@ -186,7 +186,7 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
             className="action-btn btn-primary"
             onClick={onOpenUpgrade}
             style={{
-              background: "#4f46e5",
+              background: "var(--primary)",
               color: "#ffffff",
               padding: "0.6rem 1.25rem",
               borderRadius: 8,
@@ -225,8 +225,8 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
         className="settings-card fields-rows-stack"
         style={{
           marginBottom: "20px",
-          border: "1px solid rgba(255, 255, 255, 0.08)",
-          borderRadius: "12px",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius)",
           background: "#18181c",
         }}
       >
@@ -239,7 +239,7 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
             gap: "1rem",
             flexWrap: "wrap",
             paddingBottom: "1.25rem",
-            borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+            borderBottom: "1px solid var(--border)",
           }}
         >
           <div style={{ display: "flex", gap: "0.85rem", alignItems: "flex-start" }}>
@@ -253,7 +253,7 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "#818cf8",
+                color: "var(--accent-blue)",
                 flexShrink: 0,
               }}
             >
@@ -282,7 +282,7 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
                   {t("cloudSync.activePill", "Cloud Connected")}
                 </span>
               </div>
-              <p style={{ margin: "4px 0 0 0", fontSize: "0.825rem", color: "#94a3b8" }}>
+              <p style={{ margin: "4px 0 0 0", fontSize: "0.825rem", color: "var(--text-secondary)" }}>
                 {status?.lastSyncedAt
                   ? t("cloudSync.lastSyncedText", "Last synced {{time}} from {{device}}", {
                       time: new Date(status.lastSyncedAt).toLocaleString(),
@@ -301,8 +301,8 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
               onClick={() => setShowRestoreModal(true)}
               style={{
                 background: "rgba(255, 255, 255, 0.05)",
-                border: "1px solid rgba(255, 255, 255, 0.15)",
-                color: "#f8fafc",
+                border: "1px solid var(--border)",
+                color: "var(--text-primary)",
                 fontSize: "0.85rem",
                 fontWeight: 600,
                 padding: "0.5rem 1rem",
@@ -323,7 +323,7 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
               onClick={handleManualBackup}
               disabled={syncing || Boolean(status?.upToDate)}
               style={{
-                background: "#4f46e5",
+                background: "var(--primary)",
                 border: "none",
                 color: "#ffffff",
                 fontSize: "0.85rem",
@@ -406,10 +406,10 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
               <span className="switch-title" style={{ fontSize: "0.9rem" }}>
                 {t("cloudSync.frequencyTitle", "Automatic backup")}
               </span>
-              <span className="switch-subtitle" style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
+              <span className="switch-subtitle" style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
                 {t("cloudSync.frequencyDesc", "Back up your songs, notes, graphics and settings to the cloud on a schedule.")}
                 {nextText && (
-                  <span style={{ display: "block", marginTop: "3px", color: "#818cf8", fontSize: "0.75rem" }}>{nextText}</span>
+                  <span style={{ display: "block", marginTop: "3px", color: "var(--accent-blue)", fontSize: "0.75rem" }}>{nextText}</span>
                 )}
               </span>
             </div>
@@ -438,7 +438,7 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
               <span className="switch-title" style={{ fontSize: "0.9rem" }}>
                 {t("cloudSync.includeImagesTitle", "Include pictures")}
               </span>
-              <span className="switch-subtitle" style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
+              <span className="switch-subtitle" style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
                 {t("cloudSync.includeImagesDesc", "Logos and images from your media library and saved graphics.")}
               </span>
             </div>
@@ -454,7 +454,7 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
               <span className="switch-title" style={{ fontSize: "0.9rem" }}>
                 {t("cloudSync.includeVideosTitle", "Include videos")}
               </span>
-              <span className="switch-subtitle" style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
+              <span className="switch-subtitle" style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
                 {t("cloudSync.includeVideosDesc", "Videos are large and use your cloud storage quickly, so they are off by default.")}
               </span>
             </div>
@@ -466,7 +466,7 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
 
           {/* Storage used */}
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", color: "#94a3b8", marginBottom: 6 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: 6 }}>
               <span>{t("cloudSync.storageTitle", "Cloud storage")}</span>
               <span>{formatSize(usedBytes)} / {formatSize(limitBytes)}</span>
             </div>
@@ -481,7 +481,7 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
               />
             </div>
             {progress && progress.total > 0 && (
-              <span style={{ display: "block", marginTop: 6, fontSize: "0.75rem", color: "#818cf8" }}>
+              <span style={{ display: "block", marginTop: 6, fontSize: "0.75rem", color: "var(--accent-blue)" }}>
                 {t("cloudSync.sendingFiles", "Sending files {{done}} of {{total}}", progress)}
               </span>
             )}
@@ -493,7 +493,7 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
               <span className="switch-title" style={{ fontSize: "0.9rem" }}>
                 {t("cloudSync.deviceNameTitle", "Current Laptop / PC Name")}
               </span>
-              <span className="switch-subtitle" style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
+              <span className="switch-subtitle" style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
                 {t("cloudSync.deviceNameDesc", "Distinguish which computer created each cloud backup.")}
               </span>
             </div>
@@ -530,13 +530,13 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
                       alignItems: "center",
                       gap: "6px",
                       fontSize: "0.85rem",
-                      color: "#e2e8f0",
+                      color: "var(--text-primary)",
                       background: "rgba(255, 255, 255, 0.05)",
                       padding: "4px 10px",
                       borderRadius: 6,
                     }}
                   >
-                    <Laptop size={14} style={{ color: "#818cf8" }} />
+                    <Laptop size={14} style={{ color: "var(--accent-blue)" }} />
                     {deviceName}
                   </span>
                   <button
@@ -548,7 +548,7 @@ export function CloudSyncSettingsCard({ onOpenUpgrade }: CloudSyncSettingsCardPr
                       fontSize: "0.775rem",
                       background: "transparent",
                       border: "none",
-                      color: "#818cf8",
+                      color: "var(--accent-blue)",
                       cursor: "pointer",
                       textDecoration: "underline",
                     }}

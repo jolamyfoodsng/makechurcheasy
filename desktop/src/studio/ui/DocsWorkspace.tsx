@@ -8,7 +8,7 @@
  *  Notes      sermon notes (from Verse AI and the Dock's Notes tab); each blank-line block is a slide.
  */
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { CalendarPlus, ChevronDown, ChevronLeft, ChevronUp, Maximize2, ChevronRight, Eye, FileText, Loader2, Minus, NotebookPen, Pencil, Play, Plus, Search, Upload, X } from "lucide-react";
+import { CalendarPlus, ChevronDown, ChevronLeft, ChevronUp, Maximize2, ChevronRight, Eye, FileText, Loader2, Minus, NotebookPen, Pencil, Play, Plus, Search, Upload, X } from "../../components/icons/NativeIcons";
 import type { MediaItem } from "../../library/libraryTypes";
 import type { DockNote } from "../../dock/dockNotesStorage";
 import type { StudioSlide } from "../studioEngine";

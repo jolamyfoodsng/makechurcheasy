@@ -1,17 +1,17 @@
 /* ShortcutsPanel.css — the Keyboard shortcuts tab in the Studio settings. */
 .st-sc { display: flex; flex-direction: column; gap: 10px; padding: 12px 0 4px; }
 .st-sc__bar { position: sticky; top: 47px; z-index: 2; padding: 4px 0; background: var(--st-panel); display: flex; align-items: center; gap: 8px; }
-.st-sc__search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--st-line-strong); background: #0a1222; color: var(--st-text-3); }
+.st-sc__search { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; height: 34px; padding: 0 10px; border-radius: var(--radius, 4px); border: 1px solid var(--st-line-strong); background: #0a1222; color: var(--st-text-3); }
 .st-sc__search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; color: var(--st-text); font-size: 13px; }
 .st-sc__search:focus-within { border-color: var(--st-blue); }
 
-.st-sc__notice { margin: 2px 0 4px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--st-orange, #f59e0b); background: rgba(245, 158, 11, 0.1); color: var(--st-text); font-size: 12.5px; }
+.st-sc__notice { margin: 2px 0 4px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 9px 11px; border-radius: var(--radius, 4px); border: 1px solid var(--st-orange, #f59e0b); background: rgba(245, 158, 11, 0.1); color: var(--st-text); font-size: 12.5px; }
 .st-sc__notice-buttons { display: inline-flex; gap: 6px; }
 
 .st-sc__group { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; }
 .st-sc__group h3 { margin: 0 0 4px; color: var(--st-text-2); font-size: 11.5px; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; }
 
-.st-sc__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 8px; border-radius: 8px; }
+.st-sc__row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 8px; border-radius: var(--radius, 4px); }
 .st-sc__row:hover { background: rgba(255, 255, 255, 0.03); }
 .st-sc__row.is-recording { background: var(--st-blue-soft, rgba(10, 59, 232, 0.16)); outline: 1px solid var(--st-blue); }
 .st-sc__name { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
@@ -20,12 +20,12 @@
 .st-sc__keys { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px; flex: none; max-width: 58%; }
 
 .st-keys { display: inline-flex; align-items: center; gap: 3px; }
-.st-keys kbd { min-width: 22px; height: 22px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; border: 1px solid var(--st-line-strong); border-bottom-width: 2px; background: var(--st-raised, #1b2640); color: var(--st-text); font: 600 11.5px/1 ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
+.st-keys kbd { min-width: 22px; height: 22px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--radius, 4px); border: 1px solid var(--st-line-strong); border-bottom-width: 2px; background: var(--st-raised, #1b2640); color: var(--st-text); font: 600 11.5px/1 ui-sans-serif, system-ui, sans-serif; white-space: nowrap; }
 
 .st-sc__chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 3px 2px 2px; border-radius: 8px; }
 .st-sc__x { width: 17px; height: 17px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 50%; background: transparent; color: var(--st-text-3); cursor: pointer; opacity: 0.55; }
 .st-sc__chip:hover .st-sc__x, .st-sc__x:focus-visible { opacity: 1; background: rgba(255, 255, 255, 0.1); color: var(--st-text); }
-.st-sc__add { height: 24px; padding: 0 9px; display: inline-flex; align-items: center; gap: 4px; border-radius: 7px; border: 1px dashed var(--st-line-strong); background: transparent; color: var(--st-text-2); font-size: 11.5px; font-weight: 600; cursor: pointer; }
+.st-sc__add { height: 24px; padding: 0 9px; display: inline-flex; align-items: center; gap: 4px; border-radius: var(--radius, 4px); border: 1px dashed var(--st-line-strong); background: transparent; color: var(--st-text-2); font-size: 11.5px; font-weight: 600; cursor: pointer; }
 .st-sc__add:hover { border-color: var(--st-blue); color: var(--st-text); }
 .st-sc__none { color: var(--st-text-3); font-size: 12px; font-style: normal; }
 .st-sc__listen { color: var(--st-text); font-size: 12px; font-weight: 600; }

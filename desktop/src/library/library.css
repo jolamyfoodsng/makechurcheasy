@@ -459,7 +459,7 @@
   margin: 2px 32px 18px;
   padding: 16px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--surface-raised) 68%, var(--bg-dark));
 }
 
@@ -495,7 +495,7 @@
 .lib-toolbar--song-library .lib-search-input {
   min-height: 44px;
   padding: 10px 40px 10px 42px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: var(--surface-dark);
   font-size: 13px;
 }
@@ -511,7 +511,7 @@
 .lib-toolbar--song-library > .lib-toolbar-main > .lib-add-btn {
   min-height: 44px;
   padding: 0 18px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   flex-shrink: 0;
 }
 
@@ -535,7 +535,7 @@
 .lib-toolbar--song-library .lib-toolbar-btn {
   min-height: 36px;
   padding: 0 12px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
 }
 
 .lib-toolbar--song-library .lib-toolbar-btn--online {
@@ -715,7 +715,7 @@
   color: var(--text-muted);
   font-size: 12px;
   border: 1px dashed rgba(var(--primary-rgb), 0.18);
-  border-radius: 18px;
+  border-radius: var(--radius, 4px);
   background: var(--surface);
 }
 
@@ -773,7 +773,7 @@
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: var(--surface-dark);
   text-align: left;
 }
@@ -810,7 +810,7 @@
   height: 30px;
   place-items: center;
   border: 1px solid rgba(var(--primary-rgb), 0.28);
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   background: rgba(var(--primary-rgb), 0.1);
   color: var(--primary);
   cursor: pointer;
@@ -885,8 +885,8 @@
 /* Card */
 .lib-media-card {
   background: #0d1527;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius, 4px);
+  border: 1px solid var(--border);
   overflow: visible;
   position: relative;
   z-index: 0;
@@ -968,13 +968,13 @@
   top: 10px;
   right: 10px;
   background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
   color: #fff;
   font-size: 10px;
   font-weight: 700;
   padding: 3px 8px;
   border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border);
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -1086,7 +1086,7 @@
 .lib-media-name {
   font-size: 13px;
   font-weight: 600;
-  color: #f1f5f9;
+  color: var(--text-primary);
   margin: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -1095,7 +1095,7 @@
 
 .lib-media-meta {
   font-size: 11px;
-  color: #64748b;
+  color: var(--text-muted);
   margin: 3px 0 0;
 }
 
@@ -1112,7 +1112,7 @@
   gap: 6px;
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
   padding: 4px 8px;
@@ -1129,7 +1129,7 @@
 .lib-media-card-menu-btn {
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -1312,7 +1312,7 @@
   padding: 14px 16px;
   background: var(--surface-dark);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   transition: border-color 0.2s ease, background 0.2s ease;
   cursor: pointer;
 }
@@ -1598,7 +1598,7 @@
 .lib-online-status {
   padding: 14px 16px;
   border: 1px dashed var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: var(--surface-dark);
   color: var(--text-muted);
   font-size: 13px;
@@ -1724,7 +1724,7 @@
   inset: 0;
   z-index: 500;
   background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1735,7 +1735,7 @@
 .lib-confirm-modal {
   background: var(--surface-dark);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg, 6px);
   padding: 24px;
   width: 100%;
   max-width: 400px;
@@ -1801,7 +1801,7 @@
   padding: 32px;
   background: var(--surface-dark);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   box-shadow: 0 20px 56px rgba(0, 0, 0, 0.52);
   align-items: center;
   text-align: center;
@@ -1814,7 +1814,7 @@
   width: 34px;
   height: 34px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   color: var(--text-muted);
   background: transparent;
   cursor: pointer;
@@ -1835,7 +1835,7 @@
   height: 52px;
   border-radius: 12px;
   margin: 0 0 20px;
-  color: #93c5fd;
+  color: var(--accent-blue);
   background: rgba(29, 78, 216, 0.14);
   border: 1px solid rgba(147, 197, 253, 0.22);
   display: inline-flex;
@@ -1880,7 +1880,7 @@
 .lib-upgrade-prompt .ssm-btn-upgrade {
   min-height: 44px;
   padding: 0 18px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   font-family: inherit;
   font-size: 14px;
   font-weight: 600;
@@ -2005,7 +2005,7 @@
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: var(--surface-raised);
 }
 
@@ -2018,7 +2018,7 @@
   min-height: 36px;
   padding: 0 14px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--text-muted);
   font-size: 11px;
@@ -2054,7 +2054,7 @@
   min-width: 0;
   padding: 16px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: var(--surface);
 }
 
@@ -2092,7 +2092,7 @@
   min-height: 190px;
   padding: 24px 16px;
   border: 1px dashed rgba(var(--primary-rgb), 0.42);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: rgba(var(--primary-rgb), 0.04);
   text-align: center;
 }
@@ -2140,7 +2140,7 @@
   min-height: 36px;
   padding: 0 12px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   font-size: 10px;
   font-weight: 800;
   cursor: pointer;
@@ -2188,7 +2188,7 @@
   gap: 7px;
   padding: 22px 16px;
   border: 1px dashed var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   color: var(--text-muted);
   text-align: center;
 }
@@ -2222,7 +2222,7 @@
   min-width: 0;
   padding: 10px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius, 4px);
   background: var(--surface-raised);
 }
 
@@ -2275,7 +2275,7 @@
   height: 28px;
   flex: 0 0 28px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -2401,7 +2401,7 @@
   gap: 9px;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: var(--radius, 4px);
   font-size: 11px;
   line-height: 1.4;
 }
@@ -2479,7 +2479,7 @@
   padding: 14px 16px;
   background: var(--surface-overlay);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
 }
 
 .lib-archive-meta {
@@ -2499,7 +2499,7 @@
 .lib-add-modal {
   background: var(--surface-dark);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg, 6px);
   width: 100%;
   max-width: 480px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
@@ -2529,7 +2529,7 @@
   color: var(--text-muted);
   cursor: pointer;
   padding: 4px;
-  border-radius: 6px;
+  border-radius: var(--radius-lg, 6px);
   transition: all 0.15s ease;
   display: flex;
   align-items: center;
@@ -2615,9 +2615,9 @@
   position: relative;
   display: flex;
   align-items: center;
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   min-height: 40px;
   padding: 0 12px;
   transition: border-color 0.15s ease;
@@ -2628,7 +2628,7 @@
 }
 
 .lib-media-search-icon {
-  color: #64748b;
+  color: var(--text-muted);
   flex-shrink: 0;
   margin-right: 8px;
 }
@@ -2637,19 +2637,19 @@
   flex: 1;
   background: transparent;
   border: none;
-  color: #f8fafc;
+  color: var(--text-primary);
   font-size: 13px;
   outline: none;
 }
 
 .lib-media-search-input::placeholder {
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .lib-media-search-clear {
   background: none;
   border: none;
-  color: #64748b;
+  color: var(--text-muted);
   cursor: pointer;
   padding: 2px;
   display: flex;
@@ -2658,15 +2658,15 @@
 }
 
 .lib-media-search-clear:hover {
-  color: #f8fafc;
+  color: var(--text-primary);
 }
 
 .lib-media-filter-segmented {
   display: inline-flex;
   align-items: center;
-  background: #0f172a;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   padding: 4px;
   gap: 2px;
 }
@@ -2674,22 +2674,22 @@
 .lib-media-segmented-btn {
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
   padding: 6px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .lib-media-segmented-btn:hover {
-  color: #f8fafc;
+  color: var(--text-primary);
 }
 
 .lib-media-segmented-btn.is-active {
-  background: #1e293b;
-  color: #f8fafc;
+  background: var(--surface-raised);
+  color: var(--text-primary);
   font-weight: 600;
 }
 
@@ -2700,7 +2700,7 @@
   background: #22c55e;
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   padding: 0 18px;
   min-height: 40px;
   font-size: 13px;
@@ -2723,7 +2723,7 @@
   margin: 0 24px 20px;
   background: #0d1527;
   border: 1px solid rgba(59, 130, 246, 0.22);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   padding: 16px 20px;
   display: flex;
   align-items: center;
@@ -2743,7 +2743,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #60a5fa;
+  color: var(--accent-blue);
   flex-shrink: 0;
 }
 
@@ -2756,20 +2756,20 @@
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: #f8fafc;
+  color: var(--text-primary);
 }
 
 .lib-media-share-callout__subtitle {
   margin: 2px 0 0;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--text-secondary);
 }
 
 .lib-media-share-callout__btn {
   background: #131d33;
-  color: #e2e8f0;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   padding: 8px 18px;
   font-size: 13px;
   font-weight: 500;
@@ -2779,7 +2779,7 @@
 }
 
 .lib-media-share-callout__btn:hover {
-  background: #1e293b;
+  background: var(--surface-raised);
   border-color: rgba(255, 255, 255, 0.3);
   color: #fff;
 }
@@ -2794,7 +2794,7 @@
 
 .lib-media-share-topbar {
   padding: 12px 24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border);
   background: var(--surface-raised, #0f172a);
 }
 
@@ -2803,10 +2803,10 @@
   align-items: center;
   gap: 8px;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   padding: 6px 14px;
-  color: #e2e8f0;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -2837,7 +2837,7 @@
   min-height: 34px;
   padding: 0 12px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--text-muted);
   font-size: 11px;
@@ -2935,7 +2935,7 @@
   margin: 10px 20px 0;
   padding: 9px 12px;
   border: 1px solid rgba(var(--primary-rgb), 0.42);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: rgba(var(--primary-rgb), 0.09);
   color: var(--text-primary);
   text-align: left;
@@ -2999,7 +2999,7 @@
   min-height: 58px;
   padding: 10px 12px;
   border: 1px solid rgba(var(--primary-rgb), 0.44);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: var(--surface-raised);
   color: var(--text-primary);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3);
@@ -3145,7 +3145,7 @@
   align-items: center;
   gap: 10px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
 }
 
 .lib-media-receiver__ready {
@@ -3237,7 +3237,7 @@
   gap: 14px;
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: var(--surface-raised);
 }
 
@@ -3298,7 +3298,7 @@
   min-height: 34px;
   padding: 0 11px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   font-size: 10px;
   font-weight: 700;
   cursor: pointer;
@@ -3337,7 +3337,7 @@
   min-height: 230px;
   padding: 36px 20px;
   border: 1px dashed var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: rgba(var(--primary-rgb), 0.025);
   text-align: center;
 }
@@ -3458,7 +3458,7 @@
   min-width: min(360px, calc(100vw - 48px));
   padding: 18px 24px;
   border: 1px solid rgba(var(--primary-rgb), 0.42);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: rgba(24, 29, 41, 0.94);
   color: var(--text-primary);
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.34);
@@ -3485,7 +3485,7 @@
   width: 100%;
   min-height: 180px;
   border: 2px dashed var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: rgba(255, 255, 255, 0.015);
   cursor: pointer;
   transition: all 0.2s ease;
@@ -3625,7 +3625,7 @@
   justify-content: center;
   gap: 6px;
   padding: 8px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   font-size: 13px;
   font-weight: 500;
   color: var(--text-muted);
@@ -3663,7 +3663,7 @@
   transform: translateX(50px);
   background: var(--surface-dark);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg, 6px);
   width: 100%;
   max-width: 900px;
   max-height: 90vh;
@@ -4027,7 +4027,7 @@ html.mv-theme-light .lib-song-modal {
 :root.light .lib-modal-backdrop,
 html.mv-theme-light .lib-modal-backdrop {
   background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
 }
 
 :root.light .lib-media-shell--dragging::after,
@@ -4322,7 +4322,7 @@ html.mv-theme-light .lib-song-modal {
 :root.light .lib-modal-backdrop,
 html.mv-theme-light .lib-modal-backdrop {
   background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
 }
 
 :root.light .lib-media-shell--dragging::after,
@@ -4371,7 +4371,7 @@ html.mv-theme-light .lib-media-drop-overlay__card {
 
 .lib-song-lang-badge--yoruba {
   border: 1px solid rgba(59, 130, 246, 0.3);
-  color: #93c5fd;
+  color: var(--accent-blue);
   background: rgba(59, 130, 246, 0.08);
 }
 
@@ -4396,7 +4396,7 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   padding: 14px 16px;
   margin: 4px 0;
   border: 1px dashed rgba(var(--primary-rgb, 124, 131, 255), 0.25);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--surface);
   grid-column: 1 / -1;
   min-height: 52px;
@@ -4462,7 +4462,7 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   padding: 10px 14px;
   margin: 4px 0;
   border: 1px solid rgba(var(--primary-rgb, 124, 131, 255), 0.15);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: rgba(var(--primary-rgb, 124, 131, 255), 0.04);
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
@@ -4567,8 +4567,8 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   display: flex;
   align-items: center;
   background: rgba(17, 24, 39, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   padding: 0 14px;
   height: 44px;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -4581,7 +4581,7 @@ html.mv-theme-light .lib-media-drop-overlay__card {
 }
 
 .worship-search-icon {
-  color: #64748b;
+  color: var(--text-muted);
   flex-shrink: 0;
   margin-right: 10px;
 }
@@ -4597,13 +4597,13 @@ html.mv-theme-light .lib-media-drop-overlay__card {
 }
 
 .worship-search-input::placeholder {
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .worship-search-clear {
   background: transparent;
   border: none;
-  color: #64748b;
+  color: var(--text-muted);
   cursor: pointer;
   padding: 4px;
   display: flex;
@@ -4634,7 +4634,7 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   font-size: 0.9rem;
   font-weight: 600;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   cursor: pointer;
   transition: background-color 0.15s ease, transform 0.1s ease;
   white-space: nowrap;
@@ -4660,7 +4660,7 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   padding: 0 12px;
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
@@ -4677,9 +4677,9 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   top: calc(100% + 6px);
   right: 0;
   min-width: 200px;
-  background: #111827;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
   padding: 6px;
   z-index: 100;
@@ -4696,8 +4696,8 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   padding: 8px 12px;
   background: transparent;
   border: none;
-  border-radius: 6px;
-  color: #cbd5e1;
+  border-radius: var(--radius, 4px);
+  color: var(--text-secondary);
   font-size: 0.85rem;
   font-weight: 500;
   cursor: pointer;
@@ -4717,7 +4717,7 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   padding: 1px 6px;
   border-radius: 999px;
   background: rgba(99, 102, 241, 0.2);
-  color: #818cf8;
+  color: var(--accent-blue);
 }
 
 /* EasyWorship Import Banner */
@@ -4727,7 +4727,7 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   justify-content: space-between;
   gap: 16px;
   padding: 14px 20px;
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: rgba(245, 158, 11, 0.04);
   border: 1px solid rgba(245, 158, 11, 0.3);
   box-sizing: border-box;
@@ -4768,7 +4768,7 @@ html.mv-theme-light .lib-media-drop-overlay__card {
 .worship-ew-subtitle {
   margin: 2px 0 0 0;
   font-size: 0.825rem;
-  color: #9ca3af;
+  color: var(--text-secondary);
   line-height: 1.3;
 }
 
@@ -4778,7 +4778,7 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   justify-content: center;
   padding: 8px 18px;
   height: 38px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: #f3f4f6;
@@ -4824,16 +4824,16 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   justify-content: space-between;
   min-height: 168px;
   padding: 16px 18px;
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: rgba(17, 24, 39, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
   box-sizing: border-box;
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
   position: relative;
 }
 
 .worship-song-card:hover {
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: var(--border);
   background: rgba(23, 32, 51, 0.95);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
 }
@@ -4864,7 +4864,7 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: #94a3b8;
+  color: var(--text-secondary);
 }
 
 .worship-song-card-header {
@@ -4887,7 +4887,7 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   display: block;
   font-size: 0.78rem;
   font-weight: 500;
-  color: #94a3b8;
+  color: var(--text-secondary);
   margin-bottom: 2px;
   line-height: 1.2;
 }
@@ -4902,11 +4902,11 @@ html.mv-theme-light .lib-media-drop-overlay__card {
 }
 
 .worship-song-card-line--primary {
-  color: #cbd5e1;
+  color: var(--text-secondary);
 }
 
 .worship-song-card-line--secondary {
-  color: #94a3b8;
+  color: var(--text-secondary);
   padding-left: 2px;
 }
 
@@ -4925,9 +4925,9 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   gap: 6px;
   padding: 6px 14px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--border);
   color: #f3f4f6;
   font-size: 0.825rem;
   font-weight: 500;
@@ -4950,10 +4950,10 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #94a3b8;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
@@ -4968,9 +4968,9 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   bottom: calc(100% + 6px);
   right: 0;
   min-width: 140px;
-  background: #111827;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
   padding: 4px;
   z-index: 50;
@@ -4987,8 +4987,8 @@ html.mv-theme-light .lib-media-drop-overlay__card {
   padding: 6px 10px;
   background: transparent;
   border: none;
-  border-radius: 6px;
-  color: #cbd5e1;
+  border-radius: var(--radius, 4px);
+  color: var(--text-secondary);
   font-size: 0.8rem;
   font-weight: 500;
   cursor: pointer;

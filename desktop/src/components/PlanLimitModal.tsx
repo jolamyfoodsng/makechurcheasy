@@ -7,7 +7,7 @@
  * press the button. Built on the shared ModalDialog so it matches every other dialog.
  * (`UpgradeModal` opens the plans page straight away and shows nothing.)
  */
-import { Lock } from "lucide-react";
+import { Lock } from "./icons/NativeIcons";
 import ModalDialog from "./ModalDialog";
 import { openDashboardSubscriptionPlans } from "../services/subscriptionNavigation";
 

@@ -1,7 +1,7 @@
 /**
  * Icon.tsx — Bundled icon component (replaces Material Icons CDN)
  *
- * Maps material icon names to lucide-react SVG components.
+ * Maps material icon names to Fluent System Icon components.
  * Renders instantly — no font download, no text flash.
  *
  * Usage:
@@ -188,12 +188,12 @@ import {
   Wifi,
   WifiOff,
   X,
-} from "lucide-react";
+} from "./icons/NativeIcons";
 
-import type { LucideIcon } from "lucide-react";
+import type { LucideIcon } from "./icons/NativeIcons";
 
 /**
- * Map of material icon name → lucide-react component.
+ * Map of material icon name → Fluent component.
  * Covers all icons used in the codebase.
  */
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -525,20 +525,7 @@ interface IconProps extends React.SVGAttributes<SVGSVGElement> {
  * Renders a bundled SVG instantly — no font download needed.
  */
 export default function Icon({ name, size = 20, className, style, ...rest }: IconProps) {
-  const LucideComponent = ICON_MAP[name];
-
-  if (!LucideComponent) {
-    // Fallback: render the name as text (same as broken material icon)
-    return (
-      <span
-        className={className}
-        style={{ fontSize: size, display: "inline-flex", alignItems: "center", justifyContent: "center", ...style }}
-        {...(rest as React.HTMLAttributes<HTMLSpanElement>)}
-      >
-        {name}
-      </span>
-    );
-  }
+  const LucideComponent = ICON_MAP[name] ?? HelpCircle;
 
   return (
     <LucideComponent

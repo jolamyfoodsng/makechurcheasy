@@ -8,7 +8,7 @@
  * Program (and the projector) at once.
  */
 import { useState } from "react";
-import { ArrowDown, ArrowUp, Camera, Film, Image as ImageIcon, MessageSquare, Plus, Settings2, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Camera, Film, Image as ImageIcon, MessageSquare, Plus, Settings2, Trash2, X } from "../../components/icons/NativeIcons";
 import type { MediaItem } from "../../library/libraryTypes";
 import { mediaPath } from "../studioSlides";
 import {

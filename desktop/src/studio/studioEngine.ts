@@ -302,7 +302,7 @@ export interface StudioBrand {
 }
 
 /** Bumped when public/studio-output.html changes in a way an already-open projector window must reload for. */
-export const OUTPUT_PAGE_REV = 8;
+export const OUTPUT_PAGE_REV = 10;
 
 export interface StudioProgramState {
   revision: number;
@@ -334,6 +334,19 @@ export interface StudioProgramState {
   mix?: StudioMixLayer[];
   /** What Preview shows, for Preview projectors (always rendered as Cut, no curtain). */
   preview?: StudioPreviewState;
+  /** The alternate output: the same live item in its own look (kept ready for the Studio preview). */
+  alt?: StudioAltState;
+}
+
+/**
+ * The alternate output shows everything Program shows (media, camera, Screen Mix, Black / Logo),
+ * but its words use their own look, e.g. Lower Third for the live stream while the room sees Full Screen.
+ */
+export interface StudioAltState {
+  mode: StudioMode;
+  /** The module visible on the alternate feed (can stay live during a main-look transition). */
+  active?: StudioModule | null;
+  packets: Partial<Record<StudioTextModule, Record<string, unknown>>>;
 }
 
 export interface StudioPreviewState {
@@ -351,6 +364,10 @@ function nextRevision(): number {
 }
 
 let program: StudioProgramState = { revision: 0, active: null, screen: "live", packets: {}, media: null };
+/** The alternate output's look, or null when the current plan cannot use it. */
+let altMode: StudioMode | null = null;
+/** The text slide on Program, so the alternate output can be redrawn when its look changes. */
+let liveText: { slide: StudioSlide; themes: StudioThemes | null } | null = null;
 let postChain: Promise<boolean> = Promise.resolve(true);
 let lastError = "";
 
@@ -440,14 +457,24 @@ export function goLive(
   }
   let media = program.media;
   let mediaControl = program.mediaControl;
+  let alt = program.alt;
   if (slide.module === "media") {
     media = slide.media ?? null;
     if (media) mediaControl = { ...DEFAULT_MEDIA_CONTROL, loop: media.loop, muted: media.muted, fit: media.fit, seekRev: Date.now() };
+    liveText = null;
+    if (altMode) alt = { mode: altMode, packets: alt?.packets ?? blankPackets(altMode), active: "media" };
   } else {
     packets[slide.module] = buildStudioPacket(slide.module, slide, themes, mode, transition).data;
     if (previous === "media") media = null;
+    liveText = { slide, themes };
+    if (altMode) {
+      const altPackets = { ...(alt?.packets ?? {}) };
+      if (previous && previous !== slide.module && previous !== "media") altPackets[previous] = blankPacket(altMode);
+      altPackets[slide.module] = buildStudioPacket(slide.module, slide, themes, altMode, transition).data;
+      alt = { mode: altMode, packets: altPackets, active: slide.module };
+    }
   }
-  return commit({ ...program, active: slide.module, screen: "live", logoUrl: undefined, churchName: undefined, logoBg: undefined, packets, media, mediaControl });
+  return commit({ ...program, active: slide.module, screen: "live", logoUrl: undefined, churchName: undefined, logoBg: undefined, packets, media, mediaControl, alt });
 }
 
 /** Something ready to show: an overlay packet for a text module, or a picture / video. */
@@ -463,13 +490,23 @@ export function goLiveItem(item: StudioItem, mode: StudioMode): Promise<boolean>
     packets[previous] = blankPacket(mode);
   }
   let media = program.media;
+  let alt = program.alt;
+  liveText = null;
   if (item.module === "media") {
     media = item.media;
+    if (altMode) alt = { mode: altMode, packets: alt?.packets ?? blankPackets(altMode), active: "media" };
   } else {
     packets[item.module] = item.data;
     if (previous === "media") media = null;
+    // A ready-made item already has its look, so the alternate output shows it as it is.
+    if (altMode) {
+      const altPackets = { ...(alt?.packets ?? {}) };
+      if (previous && previous !== item.module && previous !== "media") altPackets[previous] = blankPacket(altMode);
+      altPackets[item.module] = item.data;
+      alt = { mode: altMode, packets: altPackets, active: item.module };
+    }
   }
-  return commit({ ...program, active: item.module, screen: "live", logoUrl: undefined, churchName: undefined, logoBg: undefined, packets, media });
+  return commit({ ...program, active: item.module, screen: "live", logoUrl: undefined, churchName: undefined, logoBg: undefined, packets, media, alt });
 }
 
 /** Set the Screen Mix layers (what is `shown` appears on Program and Preview screens). */
@@ -528,11 +565,16 @@ export interface ClearProgramOptions {
   churchName?: string;
   logoBg?: { color?: string; image?: string };
   camera?: StudioCamera;
+  /** Keep the alternate feed visible while the main output changes looks. */
+  preserveAlternate?: boolean;
 }
 
 export function clearProgram(mode: StudioMode, options: ClearProgramOptions = {}): Promise<boolean> {
-  const packets: StudioProgramState["packets"] = {};
-  for (const module of STUDIO_MODULES) packets[module] = blankPacket(mode);
+  const packets = blankPackets(mode);
+  liveText = null;
+  const alt = options.preserveAlternate
+    ? program.alt
+    : altMode ? { mode: altMode, packets: blankPackets(altMode), active: null } : undefined;
   const screen = options.screen ?? "live";
   return commit({
     ...program,
@@ -543,8 +585,33 @@ export function clearProgram(mode: StudioMode, options: ClearProgramOptions = {}
     logoBg: screen === "logo" ? options.logoBg : undefined,
     packets,
     media: null,
+    alt,
     ...(options.camera ? { camera: { ...options.camera } } : {}),
   });
+}
+
+function blankPackets(mode: StudioMode): StudioProgramState["packets"] {
+  const packets: StudioProgramState["packets"] = {};
+  for (const module of STUDIO_MODULES) packets[module] = blankPacket(mode);
+  return packets;
+}
+
+/**
+ * Turn the alternate output on in a look (null = off) and draw what is on Program in that look now.
+ * Called when the alternate preview is enabled, its look changes, or access is removed.
+ */
+export function setAltOutputMode(mode: StudioMode | null): Promise<boolean> {
+  if (mode === altMode && Boolean(program.alt) === Boolean(mode)) return Promise.resolve(true);
+  altMode = mode;
+  if (!mode) return commit({ ...program, alt: undefined });
+  const packets = blankPackets(mode);
+  const active = program.active;
+  if (active && active !== "media") {
+    packets[active] = liveText && liveText.slide.module === active
+      ? buildStudioPacket(active, liveText.slide, liveText.themes, mode, "cut").data
+      : program.packets[active];
+  }
+  return commit({ ...program, alt: { mode, packets, active: active ?? null } });
 }
 
 /** Show a slide on Preview projectors (null = empty Preview). */
@@ -583,6 +650,11 @@ export function previewFrameUrl(base: string, packet: StudioPacket | null, modul
 
 export function programFrameUrl(base: string): string {
   return `${base}/studio-output.html?monitor=1`;
+}
+
+/** The Studio's in-app monitor for the independent Alternate output feed. */
+export function alternateFrameUrl(base: string): string {
+  return `${base}/studio-output.html?monitor=1&feed=alt`;
 }
 
 /** The in-app Preview monitor: the output page showing the Preview feed. */

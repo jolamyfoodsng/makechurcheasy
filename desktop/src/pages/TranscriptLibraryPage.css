@@ -35,13 +35,13 @@
 .tl-title {
   font-size: 1.6rem;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
   line-height: 1.2;
 }
 
 .tl-subtitle {
   font-size: 15px;
-  color: #94a3b8;
+  color: var(--text-secondary);
   margin-top: 4px;
 }
 
@@ -62,28 +62,28 @@
   left: 12px;
   top: 50%;
   transform: translateY(-50%);
-  color: #64748b;
+  color: var(--text-muted);
   pointer-events: none;
 }
 
 .tl-search-input {
   width: 100%;
   padding: 10px 32px 10px 36px;
-  background: #171b28;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   font-size: 14.5px;
   color: #ffffff;
   transition: border-color 0.15s;
 }
 
 .tl-search-input::placeholder {
-  color: #64748b;
+  color: var(--text-muted);
   opacity: 1;
 }
 
 .tl-search-input:focus {
-  border-color: #4f46e5;
+  border-color: var(--primary);
   outline: none;
 }
 
@@ -126,7 +126,7 @@
   justify-content: center;
   gap: 8px;
   padding: 10px 18px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   font-weight: 600;
   font-size: 14.5px;
   transition: all 0.15s ease;
@@ -138,7 +138,7 @@
 
 .tl-btn-primary,
 .tl-scroll-content .tl-btn-primary {
-  background: #4f46e5 !important;
+  background: var(--primary) !important;
   color: #FFFFFF !important;
   border: 1px solid #4f46e5;
   box-shadow: none;
@@ -146,7 +146,7 @@
 
 .tl-btn-primary:hover,
 .tl-scroll-content .tl-btn-primary:hover {
-  background: #4338ca !important;
+  background: var(--primary-hover) !important;
   color: #FFFFFF !important;
   border-color: #6366f1;
   box-shadow: none;
@@ -160,18 +160,18 @@
 
 .tl-btn-primary.tl-btn--locked,
 .tl-scroll-content .tl-btn-primary.tl-btn--locked {
-  background: #171b28 !important;
-  color: #64748b !important;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--surface-raised) !important;
+  color: var(--text-muted) !important;
+  border: 1px solid var(--border);
   box-shadow: none !important;
   cursor: pointer;
 }
 
 .tl-btn-outline,
 .tl-scroll-content .tl-btn-outline {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: #1e293b;
-  color: #f8fafc;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-primary);
 }
 
 .tl-btn-outline:hover,
@@ -189,9 +189,9 @@
 }
 
 .tl-stat-card {
-  background: #131724;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   padding: 20px;
   display: flex;
   align-items: center;
@@ -213,7 +213,7 @@
   width: 44px;
   height: 44px;
   border-radius: 10px;
-  background: #171b28;
+  background: var(--surface-raised);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -231,16 +231,16 @@
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #64748b;
+  color: var(--text-muted);
   font-weight: 600;
   margin-top: 2px;
 }
 
 /* ── Table Section ── */
 .tl-table-section {
-  background: #131724;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   overflow: hidden;
 }
 
@@ -263,7 +263,7 @@
   padding: 6px 12px;
   border: 1px solid var(--border);
   background: var(--surface-raised, rgba(255, 255, 255, 0.04));
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--text-secondary, #cbd5e1);
@@ -324,7 +324,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #a1a1aa;
+  color: var(--text-muted);
   border-bottom: 1px solid var(--border);
   user-select: none;
 }
@@ -382,7 +382,7 @@
   height: 38px;
   border-radius: 6px;
   background: rgba(37, 99, 235, 0.16);
-  color: #60a5fa;
+  color: var(--accent-blue);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -397,7 +397,7 @@
 .tl-name-text {
   font-size: 15px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -405,7 +405,7 @@
 
 .tl-sub-text {
   font-size: 13px;
-  color: #a1a1aa;
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -436,7 +436,7 @@
 
 .tl-matches-label {
   font-size: 12px;
-  color: #a1a1aa;
+  color: var(--text-muted);
 }
 
 .tl-cell-language {
@@ -562,7 +562,7 @@
   margin-top: 4px;
   background: var(--surface-dark);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   padding: 4px;
   min-width: 140px;
   z-index: 50;
@@ -577,7 +577,7 @@
   gap: 8px;
   width: 100%;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   border: none;
   background: transparent;
   font-size: 0.8125rem;
@@ -624,7 +624,7 @@
   min-width: 30px;
   height: 30px;
   padding: 0 6px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   border: 1px solid transparent;
   background: transparent;
   font-size: 0.8125rem;
@@ -666,7 +666,7 @@
 .tl-confirm-dialog {
   background: var(--surface-dark);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg, 6px);
   padding: 24px;
   width: 380px;
   max-width: 90vw;
@@ -696,7 +696,7 @@
 
 .tl-btn-cancel {
   padding: 8px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--text-muted);
@@ -711,7 +711,7 @@
 
 .tl-btn-danger {
   padding: 8px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   font-size: 0.8125rem;
   font-weight: 500;
   background: var(--error);
@@ -744,7 +744,7 @@
   position: relative;
   background: var(--surface-dark);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   padding: 24px 28px;
   display: flex;
   align-items: center;

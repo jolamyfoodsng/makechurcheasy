@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { CloudDownload, CheckCircle, AlertTriangle } from "lucide-react";
+import { CloudDownload, CheckCircle, AlertTriangle } from "./icons/NativeIcons";
 import ModalDialog from "./ModalDialog";
 import { useAuth } from "../contexts/AuthContext";
 import { canUseCloudSync } from "../services/licenseService";

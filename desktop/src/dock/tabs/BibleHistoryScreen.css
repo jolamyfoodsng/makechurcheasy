@@ -78,7 +78,7 @@
 .bible-history-header__close:hover {
   background: var(--dock-surface-hover, #334155);
   border-color: var(--dock-accent, #6366F1);
-  color: #FFFFFF;
+  color: var(--text-primary);
 }
 
 .bible-history-header__back:active,
@@ -87,7 +87,7 @@
 }
 
 .bible-history-header__title {
-  font-family: var(--dock-font-heading, "Inter", "SF Pro Display", sans-serif);
+  font-family: var(--font-body);
   font-size: 13px;
   font-weight: 600;
   color: var(--dock-text, #F8FAFC);
@@ -215,7 +215,7 @@
   inset: 0;
   z-index: 300;
   background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(2px);
+  backdrop-filter: none;
   display: flex;
   align-items: flex-end;
   animation: bible-history-fade-in 120ms ease-out;
@@ -260,7 +260,7 @@
 }
 
 .bible-history-sheet__title {
-  font-family: var(--dock-font-heading, "Inter", "SF Pro Display", sans-serif);
+  font-family: var(--font-body);
   font-size: 12px;
   font-weight: 600;
   color: var(--dock-text, #F8FAFC);
@@ -341,7 +341,7 @@
 }
 
 .bible-history-group__label {
-  font-family: var(--dock-font-heading, "Inter", "SF Pro Display", sans-serif);
+  font-family: var(--font-body);
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -409,7 +409,7 @@
 }
 
 .bible-history-card__ref {
-  font-family: var(--dock-font-heading, "Inter", "SF Pro Display", sans-serif);
+  font-family: var(--font-body);
   font-size: 11.5px;
   font-weight: 600;
   color: var(--dock-text, #F8FAFC);
@@ -449,7 +449,7 @@
 
 .bible-history-card__action-btn--goto {
   background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: var(--border);
   color: var(--dock-text, #F8FAFC);
 }
 
@@ -496,12 +496,12 @@
   align-items: center;
   gap: 4px;
   font-size: 10.5px;
-  color: #cbd5e1;
+  color: var(--text-secondary);
   margin-top: 2px;
 }
 
 .bible-history-card__count {
-  color: #cbd5e1;
+  color: var(--text-secondary);
 }
 
 .bible-history-card__fav {
@@ -572,7 +572,7 @@
 }
 
 .bible-history-empty__title {
-  font-family: var(--dock-font-heading, "Inter", "SF Pro Display", sans-serif);
+  font-family: var(--font-body);
   font-size: 13px;
   font-weight: 600;
   color: var(--dock-text, #F8FAFC);

@@ -45,7 +45,7 @@
   gap: 6px;
   padding: 6px 12px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
   background: var(--surface-dark);
   font-size: 10px;
   font-weight: 600;
@@ -88,7 +88,7 @@
 .ps-sequence-countdown {
   margin: 12px 24px 0;
   padding: 12px 16px 8px;
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: rgba(var(--primary-rgb), 0.08);
   border: 1px solid rgba(var(--primary-rgb), 0.2);
   animation: countdown-slide-in 0.35s ease-out;
@@ -221,8 +221,8 @@
    Step Cards
    ═══════════════════════════════════════════════════════ */
 .ps-step-card {
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius, 4px);
+  border: 1px solid var(--border);
   background: var(--surface-dark);
   overflow: hidden;
   position: relative;
@@ -258,7 +258,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border);
   background: rgba(17, 26, 20, 0.5);
   cursor: pointer;
   user-select: none;
@@ -465,7 +465,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border);
   transition: background 0.12s;
 }
 
@@ -667,7 +667,7 @@
   background: none;
   border: none;
   padding: 6px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   color: var(--text-muted);
   cursor: pointer;
   transition: color 0.15s, background 0.15s;
@@ -713,7 +713,7 @@
 .ps-step-duration-select {
   width: 100%;
   border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-primary);
   font-size: 10px;
@@ -735,7 +735,7 @@
   gap: 12px;
   padding: 10px 14px;
   background: rgba(17, 26, 20, 0.5);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--border);
 }
 
 .ps-step-footer-left {
@@ -749,7 +749,7 @@
   align-items: center;
   gap: 5px;
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   border: 1px solid rgba(var(--primary-rgb), 0.2);
   background: rgba(var(--primary-rgb), 0.1);
   color: var(--primary);
@@ -780,8 +780,8 @@
   align-items: center;
   gap: 6px;
   padding: 6px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius, 4px);
+  border: 1px solid var(--border);
   background: var(--surface-dark);
 }
 
@@ -876,7 +876,7 @@
   text-align: center;
   color: #fff;
   background: rgba(255, 255, 255, 0.08);
-  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border: 1.5px solid var(--border);
   border-radius: 4px;
   outline: none;
   transition: border-color 0.15s, background 0.15s;
@@ -941,7 +941,7 @@
   gap: 8px;
   width: 100%;
   padding: 14px;
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   border: 1px dashed rgba(255, 255, 255, 0.2);
   background: var(--surface-dark);
   color: var(--text-muted);
@@ -979,8 +979,8 @@
    Sidebar Panels
    ═══════════════════════════════════════════════════════ */
 .ps-sidebar-panel {
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius, 4px);
+  border: 1px solid var(--border);
   background: var(--surface-dark);
   padding: 18px;
   overflow: hidden;
@@ -1012,9 +1012,9 @@
 .ps-monitor-stat {
   position: relative;
   overflow: hidden;
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: var(--bg-dark);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
   padding: 14px;
   transition: border-color 0.2s;
 }
@@ -1085,9 +1085,9 @@
 
 /* ── Control Actions panel ── */
 .ps-control-panel {
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: var(--surface-dark);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
   padding: 18px;
   display: flex;
   flex-direction: column;
@@ -1116,7 +1116,7 @@
   justify-content: center;
   gap: 8px;
   padding: 14px 20px;
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   border: none;
   background: var(--primary);
   color: #fff;
@@ -1155,8 +1155,8 @@
   justify-content: center;
   gap: 8px;
   padding: 10px 20px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius, 4px);
+  border: 1px solid var(--border);
   background: var(--surface-dark);
   color: var(--text-primary);
   font-size: 13px;
@@ -1189,8 +1189,8 @@
   justify-content: center;
   gap: 8px;
   padding: 10px 20px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius, 4px);
+  border: 1px solid var(--border);
   background: var(--surface-dark);
   color: var(--text-primary);
   font-size: 13px;
@@ -1225,8 +1225,8 @@
 
 /* ── OBS Status panel ── */
 .ps-obs-status {
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius, 4px);
+  border: 1px solid var(--border);
   background: var(--surface-dark);
   padding: 18px;
   overflow: hidden;
@@ -1314,7 +1314,7 @@
   flex-direction: column;
   gap: 10px;
   padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--border);
   margin-top: 4px;
 }
 
@@ -1334,8 +1334,8 @@
 .ps-setting-item select {
   width: 100%;
   max-width: 180px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   background: var(--bg-dark);
   color: var(--text-primary);
   padding: 6px 8px;
@@ -1423,7 +1423,7 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.62);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1434,7 +1434,7 @@
 .pre-service-modal {
   width: min(980px, 100%);
   max-height: min(92dvh, 820px);
-  border-radius: 14px;
+  border-radius: var(--radius-lg, 6px);
   border: 1px solid var(--border);
   background: var(--surface-raised);
   overflow: hidden;
@@ -1484,7 +1484,7 @@
   width: 34px;
   height: 34px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-lg, 6px);
   background: var(--surface-hover);
   color: var(--text-secondary);
   cursor: pointer;
@@ -1528,7 +1528,7 @@
   gap: 10px;
   min-height: 170px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: var(--surface-dark);
   color: var(--text-secondary);
   cursor: pointer;
@@ -1638,7 +1638,7 @@
   border: 1px solid var(--border);
   background: var(--surface-hover);
   color: var(--text-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-lg, 6px);
   padding: 8px 14px;
   font-size: 10px;
   font-weight: 600;
@@ -1819,7 +1819,7 @@
 
 .cfg-media-card {
   position: relative;
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   border: 2px solid var(--border);
   overflow: hidden;
   cursor: pointer;
@@ -1903,7 +1903,7 @@
 .cfg-media-card__name {
   font-size: 11px;
   font-weight: 700;
-  color: #fff;
+  color: var(--text-primary);
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1958,7 +1958,7 @@
 .cfg-duration-inline-field {
   width: 48px;
   padding: 4px 6px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   border: 1px solid var(--border);
   background: var(--bg-dark);
   color: var(--text-primary);
@@ -2426,7 +2426,7 @@
 }
 
 .cfg-template-card {
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   border: 1px solid var(--border);
   overflow: hidden;
   background: var(--surface-dark);
@@ -2553,7 +2553,7 @@
   padding: 20px 16px;
   margin: 12px 18px 0;
   border: 2px dashed var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: var(--surface-dark);
   color: var(--text-muted);
   transition: border-color 0.2s, background 0.2s, color 0.2s;
@@ -2587,7 +2587,7 @@
   align-items: center;
   gap: 6px;
   padding: 7px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   border: 1px solid var(--primary);
   background: var(--primary);
   color: #fff;
@@ -2613,7 +2613,7 @@
    ═══════════════════════════════════════════════════════ */
 .ps-confirm-modal {
   width: min(420px, 92vw);
-  border-radius: 14px;
+  border-radius: var(--radius-lg, 6px);
   border: 1px solid var(--border);
   background: var(--surface-raised);
   padding: 28px 24px 22px;
@@ -2887,8 +2887,8 @@
   align-items: center;
   gap: 14px;
   padding: 14px 18px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius, 4px);
+  border: 1px solid var(--border);
   margin-bottom: 8px;
 }
 
@@ -2944,7 +2944,7 @@
 }
 
 .ps-status-banner--finished .ps-status-banner-icon svg {
-  color: #4f46e5;
+  color: var(--accent-blue);
   width: 28px;
   height: 28px;
 }

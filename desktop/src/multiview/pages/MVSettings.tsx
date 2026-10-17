@@ -69,6 +69,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import {
   Bell,
+  Lock,
   BookOpen,
   Calendar,
   Check,
@@ -96,7 +97,7 @@ import {
   Sun,
   Trash2,
   Zap,
-} from "lucide-react";
+} from "../../components/icons/NativeIcons";
 import { refreshAccountBootstrapFromServer } from "../../services/authService";
 import { readNativeDockSetting, writeNativeDockSetting } from "../../services/localDockSettings";
 import { safeTauriInvoke, safeTauriListen } from "../../services/tauriSafe";
@@ -1552,7 +1553,7 @@ export function MVSettings() {
                       alignItems: "center",
                       justifyContent: "space-between",
                       padding: "12px 16px",
-                      borderRadius: "8px",
+                      borderRadius: "var(--radius)",
                       background: obsStatus === "connected" ? "rgba(34, 197, 94, 0.08)" : obsStatus === "connecting" ? "rgba(245, 158, 11, 0.08)" : "rgba(239, 68, 68, 0.08)",
                       border: `1px solid ${obsStatus === "connected" ? "rgba(34, 197, 94, 0.25)" : obsStatus === "connecting" ? "rgba(245, 158, 11, 0.25)" : "rgba(239, 68, 68, 0.25)"}`,
                     }}>
@@ -1641,7 +1642,7 @@ export function MVSettings() {
                       <p style={{
                         fontSize: 12,
                         padding: "8px 12px",
-                        borderRadius: "6px",
+                        borderRadius: "var(--radius)",
                         background: obsStatus === "connected" ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
                         color: obsStatus === "connected" ? "var(--success-color)" : "var(--danger-color)",
                       }}>
@@ -2206,7 +2207,7 @@ export function MVSettings() {
                 ) : (
                   <div className="settings-section">
                     <div className="settings-card" style={{ textAlign: "center", padding: "48px 32px" }}>
-                      <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+                      <div style={{ marginBottom: 16 }}><Lock size={48} /></div>
                       <h3 style={{ fontSize: 20, fontWeight: 600, marginBottom: 8, color: "var(--text-primary)" }}>
                         {t("mvSettings.mobile.upgradeTitle")}
                       </h3>
@@ -2884,7 +2885,7 @@ export function MVSettings() {
                       border: "1px solid rgba(29, 78, 216, 0.2)",
                     }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <Calendar size={18} style={{ color: "#1D4ED8" }} />
+                        <Calendar size={18} style={{ color: "var(--accent-blue)" }} />
                         <div>
                           <div style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--text-primary)" }}>
                             {t("mvSettings.credits.trial.growthTrialDaysRemaining", { trialDaysLeft })}
@@ -2911,7 +2912,7 @@ export function MVSettings() {
                             textTransform: "uppercase",
                             fontSize: "12px",
                             background: displayTrialActive ? "rgba(29,78,216,0.15)" : "rgba(16,185,129,0.15)",
-                            color: displayTrialActive ? "#1D4ED8" : "var(--success-color)",
+                            color: displayTrialActive ? "var(--accent-blue)" : "var(--success-color)",
                           }}>{displayTrialActive ? t("mvSettings.credits.activeTrial") : t("mvSettings.credits.active")}</span>
                         </div>
                       </div>

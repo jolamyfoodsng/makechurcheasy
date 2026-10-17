@@ -72,7 +72,7 @@ import {
   ChevronRight,
   ArrowUp,
   ArrowDown,
-} from "lucide-react";
+} from "../components/icons/NativeIcons";
 import { OBS_LOGO_BASE64 } from "../assets/obsLogoBase64";
 import "./BroadcastPage.css";
 
@@ -1597,7 +1597,7 @@ export default function BroadcastPage() {
             </div>
 
             <div className="broadcast-modal-card__body">
-              <p style={{ margin: "0 0 14px", fontSize: "13.5px", color: "#a1a1aa", lineHeight: 1.5 }}>
+              <p style={{ margin: "0 0 14px", fontSize: "13.5px", color: "var(--text-muted)", lineHeight: 1.5 }}>
                 Make Church Eazy connects to OBS Studio using the built-in OBS WebSocket Server to synchronize stream keys automatically.
               </p>
 
@@ -1638,8 +1638,8 @@ export default function BroadcastPage() {
                 style={{
                   padding: "10px 14px",
                   background: "rgba(255, 255, 255, 0.04)",
-                  borderRadius: "8px",
-                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  borderRadius: "var(--radius)",
+                  border: "1px solid var(--border)",
                   fontSize: "13px",
                   color: "#d4d4d8",
                 }}

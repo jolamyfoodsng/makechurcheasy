@@ -159,7 +159,7 @@ export default function DockBibleMacrosModal({
               style={{
                 padding: "12px",
                 background: "var(--dock-surface-panel, rgba(30, 41, 59, 0.5))",
-                borderRadius: "8px",
+                borderRadius: "var(--radius)",
                 border: "1px solid var(--dock-border-subtle, rgba(255, 255, 255, 0.1))",
                 marginBottom: "16px",
               }}
@@ -202,7 +202,7 @@ export default function DockBibleMacrosModal({
                     padding: "6px 10px",
                     background: "rgba(245, 158, 11, 0.15)",
                     border: "1px solid rgba(245, 158, 11, 0.3)",
-                    borderRadius: "6px",
+                    borderRadius: "var(--radius)",
                     fontSize: "11px",
                     color: "#f59e0b",
                     marginBottom: "8px",

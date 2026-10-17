@@ -24,7 +24,7 @@ import {
   Trash2,
   Wand2,
   X,
-} from "lucide-react";
+} from "../components/icons/NativeIcons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import "./TranscriptLibraryPage.css";

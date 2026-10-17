@@ -1,4 +1,4 @@
-import { ChevronRight, HelpCircle, Music2, Radio } from "lucide-react";
+import { ChevronRight, HelpCircle, Music2, Radio } from "./icons/NativeIcons";
 
 interface MultiPlatformStreamingBannerProps {
   onOpenBroadcast: () => void;

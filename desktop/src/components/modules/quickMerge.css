@@ -109,7 +109,7 @@
 .qm-card {
   background: var(--surface-dark);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   padding: 20px;
 }
 
@@ -254,7 +254,7 @@
 .qm-layer-select {
   width: 100%;
   padding: 10px 36px 10px 36px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   border: 1px solid var(--border);
   background: var(--bg-dark);
   color: var(--text-primary);
@@ -445,7 +445,7 @@
   z-index: 100;
   max-height: 280px;
   overflow-y: auto;
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   border: 1px solid var(--border);
   background: var(--surface-raised, var(--surface-dark));
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
@@ -471,7 +471,7 @@
   gap: 10px;
   width: 100%;
   padding: 8px 10px;
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   border: none;
   background: transparent;
   color: var(--text-primary);
@@ -718,7 +718,7 @@
   align-items: stretch;
   gap: 0;
   padding: 0;
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   border: 2px solid var(--border);
   background: var(--surface-hover);
   color: var(--text-secondary);
@@ -822,7 +822,7 @@
   font-family: monospace;
   color: #fff;
   background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
   letter-spacing: 0.02em;
 }
 
@@ -1176,7 +1176,7 @@
 .qm-monitor-frame {
   width: 100%;
   aspect-ratio: 16 / 9;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   overflow: hidden;
   position: relative;
   background: #000;
@@ -1228,7 +1228,7 @@
   font-weight: 700;
   color: #fff;
   background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
 }
 
 .qm-monitor-badge--live {

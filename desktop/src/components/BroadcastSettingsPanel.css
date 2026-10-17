@@ -13,7 +13,7 @@
   gap: 20px;
   width: 100%;
   color: var(--broadcast-text);
-  font-family: var(--font-sans, Inter, system-ui, sans-serif);
+  font-family: var(--font-body);
   font-size: var(--base-size, 14px);
   line-height: 1.5;
 }
@@ -53,7 +53,7 @@
 .broadcast-settings-card {
   min-width: 0;
   border: 1px solid var(--broadcast-border);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: var(--broadcast-surface);
 }
 
@@ -138,7 +138,7 @@
 .broadcast-settings-panel .action-btn {
   min-height: 36px;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   font-size: 13px;
   line-height: 1.25;
 }
@@ -198,7 +198,7 @@
   min-height: 36px;
   padding: 7px 12px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
@@ -258,7 +258,7 @@
   min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--broadcast-border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: var(--broadcast-raised);
 }
 
@@ -310,7 +310,7 @@
   gap: 10px;
   padding: 12px 14px;
   border: 1px solid color-mix(in srgb, #f59e0b 32%, var(--broadcast-border));
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, #f59e0b 7%, var(--broadcast-surface));
   color: var(--broadcast-muted);
   font-size: 13px;
@@ -374,7 +374,7 @@
   gap: 10px;
   padding: 9px 10px;
   border: 1px solid var(--broadcast-border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: var(--broadcast-raised);
   cursor: pointer;
   transition: border-color 140ms ease, background-color 140ms ease;
@@ -456,7 +456,7 @@
   min-width: 0;
   padding: 13px;
   border: 1px solid var(--broadcast-border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: var(--broadcast-raised);
 }
 
@@ -540,7 +540,7 @@
   min-height: 30px;
   padding: 4px 9px;
   border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 42%, var(--broadcast-border));
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--warning, #f59e0b) 10%, var(--broadcast-surface));
   color: var(--warning, #b45309);
   font-size: 12px;
@@ -554,7 +554,7 @@
   padding: 24px;
   place-items: center;
   border: 1px dashed var(--broadcast-border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: var(--broadcast-raised);
   color: var(--broadcast-muted);
   font-size: 13px;

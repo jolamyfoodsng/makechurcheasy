@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle, Download, ExternalLink, Loader2, Puzzle, RefreshCw, X } from "lucide-react";
+import { CheckCircle, Download, ExternalLink, Loader2, Puzzle, RefreshCw, X } from "./icons/NativeIcons";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   getObsMovePluginStatus,

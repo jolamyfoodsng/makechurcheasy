@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { X, Smartphone, Wifi, WifiOff, RefreshCw } from "lucide-react";
+import { X, Smartphone, Wifi, WifiOff, RefreshCw } from "../../components/icons/NativeIcons";
 import {
   buildMobilePairingPayload,
   resolveMobilePairingPorts,

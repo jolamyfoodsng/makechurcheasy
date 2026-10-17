@@ -8,7 +8,7 @@
  *          Blue = selected / in Preview. Red LIVE = on the screen (they are independent).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bookmark, CalendarPlus, ChevronDown, ChevronLeft, ChevronRight, Columns2, Copy, Eye, ListPlus, MoreHorizontal, Monitor, Play, Search, X } from "lucide-react";
+import { Bookmark, CalendarPlus, ChevronDown, ChevronLeft, ChevronRight, Columns2, Copy, Eye, ListPlus, MoreHorizontal, Monitor, Play, Search, X } from "../../components/icons/NativeIcons";
 import { BIBLE_BOOKS } from "../../bible/types";
 import { parseBibleSearch } from "../../dock/bibleSearchParser";
 import { formatBiblePassageReference, parseBiblePassageReference } from "../../dock/bibleMultiPassage";

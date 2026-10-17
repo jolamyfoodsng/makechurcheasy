@@ -6,21 +6,21 @@
    Colours: blue = selected / active, orange = Verse AI + next, red = live, green = connected.
    ───────────────────────────────────────────────────────────────────────────── */
 .st {
-  --st-bg: #070d1a;
-  --st-panel: #0e1626;
-  --st-raised: #141e33;
-  --st-hover: #1a2640;
-  --st-line: #1f2b45;
-  --st-line-strong: #2b3a5c;
-  --st-text: #e8eef9;
-  --st-text-2: #a3b1cc;
-  --st-text-3: #7584a3;
-  /* The accent follows Settings: appAppearance.ts writes --primary on the page root, so the Studio reads it instead of fixed blues. */
-  --st-blue: var(--primary, #2563eb);
-  --st-blue-2: var(--primary-hover, #3b82f6);
-  --st-blue-soft: var(--primary-soft, rgba(37, 99, 235, 0.18));
-  --st-send: color-mix(in srgb, var(--st-blue) 52%, #c026d3);
-  --st-send-2: color-mix(in srgb, var(--st-blue) 70%, #f43f5e);
+  --st-bg: #18181b;
+  --st-panel: #202023;
+  --st-raised: #2c2c30;
+  --st-hover: #38383d;
+  --st-line: #36363b;
+  --st-line-strong: #505057;
+  --st-text: #f4f4f5;
+  --st-text-2: #d1d1d6;
+  --st-text-3: #a1a1aa;
+  /* Studio uses a restrained system-style blue for actions and selection. */
+  --st-blue: #0067c0;
+  --st-blue-2: #0078d4;
+  --st-blue-soft: rgba(0, 120, 212, 0.18);
+  --st-send: var(--st-blue);
+  --st-send-2: var(--st-blue-2);
   --st-orange: #f59e0b;
   --st-orange-2: #f97316;
   --st-orange-soft: rgba(245, 158, 11, 0.16);
@@ -43,7 +43,7 @@
   --text-primary: var(--st-text);
   --text-secondary: var(--st-text-2);
   --text-muted: var(--st-text-3);
-  --input-bg: #0a1222;
+  --input-bg: #252528;
   --input-border: var(--st-line-strong);
   --input-text: var(--st-text);
 
@@ -54,6 +54,7 @@
   overflow: hidden;
   background: var(--st-bg);
   color: var(--st-text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 13px;
   color-scheme: dark;
 }
@@ -998,7 +999,6 @@ html.st-resizing iframe { pointer-events: none !important; }
 .st-headbtn--output.is-out { border-color: #22c55e; color: #bbf7d0; background: rgba(34, 197, 94, 0.14); }
 .st-outpop { width: 340px; max-width: calc(100vw - 16px); z-index: 90; }
 .st-outpop__title { display: flex; align-items: center; gap: 8px; padding: 6px 10px 0; font-weight: 700; font-size: 13px; }
-.st-outpop__hint { margin: 2px 10px 6px; font-size: 11.5px; line-height: 1.4; opacity: 0.7; }
 
 /* Narrow window: Schedule / History floats over the right edge instead of squeezing the middle. */
 .st-col--dock.is-overlay {
@@ -1017,7 +1017,6 @@ html.st-resizing iframe { pointer-events: none !important; }
 .st-outsplit__more { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left-width: 0; padding: 0 7px; }
 .st-outsplit__main:disabled { opacity: 0.7; cursor: progress; }
 .st-outpop__stop { color: #fecaca; }
-.st-outpop__cam.is-bad { color: #fca5a5; opacity: 1; font-weight: 600; }
 
 /* Live card: Logo and Clear at the top, clearly labelled */
 .st-live__actions { display: flex; flex-direction: column; gap: 6px; flex: none; }
@@ -1176,6 +1175,24 @@ html.st-resizing iframe { pointer-events: none !important; }
 /* ── Studio screen preview and controls ── */
 .st-lo { gap: 10px; }
 .st-lo__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.st-lo__feedtabs { display: inline-flex; align-items: center; gap: 2px; min-width: 0; padding: 2px; border: 1px solid var(--st-line); border-radius: 6px; background: var(--st-panel); }
+.st-lo__feedtabs button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-width: 0; height: 28px; padding: 0 7px; border: 0; border-radius: 4px; background: transparent; color: var(--st-text-2); font: inherit; font-size: 11.5px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.st-lo__feedtabs button:hover { background: var(--st-raised); color: var(--st-text); }
+.st-lo__feedtabs button.is-on { background: var(--st-raised); color: var(--st-text); box-shadow: inset 0 0 0 1px var(--st-line-strong); }
+.st-lo__feedtabs button.is-locked { color: var(--st-text-3); }
+.st-lo__feedtabs button:focus-visible { outline: 2px solid var(--st-blue); outline-offset: 1px; }
+.st-altlocked { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; width: 100%; aspect-ratio: 16 / 9; box-sizing: border-box; padding: 20px; border: 1px solid var(--st-line-strong); border-radius: 8px; background: var(--st-panel); color: var(--st-text-2); text-align: center; }
+.st-altlocked > svg { color: var(--st-blue); }
+.st-altlocked strong { color: var(--st-text); font-size: 13px; }
+.st-altlocked p { max-width: 290px; margin: 0; font-size: 11.5px; line-height: 1.45; }
+.st-altlocked button { min-height: 30px; padding: 0 11px; border: 1px solid var(--st-blue); border-radius: 5px; background: var(--st-blue); color: #fff; font: inherit; font-size: 11.5px; font-weight: 650; cursor: pointer; }
+.st-altlocked button:hover { filter: brightness(1.08); }
+.st-altlook { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 6px 0 0; color: var(--st-text-3); font-size: 11px; }
+.st-altlook > span { margin-right: auto; }
+.st-altlook button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 28px; padding: 0 8px; border: 1px solid var(--st-line); border-radius: 5px; background: var(--st-panel); color: var(--st-text-2); font: inherit; font-size: 11px; cursor: pointer; }
+.st-altlook button:hover { background: var(--st-raised); color: var(--st-text); }
+.st-altlook button.is-on { border-color: var(--st-blue); background: var(--st-blue-soft); color: var(--st-text); }
+.st-altlook button:focus-visible { outline: 2px solid var(--st-blue-2); outline-offset: 1px; }
 .st-lo .st-preview__stage { max-width: min(100%, 340px); width: 100%; margin: 0 auto; }
 .st-lo .st-monitor { border-radius: 12px; overflow: hidden; }
 .st-lo__actions { display: flex; align-items: stretch; gap: 8px; min-width: 0; }
@@ -1407,6 +1424,7 @@ html.st-resizing iframe { pointer-events: none !important; }
 .st-lo__clear:not(:disabled):hover { background: var(--st-raised); }
 .st-lo__logo { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--st-line); background: transparent; color: var(--st-text-2); font-size: 12px; cursor: pointer; }
 .st-lo__logo.is-on { background: var(--st-blue-soft); color: var(--st-text); border-color: var(--st-blue); }
+.st-outpop__pro { margin-left: auto; padding: 1px 5px; border: 1px solid var(--st-line); border-radius: 3px; color: var(--st-text-3); font-size: 9px; font-weight: 700; letter-spacing: .04em; }
 .st-lib__row.is-next { box-shadow: inset 2px 0 0 var(--st-blue); background: var(--st-blue-soft); }
 .st-lib__top .st-searchbox--big { height: 42px; font-size: 14.5px; }
 .st-lib__top .st-searchbox--big input { font-size: 14.5px; }
@@ -1452,12 +1470,12 @@ html.st-resizing iframe { pointer-events: none !important; }
 .st-switch.is-locked { cursor: not-allowed; }
 .st-switch.is-locked .st-switch__track { opacity: 0.55; }
 
-/* Send to Screen: built from the Settings accent (plus a warm shift) so it changes with the colours the user picks. */
-.st-lo__send--color { box-shadow: 0 4px 16px color-mix(in srgb, var(--st-send) 45%, transparent); background: linear-gradient(135deg, var(--st-send), var(--st-send-2)); }
+/* Send uses the same solid accent as the other Studio actions. */
+.st-lo__send--color { box-shadow: none; background: var(--st-send); }
 .st-lo__send--color .st-lo__sendmain, .st-lo__send--color .st-lo__sendmenu { background: transparent; color: #fff; }
 .st-lo__send--color .st-lo__sendmenu { border-left-color: rgba(255, 255, 255, 0.3); }
 .st-lo__send--color button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.16); filter: none; }
-.st-lo__send--color:has(.st-lo__sendmain:disabled) { background: color-mix(in srgb, var(--st-send) 30%, #141e33); box-shadow: none; }
+.st-lo__send--color:has(.st-lo__sendmain:disabled) { background: var(--st-raised); box-shadow: none; }
 .st-lo__send--color .st-lo__sendmain:disabled, .st-lo__send--color .st-lo__sendmain:disabled ~ .st-lo__sendmenu { background: transparent; opacity: 0.7; }
 
 /* Output menu: a Screen drop-down, then Go and Stop buttons. */
@@ -2019,6 +2037,15 @@ html.st-resizing iframe { pointer-events: none !important; }
 @container stpv (min-width: 600px) {
   .st-lo__stack { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
 }
+@container stpv (max-width: 400px) {
+  .st-lo__head { flex-wrap: wrap; }
+  .st-lo__feedtabs { flex: 1; justify-content: space-between; }
+  .st-lo__feedtabs button { flex: 1; padding: 0 4px; font-size: 10.5px; }
+}
+@container stpv (max-width: 320px) {
+  .st-lo__feedtabs button span { display: none; }
+  .st-lo__feedtabs button { flex: 0 0 34px; }
+}
 .st-lo__t2icons { display: inline-flex; align-items: center; gap: 2px; flex: none; }
 
 /* Narrow: Logo / Edit / Send / Clear keep only their icon */
@@ -2145,3 +2172,58 @@ html.st-resizing iframe { pointer-events: none !important; }
 }
 .st-mitem__missing:hover,
 .st-mitem__missing:focus-visible { background: #fbbf24; }
+
+/* Wide Preview column (big screens): the panel fills the column, the monitor grows with the room,
+   and the themes become a grid of bigger cards that fills the space below (scrolls up and down). */
+@container stpv (min-width: 600px) {
+  .st-work:not(.is-stacked) .st-lo.st-preview { flex: 1 0 auto; display: flex; flex-direction: column; box-sizing: border-box; }
+  .st-work:not(.is-stacked) .st-lo.st-preview > .st-preview__stage { max-width: min(100%, 560px, calc(36cqh * 16 / 9)); }
+  .st-work:not(.is-stacked) .st-lo .st-tp { flex: 1 1 0; min-height: 220px; }
+  .st-work:not(.is-stacked) .st-lo .st-tp__strip { flex: 1 1 0; min-height: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); align-content: start; gap: 10px; overflow-x: hidden; overflow-y: auto; scroll-snap-type: none; padding: 2px 4px 4px 2px; }
+  .st-work:not(.is-stacked) .st-lo .st-tp__card { width: 100%; box-sizing: border-box; }
+  .st-work:not(.is-stacked) .st-lo .st-tp__cardname { font-size: 12px; }
+}
+@container stpv (min-width: 900px) {
+  .st-work:not(.is-stacked) .st-lo .st-tp__strip { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+}
+
+/* Output menu: the alternate output's Words + Screen side by side */
+.st-outpop__row { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 8px; margin: 0 10px; }
+.st-outpop__row .st-outpop__field { margin: 4px 0 8px; min-width: 0; }
+.st-outpop__row .st-outpop__field select { width: 100%; min-width: 0; }
+
+/* Output guidance stays tucked behind a click-opened info control. */
+.st-outpop__heading { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; margin: 0 10px; }
+.st-outpop__heading .st-outpop__title { flex: 1; min-width: 0; padding: 0; font-size: 13px; font-weight: 600; line-height: 1.4; }
+.st-outpop button.st-outpop__info { flex: 0 0 28px; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; margin: 0; padding: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--st-text-3); cursor: pointer; }
+.st-outpop button.st-outpop__info:hover, .st-outpop button.st-outpop__info[aria-expanded="true"] { border-color: var(--st-line-strong); background: var(--st-raised); color: var(--st-text); }
+.st-outpop__info:focus-visible { outline: 2px solid var(--st-blue-2); outline-offset: 1px; }
+.st-outpop__help { position: absolute; top: calc(100% + 6px); right: 0; z-index: 95; width: min(286px, calc(100vw - 40px)); box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--st-line-strong); border-radius: 8px; background: var(--st-raised); color: var(--st-text-2); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45); font-size: 11.5px; line-height: 1.45; }
+.st-outpop__help p { margin: 0; }
+.st-outpop__help p + p { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--st-line); }
+.st-outpop__help .is-warning { color: #fca5a5; }
+
+/* Output controls override generic full-width context-menu buttons. */
+.st .st-outpop { box-sizing: border-box; padding: 8px; min-width: 0; background: var(--st-panel); border-color: var(--st-line-strong); border-radius: 8px; max-height: calc(100dvh - 80px); overflow-y: auto; }
+.st-outpop .st-outpop__heading { margin: 0 4px 8px; gap: 8px; }
+.st-outpop svg { flex-shrink: 0; }
+.st-outpop .st-outpop__field { margin: 0 4px 12px; color: var(--st-text-2); gap: 6px; }
+.st-outpop .st-outpop__field select { height: 36px; border-radius: 4px; background: var(--input-bg); }
+.st-outpop .st-outpop__row { margin: 0 4px; }
+.st-outpop .st-outpop__row .st-outpop__field { margin: 0 0 12px; }
+.st-outpop .st-outpop__btns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin: 0 4px 12px; }
+.st-outpop button.st-outpop__go, .st-outpop button.st-outpop__stopbtn { width: 100%; height: 36px; padding: 0 8px; justify-content: center; border: 1px solid var(--st-line-strong); border-radius: 4px; font-size: 12px; font-weight: 600; text-align: center; }
+.st-outpop button.st-outpop__go { background: var(--st-blue); border-color: var(--st-blue); color: #fff; }
+.st-outpop button.st-outpop__go:hover:not(:disabled) { background: var(--st-blue-2); filter: none; }
+.st-outpop button.st-outpop__stopbtn { background: var(--st-raised); color: var(--st-text); }
+.st-outpop button.st-outpop__stopbtn:hover:not(:disabled) { background: var(--st-hover); }
+.st-outpop button:disabled { opacity: 0.45; cursor: default; }
+.st-outpop button:disabled:hover { background: var(--st-raised); }
+.st-outpop button span { flex: initial; }
+.st-outpop .studio-menu__divider { margin: 4px 0 12px; }
+.st-outpop button.st-outpop__share { border-radius: 4px; padding: 8px; color: var(--st-text-2); }
+.st-outpop button.st-outpop__share:hover { background: var(--st-hover); color: var(--st-text); }
+.st .st-head, .st .st-tabs, .st .st-vai__tabs, .st .st-subtabs { background: var(--st-panel); }
+.st .st-nav__btn.is-on { box-shadow: none; }
+.st .st-brand__logo { background: var(--st-blue); }
+.st .st-outpop__help { max-width: 100%; }

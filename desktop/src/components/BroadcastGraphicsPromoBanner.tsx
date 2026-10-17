@@ -1,4 +1,4 @@
-import { ChevronRight, Layers, PlayCircle } from "lucide-react";
+import { ChevronRight, Layers, PlayCircle } from "./icons/NativeIcons";
 
 interface BroadcastGraphicsPromoBannerProps {
   onOpenGraphics: () => void;

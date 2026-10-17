@@ -1,3 +1,5 @@
+@import "../native-theme.css";
+
 /**
  * dock.css — MakeChurchEazy Dock styles
  *
@@ -26,16 +28,16 @@
 .dock-root {
   --dock-font-african-latin: "Questrial", "Charis SIL", "Noto Sans";
   --dock-font-unicode-fallback: "Charis SIL", "Noto Sans", "Noto Sans Symbols 2", "Noto Sans Symbols", "Segoe UI Symbol", "Apple Symbols", "Arial Unicode MS", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
-  --dock-font-body: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, var(--dock-font-unicode-fallback);
-  --dock-font-heading: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", system-ui, var(--dock-font-unicode-fallback);
+  --dock-font-body: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, var(--dock-font-unicode-fallback);
+  --dock-font-heading: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", system-ui, var(--dock-font-unicode-fallback);
   --dock-font-mono: "SF Mono", "Cascadia Code", "Fira Code", monospace;
   --dock-font-scale: 1;
-  --dock-bg: #0c0e17;
-  --dock-bg-secondary: #111726;
-  --dock-surface: #131724;
-  --dock-surface-alt: #171b28;
-  --dock-surface-hover: #1c2132;
-  --dock-surface-overlay: #131724;
+  --dock-bg: var(--bg);
+  --dock-bg-secondary: var(--surface);
+  --dock-surface: var(--surface);
+  --dock-surface-alt: var(--surface-raised);
+  --dock-surface-hover: var(--surface-raised);
+  --dock-surface-overlay: var(--surface);
   /* Shared aliases used by newer Dock controls. Keep these derived from the
      canonical tokens so light mode changes propagate automatically. */
   --dock-surface-0: var(--dock-bg);
@@ -44,12 +46,12 @@
   --dock-surface-3: var(--dock-surface-hover);
   --dock-border: rgba(255, 255, 255, 0.08);
   --dock-border-soft: rgba(255, 255, 255, 0.05);
-  --dock-border-active: #4f46e5;
+  --dock-border-active: var(--primary);
   --dock-border-hover: rgba(79, 70, 229, 0.6);
-  --dock-text: #F8FAFC;
-  --dock-text-secondary: #94A3B8;
-  --dock-text-dim: #64748B;
-  --dock-text-muted: #64748B;
+  --dock-text: var(--text-primary);
+  --dock-text-secondary: var(--text-secondary);
+  --dock-text-dim: var(--text-muted);
+  --dock-text-muted: var(--text-muted);
   --dock-text-disabled: #475569;
   --dock-text-primary: var(--dock-text);
   --dock-text-tertiary: var(--dock-text-dim);
@@ -58,9 +60,9 @@
   --text-secondary: #94A3B8;
   --text-muted: #64748B;
   --input-placeholder: #64748B;
-  --dock-accent: #4f46e5;
-  --dock-accent-hover: #4338ca;
-  --dock-accent-pressed: #3730a3;
+  --dock-accent: var(--primary);
+  --dock-accent-hover: var(--primary-hover);
+  --dock-accent-pressed: var(--primary-hover);
   --dock-accent-soft: rgba(79, 70, 229, 0.14);
   --dock-accent-soft-border: rgba(79, 70, 229, 0.35);
   --dock-green: #10B981;
@@ -75,7 +77,7 @@
   --dock-red-text: #FCA5A5;
   --dock-yellow: #F59E0B;
   --dock-yellow-soft: rgba(245, 158, 11, 0.14);
-  --dock-input-bg: #171b28;
+  --dock-input-bg: var(--surface-raised);
   --dock-input-border: rgba(255, 255, 255, 0.12);
 
   display: flex;
@@ -177,7 +179,7 @@ body.dock-modal-open {
   box-sizing: border-box;
   padding: 6px;
   border: 1px solid var(--dock-border-active);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.04);
   color: var(--dock-text);
@@ -212,7 +214,7 @@ body.dock-modal-open {
   min-height: 34px;
   padding: 7px 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--dock-text);
   font: inherit;
@@ -290,7 +292,7 @@ body.dock-modal-open {
   height: 34px;
   padding: 0 10px;
   border: 1px solid var(--dock-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-input-bg);
   color: var(--dock-text);
   font: inherit;
@@ -310,7 +312,7 @@ body.dock-modal-open {
   height: 34px;
   padding: 0;
   border: 1px solid var(--dock-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-alt);
   color: var(--dock-text);
   cursor: pointer;
@@ -448,8 +450,8 @@ body.dock-modal-open {
   .dtb-studio__modal,
   .dtb-studio-card,
   .dock-theme-quick__modal) {
-  -webkit-backdrop-filter: blur(14px) saturate(1.08);
-  backdrop-filter: blur(14px) saturate(1.08);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 .dock-root.dock-root--soft-shadow :is(.dock-inline-header,
@@ -640,7 +642,7 @@ body.dock-modal-open {
   margin: 12px 8px 6px;
   padding: 4px;
   border: 1px solid var(--dock-border-soft, rgba(51, 65, 85, 0.55));
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface-alt) 56%, var(--dock-surface));
   box-sizing: border-box;
   justify-content: flex-start;
@@ -664,7 +666,7 @@ body.dock-modal-open {
   font-size: 12px;
   font-weight: 700;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--dock-text-dim, #6B7280);
   cursor: pointer;
@@ -1091,7 +1093,7 @@ body.dock-modal-open {
 .dock-card {
   background: color-mix(in srgb, var(--dock-surface-alt) 72%, var(--dock-surface));
   border: 0.4px solid color-mix(in srgb, var(--dock-border) 90%, transparent);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   padding: 24px;
   margin-bottom: 4px;
   cursor: pointer;
@@ -1855,7 +1857,7 @@ body.dock-modal-open {
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.06);
   color: var(--dock-text-dim);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
 }
 
 .dock-animated-lt-card__status--on-air {
@@ -1872,7 +1874,7 @@ body.dock-modal-open {
   z-index: 10;
   background: var(--dock-surface);
   border: 1px solid var(--dock-border);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   padding: 6px;
   min-width: 210px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
@@ -1894,7 +1896,7 @@ body.dock-modal-open {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
 }
 
 .dock-animated-lt-card__overflow-item:hover {
@@ -2795,7 +2797,7 @@ body.dock-modal-open {
   margin-top: 4px;
   background: var(--dock-surface);
   border: 1px solid var(--dock-border);
-  border-radius: 16px;
+  border-radius: var(--radius, 4px);
   z-index: 90;
   max-height: 500px;
   overflow-y: auto;
@@ -2809,7 +2811,7 @@ body.dock-modal-open {
 ) {
   background: #141720 !important;
   background-color: #141720 !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
+  border-color: var(--border) !important;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75) !important;
 }
 
@@ -2821,7 +2823,7 @@ body.dock-modal-open {
   min-height: 32px;
   padding: 6px 8px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--dock-text);
   font-size: 12px;
@@ -2860,7 +2862,7 @@ body.dock-modal-open {
 .dock-search-dropdown__label {
   font-size: 12.5px;
   font-weight: 700;
-  color: #60a5fa;
+  color: var(--accent-blue);
   letter-spacing: -0.01em;
   line-height: 1.35;
   transition: color 0.12s ease;
@@ -2868,7 +2870,7 @@ body.dock-modal-open {
 
 .dock-search-dropdown__item:hover .dock-search-dropdown__label,
 .dock-search-dropdown__item--active .dock-search-dropdown__label {
-  color: #93c5fd;
+  color: var(--accent-blue);
 }
 
 .dock-search-dropdown__content {
@@ -2881,7 +2883,7 @@ body.dock-modal-open {
 
 .dock-search-dropdown__snippet {
   display: block;
-  color: #f1f5f9;
+  color: var(--text-primary);
   font-size: 13px;
   line-height: 1.55;
   font-weight: 400;
@@ -3190,8 +3192,8 @@ body.dock-modal-open {
   gap: 8px;
   padding: 4px 10px;
   background: var(--dock-surface-alt, rgba(0, 0, 0, 0.25));
-  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.1));
-  border-radius: 6px;
+  border: 1px solid var(--dock-border, var(--border));
+  border-radius: var(--radius-lg, 6px);
 }
 
 .dock-bible-favorites-modal__search input {
@@ -3217,7 +3219,7 @@ body.dock-modal-open {
   padding: 8px 10px;
   background: color-mix(in srgb, var(--dock-surface-alt, #1f2333) 80%, transparent);
   border: 1px solid color-mix(in srgb, var(--dock-border) 70%, transparent);
-  border-radius: 6px;
+  border-radius: var(--radius-lg, 6px);
   transition: background 0.12s, border-color 0.12s;
 }
 
@@ -3296,7 +3298,7 @@ body.dock-modal-open {
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px;
-  border-top: 1px solid var(--dock-border, rgba(255, 255, 255, 0.1));
+  border-top: 1px solid var(--dock-border, var(--border));
 }
 
 .dock-search-card {
@@ -4543,7 +4545,7 @@ body.dock-modal-open {
   display: flex;
   flex-direction: column;
   border: 0.4px solid color-mix(in srgb, var(--dock-border) 90%, transparent);
-  border-radius: 16px;
+  border-radius: var(--radius-lg, 6px);
   background: color-mix(in srgb, var(--dock-surface) 98%, transparent);
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
 }
@@ -4746,7 +4748,7 @@ body.dock-modal-open {
   width: 100%;
   padding: 4px 6px;
   background: var(--dock-surface, #0F172A);
-  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--dock-border, var(--border));
   border-radius: 4px;
   color: var(--dock-text, #fff);
   font-size: 12px;
@@ -5178,7 +5180,7 @@ body.dock-modal-open {
   margin-top: 4px;
   background: var(--dock-surface);
   border: 1px solid color-mix(in srgb, var(--dock-border) 88%, transparent);
-  border-radius: 16px;
+  border-radius: var(--radius, 4px);
   z-index: 120;
   max-height: 200px;
   overflow-y: auto;
@@ -5282,7 +5284,7 @@ body.dock-modal-open {
   max-width: 480px;
   max-height: 80vh;
   background: var(--dock-surface, #0F172A);
-  border-radius: 12px;
+  border-radius: var(--radius-lg, 6px);
   border: 1px solid var(--dock-border, #2a2a42);
   display: flex;
   flex-direction: column;
@@ -5544,12 +5546,12 @@ body.dock-modal-open {
 
 .dtb-card__badge--bible {
   background: rgba(29, 78, 216, 0.15);
-  color: #60A5FA;
+  color: var(--accent-blue);
 }
 
 .dtb-card__badge--worship {
   background: rgba(168, 85, 247, 0.15);
-  color: #60A5FA;
+  color: var(--accent-blue);
 }
 
 .dtb-card__badge--general {
@@ -5611,7 +5613,7 @@ body.dock-modal-open {
   gap: 8px;
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--dock-border, var(--border));
   border-radius: 4px;
   background: var(--dock-card, rgba(255, 255, 255, 0.04));
   color: var(--dock-text, #E2E8F0);
@@ -5713,7 +5715,7 @@ body.dock-modal-open {
   gap: 8px;
   width: 100%;
   padding: 8px 8px;
-  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--dock-border, var(--border));
   border-radius: 4px;
   background: var(--dock-card, rgba(255, 255, 255, 0.03));
   color: var(--dock-text, #E2E8F0);
@@ -5723,7 +5725,7 @@ body.dock-modal-open {
 }
 
 .dock-service-item:hover {
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: var(--border);
 }
 
 .dock-service-item--done {
@@ -6296,7 +6298,7 @@ body.dock-modal-open {
   gap: 3px;
   padding: 3px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface-alt) 72%, transparent);
 }
 
@@ -6338,7 +6340,7 @@ body.dock-modal-open {
   min-height: 58px;
   padding: 7px 6px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface) 82%, transparent);
   color: var(--dock-text, #F8FAFC);
   font: inherit;
@@ -6427,7 +6429,7 @@ body.dock-modal-open {
   min-height: 42px;
   padding: 6px 8px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface) 82%, transparent);
   cursor: pointer;
 }
@@ -6442,7 +6444,7 @@ body.dock-modal-open {
   height: 28px;
   padding: 2px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-input-bg, #0F172A);
   cursor: pointer;
   flex: 0 0 auto;
@@ -6629,7 +6631,7 @@ body.dock-modal-open {
   margin: 0 2px 4px;
   padding: 9px;
   border: 1px solid color-mix(in srgb, var(--dock-border) 88%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface) 82%, transparent);
 }
 
@@ -6727,7 +6729,7 @@ body.dock-modal-open {
   min-height: 52px;
   padding: 8px 10px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--dock-text, #F8FAFC);
   font: inherit;
@@ -6806,7 +6808,7 @@ body.dock-modal-open {
 .dock-sidebar__check--stacked {
   align-items: flex-start;
   padding: 7px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
 }
 
 .dock-sidebar__check--stacked:hover {
@@ -6846,7 +6848,7 @@ body.dock-modal-open {
 .dock-sidebar__select--routing {
   min-height: 34px;
   padding: 0 9px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   cursor: pointer;
 }
 
@@ -7051,7 +7053,7 @@ body.dock-modal-open {
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface, #111827);
 }
 
@@ -7746,23 +7748,23 @@ body.dock-modal-open {
   display: block;
   width: 100%;
   overflow: hidden;
-  color: #d1d5db;
+  color: var(--text-secondary);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .dock-song-card:hover .dock-song-card__lyrics-line,
 .dock-card--active .dock-song-card__lyrics-line {
-  color: #f8fafc;
+  color: var(--text-primary);
 }
 
 .dock-song-card__lyrics-more {
-  color: #94a3b8;
+  color: var(--text-secondary);
   line-height: 0.8;
 }
 
 .dock-song-card__lyrics-empty {
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-style: italic;
 }
 
@@ -7858,7 +7860,7 @@ body.dock-modal-open {
   width: fit-content;
   padding: 3px;
   border: 1px solid color-mix(in srgb, var(--dock-border) 86%, transparent);
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface) 94%, transparent);
 }
 
@@ -7937,7 +7939,7 @@ body.dock-modal-open {
   min-width: 80px;
   padding: 3px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-overlay, #1E2937);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
@@ -8669,8 +8671,8 @@ body.dock-modal-open {
   max-height: min(440px, calc(100vh - 24px));
   overflow-y: auto;
   padding: 6px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   background: #141720;
   background-color: #141720;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08);
@@ -8680,23 +8682,23 @@ body.dock-modal-open {
 :root:not(.light) .dock-bible-reader__font-size-menu {
   background: #141720 !important;
   background-color: #141720 !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
-  color: #ffffff !important;
+  border-color: var(--border) !important;
+  color: var(--text-primary) !important;
 }
 
 :root:not(.light) .dock-bible-reader__font-size-menu-header {
-  color: #ffffff !important;
+  color: var(--text-primary) !important;
 }
 
 :root:not(.light) .dock-output-quick-actions__settings {
-  color: #ffffff !important;
+  color: var(--text-primary) !important;
 }
 
 :root:not(.light) .dock-output-quick-actions__settings:hover,
 :root:not(.light) .dock-output-quick-actions__settings:focus-visible {
   border-color: rgba(255, 255, 255, 0.25) !important;
   background: rgba(255, 255, 255, 0.12) !important;
-  color: #ffffff !important;
+  color: var(--text-primary) !important;
 }
 
 .dock-bible-reader__quick-actions--menu-right .dock-bible-reader__font-size-menu {
@@ -8792,7 +8794,7 @@ body.dock-modal-open {
 }
 
 :root:not(.light) .dock-bible-reader__font-size-field-label {
-  color: #ffffff !important;
+  color: var(--text-primary) !important;
   font-weight: 600;
 }
 
@@ -8929,7 +8931,7 @@ body.dock-modal-open {
 
 :root:not(.light) .dock-bible-reader__font-size-controls {
   background: #1b1e2a !important;
-  border-color: rgba(255, 255, 255, 0.16) !important;
+  border-color: var(--border) !important;
 }
 
 :root:not(.light) .dock-bible-reader__font-size-btn {
@@ -8960,7 +8962,7 @@ body.dock-modal-open {
   .dock-bible-reader__compare-mode-toggle-btn
 ) {
   background: #1c202d !important;
-  border-color: rgba(255, 255, 255, 0.16) !important;
+  border-color: var(--border) !important;
   color: #ffffff !important;
 }
 
@@ -8999,15 +9001,15 @@ body.dock-modal-open {
 
 :root:not(.light) .dock-bible-reader__font-size-select option {
   background: #141720 !important;
-  color: #ffffff !important;
+  color: var(--text-primary) !important;
 }
 
 :root:not(.light) .dock-bible-reader__font-size-checkbox {
-  color: #ffffff !important;
+  color: var(--text-primary) !important;
 }
 
 :root:not(.light) .dock-bible-reader__font-size-checkbox span {
-  color: #ffffff !important;
+  color: var(--text-primary) !important;
 }
 
 :root:not(.light) .dock-bible-reader__font-size-checkbox-copy small {
@@ -9016,13 +9018,13 @@ body.dock-modal-open {
 
 :root:not(.light) .dock-bible-reader__font-size-save {
   background: var(--dock-accent) !important;
-  color: #ffffff !important;
+  color: var(--text-primary) !important;
   border-color: var(--dock-accent) !important;
 }
 
 :root:not(.light) .dock-bible-reader__font-size-save:disabled {
   background: rgba(255, 255, 255, 0.08) !important;
-  border-color: rgba(255, 255, 255, 0.12) !important;
+  border-color: var(--border) !important;
   color: rgba(255, 255, 255, 0.45) !important;
 }
 
@@ -9114,8 +9116,8 @@ body.dock-modal-open {
   max-height: 50vh;
   margin-top: 4px;
   background: #141720;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.75);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -9124,7 +9126,7 @@ body.dock-modal-open {
 :root:not(.light) .dock-bible-reader__history-dropdown {
   background: #141720 !important;
   background-color: #141720 !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
+  border-color: var(--border) !important;
 }
 
 .dock-bible-reader__history-dropdown::-webkit-scrollbar {
@@ -9358,8 +9360,8 @@ body.dock-modal-open {
   max-height: min(640px, calc(100vh - 24px));
   padding: 10px;
   background: #141720;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
   display: flex;
   flex-direction: column;
@@ -9370,7 +9372,7 @@ body.dock-modal-open {
 :root:not(.light) :is(.dock-bible-compare-popover, .dock-bible-reference-popover) {
   background: #141720 !important;
   background-color: #141720 !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
+  border-color: var(--border) !important;
 }
 
 .dock-bible-reference-popover {
@@ -9412,7 +9414,7 @@ body.dock-modal-open {
   align-items: flex-start;
   gap: 8px;
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   font-size: 11px;
   line-height: 1.35;
   transition: all 0.2s ease;
@@ -9492,7 +9494,7 @@ body.dock-modal-open {
   gap: 3px;
   padding: 7px 8px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-2, #1F2937);
   color: var(--dock-text, #F8FAFC);
   cursor: pointer;
@@ -9580,7 +9582,7 @@ body.dock-modal-open {
   margin-top: 8px;
   background: var(--dock-accent, #1D4ED8);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   color: #fff;
   font-family: inherit;
   font-size: 13px;
@@ -9730,7 +9732,7 @@ body.dock-modal-open {
   gap: 3px;
   padding: 3px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-alt, #0F172A);
 }
 
@@ -9739,7 +9741,7 @@ body.dock-modal-open {
   min-height: 32px;
   padding: 6px 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--dock-text-dim, #94A3B8);
   font: inherit;
@@ -9777,7 +9779,7 @@ body.dock-modal-open {
   gap: 5px;
   padding: 6px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface-2, #1F2937) 72%, transparent);
 }
 
@@ -9842,7 +9844,7 @@ body.dock-modal-open {
   min-height: 34px;
   padding: 6px 8px;
   border: 1px dashed var(--dock-border-active, #6B7280);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--dock-text, #F8FAFC);
   font: inherit;
@@ -10292,7 +10294,7 @@ body.dock-modal-open {
 .dock-worship-browser__subtitle {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #FFFFFF;
+  color: var(--text-primary);
 }
 
 .dock-worship-browser__actions {
@@ -10545,7 +10547,7 @@ body.dock-modal-open {
 
 .dock-worship-jump--pre-chorus .dock-worship-jump__short,
 .dock-worship-jump--tag .dock-worship-jump__short {
-  color: #60A5FA;
+  color: var(--accent-blue);
 }
 
 .dock-console-control--compact {
@@ -10671,7 +10673,7 @@ body.dock-modal-open {
   margin-top: 6px;
   padding: 8px 10px;
   border: 1px solid var(--dock-border-soft, #334155);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-alt, #1F2937);
   box-sizing: border-box;
 }
@@ -10691,7 +10693,7 @@ body.dock-modal-open {
   max-width: 100%;
   padding: 0 8px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface, #111827);
   color: var(--dock-text-secondary, #CBD5E1);
   font-size: 11px;
@@ -10740,7 +10742,7 @@ body.dock-modal-open {
   font-weight: 500;
   line-height: 1;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface, #111827);
   color: var(--dock-text-secondary, #CBD5E1);
   cursor: pointer;
@@ -10815,7 +10817,7 @@ body.dock-modal-open {
   margin-left: 0;
   flex-shrink: 0;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   overflow: hidden;
   background: var(--dock-surface, #111827);
 }
@@ -10907,7 +10909,7 @@ body.dock-modal-open {
   min-width: 80px;
   background: var(--dock-surface-overlay, #1E2937);
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
   padding: 3px;
 }
@@ -11210,7 +11212,7 @@ body.dock-modal-open {
   flex-direction: column;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--dock-border) 92%, transparent);
-  border-radius: 16px;
+  border-radius: var(--radius-lg, 6px);
   background: color-mix(in srgb, var(--dock-surface) 96%, black 4%);
   color: var(--dock-text);
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34);
@@ -11478,7 +11480,7 @@ body.dock-modal-open {
 }
 
 .dock-bible-keyword-modal__text {
-  color: #f1f5f9;
+  color: var(--text-primary);
   font-size: 13px;
   line-height: 1.55;
   white-space: normal;
@@ -11505,7 +11507,7 @@ body.dock-modal-open {
   margin-top: 4px;
   padding: 9px 10px;
   border: 1px solid color-mix(in srgb, var(--dock-border) 88%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-lg, 6px);
   background: color-mix(in srgb, var(--dock-surface-alt) 74%, transparent);
   color: var(--dock-text-secondary);
   font-size: 11px;
@@ -11671,12 +11673,12 @@ body.dock-modal-open {
   padding: 6px 10px;
   gap: 8px;
   box-sizing: border-box;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border);
   background: transparent;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
   outline: none;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
 }
 
 .dock-bible-verse-row:active {
@@ -11695,7 +11697,7 @@ body.dock-modal-open {
 .dock-bible-verse-row--selected,
 .dock-bible-verse-row--highlighted {
   border: 1.5px solid var(--dock-accent) !important;
-  border-radius: 8px !important;
+  border-radius: var(--radius, 4px) !important;
   background: var(--dock-accent-soft) !important;
   margin: 3px 0;
   box-shadow: 0 0 16px var(--dock-accent-soft);
@@ -11736,7 +11738,7 @@ body.dock-modal-open {
 
 .dock-bible-verse-row__text {
   min-width: 0;
-  color: #f1f5f9;
+  color: var(--text-primary);
   font-size: 13px;
   line-height: 1.5;
   overflow-wrap: break-word;
@@ -11755,7 +11757,7 @@ body.dock-modal-open {
 
 .dock-bible-verse-row--selected .dock-bible-verse-row__text,
 .dock-bible-verse-row--highlighted .dock-bible-verse-row__text {
-  color: #ffffff;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
@@ -11764,8 +11766,8 @@ body.dock-modal-open {
   position: fixed;
   min-width: 195px;
   background: #181b24;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   padding: 6px;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.7);
   z-index: 10000;
@@ -11777,7 +11779,7 @@ body.dock-modal-open {
 :root:not(.light) .dock-bible-context-menu {
   background: #141720 !important;
   background-color: #141720 !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
+  border-color: var(--border) !important;
 }
 
 .dock-bible-context-menu__item {
@@ -11786,10 +11788,10 @@ body.dock-modal-open {
   gap: 10px;
   min-height: 38px;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   border: none;
-  color: #e2e8f0;
+  color: var(--text-primary);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -11849,8 +11851,8 @@ body.dock-modal-open {
   min-height: 28px;
   border-radius: 5px;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #cbd5e1;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -11862,7 +11864,7 @@ body.dock-modal-open {
 
 .dock-bible-context-menu__line-btn:hover {
   background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: var(--border);
   color: #ffffff;
 }
 
@@ -11890,7 +11892,7 @@ body.dock-modal-open {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.78);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
   z-index: 99999;
   display: flex;
   align-items: center;
@@ -11915,7 +11917,7 @@ body.dock-modal-open {
 .dock-bible-compare-modal {
   background: var(--dock-surface);
   border: 1px solid var(--dock-border);
-  border-radius: 10px;
+  border-radius: var(--radius-lg, 6px);
   width: 100%;
   max-width: 960px;
   max-height: calc(100vh - 24px);
@@ -11931,7 +11933,7 @@ body.dock-modal-open {
 :root:not(.light) .dock-bible-compare-modal {
   background: #141720 !important;
   background-color: #141720 !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
+  border-color: var(--border) !important;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.75) !important;
 }
 
@@ -11979,15 +11981,15 @@ body.dock-modal-open {
   gap: 2px;
   background: rgba(255, 255, 255, 0.05);
   padding: 2px 4px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg, 6px);
+  border: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .dock-bible-compare-modal__verse-nav-btn {
   background: transparent;
   border: none;
-  color: #cbd5e1;
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 2px;
   border-radius: 4px;
@@ -12012,7 +12014,7 @@ body.dock-modal-open {
 .dock-bible-compare-modal__verse-select {
   background: #1e2230;
   color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 2px 6px;
   font-size: 12px;
@@ -12026,10 +12028,10 @@ body.dock-modal-open {
 .dock-bible-compare-modal__close-btn {
   background: transparent;
   border: none;
-  color: #94a3b8;
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 4px;
-  border-radius: 6px;
+  border-radius: var(--radius-lg, 6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -12059,7 +12061,7 @@ body.dock-modal-open {
 .dock-compare-card {
   background: var(--dock-surface-alt);
   border: 1px solid var(--dock-border);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   display: flex;
   flex-direction: column;
   padding: 10px;
@@ -12089,7 +12091,7 @@ body.dock-modal-open {
   font-weight: 700;
   font-size: 12px;
   border: 1px solid var(--dock-input-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   padding: 4px 8px;
   min-height: 30px;
   flex: 1 1 auto;
@@ -12108,11 +12110,11 @@ body.dock-modal-open {
   gap: 4px;
   cursor: pointer;
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--text-secondary);
   padding: 3px 7px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border);
   user-select: none;
   min-height: 30px;
   flex-shrink: 0;
@@ -12128,7 +12130,7 @@ body.dock-modal-open {
 .dock-compare-card__compare-toggle--active {
   background: rgba(59, 130, 246, 0.18);
   border-color: #3b82f6;
-  color: #93c5fd;
+  color: var(--accent-blue);
   font-weight: 600;
 }
 
@@ -12139,10 +12141,10 @@ body.dock-modal-open {
   overflow-y: auto;
   font-size: 12.5px;
   line-height: 1.5;
-  color: #e2e8f0;
+  color: var(--text-primary);
   padding: 8px 10px;
   background: rgba(0, 0, 0, 0.25);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -12151,7 +12153,7 @@ body.dock-modal-open {
 .dock-compare-card__reference-tag {
   font-size: 10px;
   font-weight: 600;
-  color: #60a5fa;
+  color: var(--accent-blue);
   margin-bottom: 4px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -12160,7 +12162,7 @@ body.dock-modal-open {
 
 .dock-compare-card__text {
   margin: 0;
-  color: #e2e8f0;
+  color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -12170,7 +12172,7 @@ body.dock-modal-open {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  color: #94a3b8;
+  color: var(--text-secondary);
   font-size: 11.5px;
   margin: auto;
 }
@@ -12190,12 +12192,12 @@ body.dock-modal-open {
   gap: 6px;
   min-height: 30px;
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   font-size: 11.5px;
   font-weight: 600;
   background: #252b3d;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: #f1f5f9;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
   cursor: pointer;
   transition: all 0.12s ease;
   user-select: none;
@@ -12213,7 +12215,7 @@ body.dock-modal-open {
   align-items: center;
   justify-content: space-between;
   padding: 6px 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.02);
   gap: 8px;
   flex-shrink: 0;
@@ -12224,7 +12226,7 @@ body.dock-modal-open {
 
 .dock-bible-compare-modal__footer-status {
   font-size: 11.5px;
-  color: #94a3b8;
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -12236,7 +12238,7 @@ body.dock-modal-open {
 }
 
 .dock-bible-compare-modal__footer-status strong {
-  color: #60a5fa;
+  color: var(--accent-blue);
   font-weight: 700;
 }
 
@@ -12251,12 +12253,12 @@ body.dock-modal-open {
 .dock-bible-compare-modal__cancel-btn {
   min-height: 30px;
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-lg, 6px);
   font-size: 11.5px;
   font-weight: 500;
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: #cbd5e1;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.12s ease;
   white-space: nowrap;
@@ -12273,7 +12275,7 @@ body.dock-modal-open {
   gap: 6px;
   min-height: 30px;
   padding: 4px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-lg, 6px);
   font-size: 11.5px;
   font-weight: 600;
   background: var(--dock-accent, #4f46e5);
@@ -12589,10 +12591,10 @@ body.dock-modal-open {
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #94a3b8;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s ease;
   flex-shrink: 0;
@@ -12601,7 +12603,7 @@ body.dock-modal-open {
 .dock-bible-chapter-bar__btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: var(--border);
 }
 
 .dock-bible-chapter-bar__btn:disabled {
@@ -12627,7 +12629,7 @@ body.dock-modal-open {
   height: 28px;
   padding: 0 8px;
   gap: 4px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-accent-soft, rgba(255, 255, 255, 0.04));
   border: 1px solid var(--dock-accent);
   color: var(--dock-text);
@@ -12674,12 +12676,12 @@ body.dock-modal-open {
   max-width: 340px;
   margin: 0 auto;
   background: #141720;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
   padding: 10px;
   z-index: 10010;
-  backdrop-filter: blur(12px);
+  backdrop-filter: none;
 }
 
 .dock-bible-picker-popover::before {
@@ -12698,7 +12700,7 @@ body.dock-modal-open {
   gap: 4px;
   background: rgba(255, 255, 255, 0.06);
   padding: 3px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   margin-bottom: 8px;
 }
 
@@ -12710,8 +12712,8 @@ body.dock-modal-open {
   text-align: center;
   background: transparent;
   border: none;
-  border-radius: 6px;
-  color: #94a3b8;
+  border-radius: var(--radius, 4px);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -12731,7 +12733,7 @@ body.dock-modal-open {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #94a3b8;
+  color: var(--text-secondary);
   margin-bottom: 6px;
 }
 
@@ -12740,8 +12742,8 @@ body.dock-modal-open {
   align-items: center;
   gap: 6px;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   padding: 4px 8px;
   margin-bottom: 8px;
 }
@@ -12756,7 +12758,7 @@ body.dock-modal-open {
 }
 
 .dock-bible-picker-search input::placeholder {
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .dock-bible-picker-books-grid {
@@ -12777,9 +12779,9 @@ body.dock-modal-open {
 
 .dock-bible-picker-book-btn {
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 6px;
-  color: #cbd5e1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
+  color: var(--text-secondary);
   font-size: 11px;
   font-weight: 600;
   padding: 4px 2px;
@@ -12823,9 +12825,9 @@ body.dock-modal-open {
 
 .dock-bible-picker-chapter-btn {
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 6px;
-  color: #e2e8f0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
+  color: var(--text-primary);
   font-size: 11px;
   font-weight: 500;
   height: 26px;
@@ -12858,7 +12860,7 @@ body.dock-modal-open {
   padding: 6px 8px;
   min-height: 42px;
   background: #101217;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--border);
 }
 
 .dock-module--bible .dock-btm-toolbar__row {
@@ -12867,8 +12869,8 @@ body.dock-modal-open {
 }
 
 .dock-module--bible .dock-btm-segmented {
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius, 4px);
+  border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.04);
 }
 
@@ -12877,7 +12879,7 @@ body.dock-modal-open {
   padding: 0 12px;
   font-size: 12px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--text-secondary);
 }
 
 .dock-module--bible .dock-btm-segmented__item--active {
@@ -12898,10 +12900,10 @@ body.dock-modal-open {
   justify-content: center;
   width: 34px;
   height: 34px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #e2e8f0;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -12924,9 +12926,9 @@ body.dock-modal-open {
   gap: 6px;
   height: 34px;
   padding: 0 11px;
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-alt, rgba(255, 255, 255, 0.06));
-  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--dock-border, var(--border));
   color: var(--dock-text, #f1f5f9);
   font-size: 11px;
   font-weight: 600;
@@ -12965,8 +12967,8 @@ body.dock-modal-open {
   height: 34px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #e2e8f0;
+  border: 1px solid var(--border);
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -13092,7 +13094,7 @@ body.dock-modal-open {
   min-width: 0;
   padding: 12px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface-2, #1F2937) 86%, transparent);
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
@@ -13591,8 +13593,8 @@ body.dock-modal-open {
   margin: 0 auto;
   padding: 0;
   box-sizing: border-box;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   background: rgba(255, 255, 255, 0.04);
   color: var(--dock-text-dim);
   cursor: pointer;
@@ -13602,7 +13604,7 @@ body.dock-modal-open {
 
 .dock-vertical-nav__item:hover {
   color: #fff;
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: var(--border);
   background: rgba(255, 255, 255, 0.08);
   transform: translateY(-1px);
 }
@@ -13872,7 +13874,7 @@ body.dock-modal-open {
 }
 
 .dock-planner-cue__type--bible {
-  color: #60A5FA;
+  color: var(--accent-blue);
 }
 
 .dock-planner-cue__type--worship {
@@ -13884,7 +13886,7 @@ body.dock-modal-open {
 }
 
 .dock-planner-cue__type--media {
-  color: #60A5FA;
+  color: var(--accent-blue);
 }
 
 .dock-planner-cue__done {
@@ -14168,7 +14170,7 @@ body.dock-modal-open {
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--dock-border-soft);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface);
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
@@ -14399,7 +14401,7 @@ body.dock-modal-open {
   overflow-y: auto;
   padding: 12px;
   border: 1px solid var(--dock-border);
-  border-radius: 7px;
+  border-radius: var(--radius-lg, 6px);
   background: var(--dock-surface);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
 }
@@ -14476,7 +14478,7 @@ body.dock-modal-open {
   padding: 4px 7px;
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.84);
-  color: #f8fafc;
+  color: var(--text-primary);
   font-size: 9px;
   font-weight: 700;
   white-space: nowrap;
@@ -14986,7 +14988,7 @@ body.dock-modal-open {
   min-height: 0;
   padding: 24px;
   border: 1px solid color-mix(in srgb, var(--dock-border) 88%, transparent);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface-alt) 68%, var(--dock-surface));
   transition: border-color 0.15s ease, background 0.15s ease;
 }
@@ -15063,7 +15065,7 @@ body.dock-modal-open {
   align-items: center;
   min-height: 15px;
   padding: 0 4px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
   border-radius: 4px;
   background: rgba(11, 15, 22, 0.64);
   color: rgba(255, 255, 255, 0.86);
@@ -15456,7 +15458,7 @@ body.dock-modal-open {
   border: none;
   border-radius: 4px;
   background: rgba(20, 20, 20, 0.75);
-  backdrop-filter: blur(8px);
+  backdrop-filter: none;
   color: #fff;
   font-size: 12px;
   font-weight: 600;
@@ -15823,7 +15825,7 @@ body.dock-modal-open {
   gap: 12px;
   padding: 16px;
   border: 1px solid color-mix(in srgb, var(--dock-border) 80%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius-lg, 6px);
   background: color-mix(in srgb, var(--dock-surface-alt) 60%, var(--dock-surface));
 }
 
@@ -15924,7 +15926,7 @@ body.dock-modal-open {
   border: none;
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(8px);
+  backdrop-filter: none;
   color: #fff;
   cursor: pointer;
   transition: background 0.12s;
@@ -15973,7 +15975,7 @@ body.dock-modal-open {
   border: none;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(8px);
+  backdrop-filter: none;
   color: #fff;
   cursor: pointer;
   transition: background 0.15s, transform 0.15s;
@@ -16069,7 +16071,7 @@ body.dock-modal-open {
 .dock-media-inspector__title-action--confirm {
   background: var(--dock-accent);
   border-color: var(--dock-accent);
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .dock-media-inspector__title-action--cancel {
@@ -16086,7 +16088,7 @@ body.dock-modal-open {
 .dock-media-inspector__title-action--confirm:hover,
 .dock-media-inspector__title-action--confirm:focus-visible {
   background: var(--dock-accent-hover, var(--dock-accent));
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .dock-media-inspector__subtitle {
@@ -16225,7 +16227,7 @@ body.dock-modal-open {
 .dock-media-inspector__card {
   margin: 0 12px 10px;
   padding: 12px;
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   border: 1px solid var(--dock-border-soft);
   background: rgba(255, 255, 255, 0.015);
 }
@@ -17183,8 +17185,8 @@ body.dock-modal-open {
   max-height: min(204px, 50vh);
   overflow: auto;
   padding: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   background: #141720;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
 }
@@ -17192,7 +17194,7 @@ body.dock-modal-open {
 :root:not(.light) .dock-bible-controls__book-dropdown {
   background: #141720 !important;
   background-color: #141720 !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
+  border-color: var(--border) !important;
 }
 
 .dock-bible-controls__dropdown-header {
@@ -17229,7 +17231,7 @@ body.dock-modal-open {
   width: 38px;
   flex: 0 0 38px;
   overflow: hidden;
-  color: #93C5FD;
+  color: var(--accent-blue);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -17456,8 +17458,8 @@ body.dock-modal-open {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 4px;
   padding: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   background: #141720;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
 }
@@ -17465,7 +17467,7 @@ body.dock-modal-open {
 :root:not(.light) :is(.dock-bible-controls__chapter-dropdown, .dock-bible-controls__verse-dropdown) {
   background: #141720 !important;
   background-color: #141720 !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
+  border-color: var(--border) !important;
 }
 
 .dock-bible-controls__verse-dropdown {
@@ -17583,8 +17585,8 @@ body.dock-modal-open {
   max-height: min(430px, calc(100vh - 92px));
   background: #141720;
   background-color: #141720;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08);
   z-index: 90;
   display: flex;
@@ -17595,7 +17597,7 @@ body.dock-modal-open {
 :root:not(.light) .bible-version-library__panel {
   background: #141720 !important;
   background-color: #141720 !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
+  border-color: var(--border) !important;
 }
 
 .bible-version-library--align-right .bible-version-library__panel {
@@ -17606,14 +17608,14 @@ body.dock-modal-open {
 .bible-version-library__search {
   position: relative;
   padding: 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border);
   background: #191c28;
   flex-shrink: 0;
 }
 
 :root:not(.light) .bible-version-library__search {
   background: #191c28 !important;
-  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+  border-bottom-color: var(--border) !important;
 }
 
 .bible-version-library__search-icon {
@@ -17629,8 +17631,8 @@ body.dock-modal-open {
   width: 100%;
   min-height: 34px;
   padding: 0 30px 0 32px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   background: #11131a;
   color: var(--dock-text);
   font: inherit;
@@ -17642,7 +17644,7 @@ body.dock-modal-open {
 
 :root:not(.light) .bible-version-library__search-input {
   background: #11131a !important;
-  border-color: rgba(255, 255, 255, 0.12) !important;
+  border-color: var(--border) !important;
 }
 
 .bible-version-library__search-input:focus {
@@ -17686,7 +17688,7 @@ body.dock-modal-open {
 }
 
 .bible-version-library__section {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--border);
 }
 
 .bible-version-library__section:last-child {
@@ -17707,13 +17709,13 @@ body.dock-modal-open {
   color: var(--dock-text-muted, #94A3B8);
   background: #141720;
   z-index: 1;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--border);
   text-transform: uppercase;
 }
 
 :root:not(.light) .bible-version-library__section-header {
   background: #141720 !important;
-  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+  border-bottom-color: var(--border) !important;
 }
 
 .bible-version-library__list {
@@ -17731,7 +17733,7 @@ body.dock-modal-open {
   min-height: 36px;
   padding: 7px 9px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--dock-text);
   font: inherit;
@@ -17791,7 +17793,7 @@ body.dock-modal-open {
 }
 
 :root:not(.light) .bible-version-library__row-code {
-  color: #ffffff !important;
+  color: var(--text-primary) !important;
 }
 
 .bible-version-library__row-name {
@@ -17799,11 +17801,11 @@ body.dock-modal-open {
 }
 
 :root:not(.light) .bible-version-library__row-name {
-  color: #e2e8f0 !important;
+  color: var(--text-primary) !important;
 }
 
 :root:not(.light) .bible-version-library__section-header span:first-child {
-  color: #ffffff !important;
+  color: var(--text-primary) !important;
 }
 
 .bible-version-library__row-lang {
@@ -17825,9 +17827,9 @@ body.dock-modal-open {
 }
 
 :root:not(.light) .bible-version-library__row-lang {
-  color: #e2e8f0 !important;
+  color: var(--text-primary) !important;
   background: rgba(255, 255, 255, 0.08) !important;
-  border-color: rgba(255, 255, 255, 0.16) !important;
+  border-color: var(--border) !important;
 }
 
 .bible-version-library__row-check {
@@ -17857,7 +17859,7 @@ body.dock-modal-open {
 
 :root:not(.light) .bible-version-library__download-btn {
   background: #1c202d !important;
-  border-color: rgba(255, 255, 255, 0.16) !important;
+  border-color: var(--border) !important;
   color: #ffffff !important;
 }
 
@@ -18836,7 +18838,7 @@ body.dock-modal-open {
   flex-direction: column;
   background: var(--dock-surface);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-lg, 6px);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
   overflow: hidden;
 }
@@ -19387,7 +19389,7 @@ body.dock-modal-open {
   min-height: 36px;
   overflow: hidden;
   border: 1px solid var(--dock-border);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-alt);
   transition: border-color 0.12s ease, box-shadow 0.12s ease;
 }
@@ -20375,7 +20377,7 @@ body.dock-modal-open {
   width: min(420px, 92vw);
   max-height: 80vh;
   overflow: auto;
-  border-radius: 16px;
+  border-radius: var(--radius, 4px);
   border: 1px solid color-mix(in srgb, var(--dock-border) 92%, transparent);
   background: color-mix(in srgb, var(--dock-surface) 98%, transparent);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
@@ -20636,7 +20638,7 @@ body.dock-modal-open {
   gap: 3px;
   box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--dock-border) 92%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface) 98%, transparent);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
 }
@@ -20662,7 +20664,7 @@ body.dock-modal-open {
   min-height: 38px;
   padding: 8px 12px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--dock-text);
   font-size: 13px;
@@ -20721,9 +20723,9 @@ body.dock-modal-open {
   padding: 5px 8px 5px 8px;
   border-radius: 999px;
   background: rgba(18, 22, 28, 0.92);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--border);
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
   box-sizing: border-box;
   animation: dock-banner-appear 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -20838,7 +20840,7 @@ body.dock-modal-open {
 .dock-auto-advance-banner__status {
   font-size: 11.5px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
@@ -20874,7 +20876,7 @@ body.dock-modal-open {
   border-radius: 50%;
   border: none;
   background: rgba(255, 255, 255, 0.08);
-  color: #cbd5e1;
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 0;
   transition: all 0.12s ease;
@@ -20958,7 +20960,7 @@ body.dock-modal-open {
   overscroll-behavior: contain;
   padding: 10px;
   border: 1px solid color-mix(in srgb, var(--dock-border) 94%, transparent);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface) 98%, black 2%);
   color: var(--dock-text);
   box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
@@ -21001,7 +21003,7 @@ body.dock-modal-open {
   height: 32px;
   padding: 0;
   border: 1px solid var(--dock-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--dock-text-dim);
   cursor: pointer;
@@ -21025,7 +21027,7 @@ body.dock-modal-open {
   margin-bottom: 12px;
   padding: 10px;
   border: 1px solid var(--dock-accent-soft-border);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-accent-soft);
 }
 
@@ -21112,7 +21114,7 @@ body.dock-modal-open {
   min-height: 40px;
   padding: 0 9px;
   border: 1px solid var(--dock-border);
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-alt);
 }
 
@@ -21163,7 +21165,7 @@ body.dock-modal-open {
 
 .dock-auto-advance__select {
   min-height: 36px;
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   background-color: var(--dock-surface-alt);
   font-size: 11px;
 }
@@ -21181,7 +21183,7 @@ body.dock-modal-open {
   min-height: 40px;
   padding: 0 12px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   cursor: pointer;
   font-size: 11px;
   font-weight: 750;
@@ -22315,7 +22317,7 @@ body.dock-modal-open {
   padding: 0 3px;
   border-radius: 4px;
   background: var(--dock-accent);
-  color: #fff;
+  color: var(--text-primary);
   font-size: 12px;
   font-weight: 700;
   line-height: 1;
@@ -22452,7 +22454,7 @@ body.dock-modal-open {
   right: 0;
   min-width: 210px;
   padding: 6px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-overlay);
   border: 1px solid var(--dock-border);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
@@ -22469,7 +22471,7 @@ body.dock-modal-open {
   min-height: 38px;
   padding: 8px 12px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--dock-text-secondary);
   font-size: 13px;
@@ -22747,7 +22749,7 @@ body.dock-modal-open {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--border);
   flex-shrink: 0;
 }
 
@@ -24568,7 +24570,7 @@ body.dock-modal-open {
   opacity: 0.8;
   background: rgba(255, 255, 255, 0.08);
   padding: 1px 5px;
-  border-radius: 9px;
+  border-radius: var(--radius, 4px);
   margin-left: 2px;
 }
 
@@ -25093,9 +25095,9 @@ body.dock-modal-open {
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: rgba(20, 20, 20, 0.7);
-  backdrop-filter: blur(8px);
+  backdrop-filter: none;
   color: #fff;
   cursor: pointer;
   transition: background 0.12s ease;
@@ -25200,7 +25202,7 @@ body.dock-modal-open {
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
 }
 
 /* ── Locked card (beyond plan limit) ── */
@@ -25247,7 +25249,7 @@ body.dock-modal-open {
   padding: 4px 8px;
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
 }
 
 /* ── Pinned badge on card thumbnail ── */
@@ -25882,7 +25884,7 @@ body.dock-modal-open {
   flex-direction: column;
   gap: 8px;
   padding: 8px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface);
   border: 1px solid var(--dock-border-soft);
 }
@@ -25944,7 +25946,7 @@ body.dock-modal-open {
   min-height: 40px;
   padding: 7px 8px;
   border: 1px solid var(--dock-border-soft);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-alt);
   color: var(--dock-text);
   font-size: 12px;
@@ -26055,7 +26057,7 @@ body.dock-modal-open {
   height: 32px;
   padding: 0 28px 0 10px;
   border: 1px solid var(--dock-border-soft);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface);
   color: var(--dock-text);
   font: inherit;
@@ -26144,7 +26146,7 @@ body.dock-modal-open {
 .dock-overlay-align-section__btn--active {
   background: color-mix(in srgb, rgba(139, 92, 246, 0.15) 50%, var(--dock-surface));
   border-color: color-mix(in srgb, #60A5FA 40%, var(--dock-border));
-  color: #60A5FA;
+  color: var(--accent-blue);
 }
 
 /* ── Animation Section ── */
@@ -26218,7 +26220,7 @@ body.dock-modal-open {
 .dock-overlay-anim-section__opt--active {
   background: color-mix(in srgb, rgba(139, 92, 246, 0.15) 50%, var(--dock-surface));
   border-color: color-mix(in srgb, #60A5FA 40%, var(--dock-border));
-  color: #60A5FA;
+  color: var(--accent-blue);
 }
 
 /* ── Action Bar ── */
@@ -26243,7 +26245,7 @@ body.dock-modal-open {
   gap: 8px;
   min-height: 44px;
   padding: 10px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
@@ -26530,7 +26532,7 @@ body.dock-modal-open {
   width: 32px;
   height: 32px;
   border: 2px solid var(--dock-border-soft);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   cursor: pointer;
   padding: 0;
   background: none;
@@ -27574,7 +27576,7 @@ body.dock-modal-open {
 .dock-sermon-compose__modal {
   background: var(--dock-surface);
   border: 1px solid var(--dock-border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg, 6px);
   width: 90%;
   max-width: 480px;
   max-height: 80vh;
@@ -28733,7 +28735,7 @@ body.dock-modal-open {
   min-height: 56px;
   padding: 10px 12px;
   border: 1px solid var(--dock-green-soft-border);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-green-soft) 72%, var(--dock-surface));
   color: var(--dock-text);
 }
@@ -28784,7 +28786,7 @@ body.dock-modal-open {
   gap: 8px;
   padding: 9px 10px;
   border: 1px solid var(--dock-green-soft-border);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-green-soft);
   color: var(--dock-text-secondary);
   font-size: 11px;
@@ -28818,7 +28820,7 @@ body.dock-modal-open {
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--dock-border);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface);
 }
 
@@ -28875,7 +28877,7 @@ body.dock-modal-open {
   min-height: 240px;
   padding: 24px 16px;
   border: 1px dashed var(--dock-border);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface) 70%, transparent);
   text-align: center;
 }
@@ -28954,7 +28956,7 @@ body.dock-modal-open {
   min-height: 54px;
   padding: 8px 10px;
   border: 1px solid var(--dock-accent-soft-border);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface);
   color: var(--dock-text);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32);
@@ -29149,7 +29151,7 @@ body.dock-modal-open {
   padding: 4px;
   margin-bottom: 0;
   border: 1px solid var(--dock-border);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface-1) 72%, var(--dock-surface));
 }
 
@@ -29159,7 +29161,7 @@ body.dock-modal-open {
   gap: 2px;
   padding: 3px;
   border: 1px solid color-mix(in srgb, var(--dock-border) 78%, transparent);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface-1) 52%, var(--dock-surface));
 }
 
@@ -29173,7 +29175,7 @@ body.dock-modal-open {
   padding: 0 10px;
   flex: 1 1 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--dock-text-tertiary, #94A3B8);
   font: inherit;
@@ -29232,7 +29234,7 @@ body.dock-modal-open {
   color: var(--dock-text-tertiary);
   background: transparent;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   cursor: pointer;
   transition: all 0.15s ease;
   flex: 1;
@@ -29297,7 +29299,7 @@ body.dock-modal-open {
   color: var(--dock-text-primary, #F8FAFC);
   background: var(--dock-surface, #111827);
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -29324,7 +29326,7 @@ body.dock-modal-open {
   color: var(--dock-text-primary, #F8FAFC);
   background: var(--dock-surface, #111827);
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   font-size: 12px;
   font-weight: 500;
   outline: none;
@@ -29356,7 +29358,7 @@ body.dock-modal-open {
   color: var(--dock-text-secondary, #94A3B8);
   background: var(--dock-surface, #111827);
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
@@ -29377,7 +29379,7 @@ body.dock-modal-open {
   padding: 8px;
   background: var(--dock-surface, #111827);
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.32);
   animation: dtb-dropdown-slide-in 0.15s ease;
 }
@@ -29560,7 +29562,7 @@ body.dock-modal-open {
   margin-top: 12px;
   padding: 12px;
   border: 1px solid var(--dock-border);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface-2) 72%, transparent);
 }
 
@@ -29635,7 +29637,7 @@ body.dock-modal-open {
   padding: 0;
   background: var(--dock-surface-1);
   border: 1px solid var(--dock-border);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   cursor: pointer;
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
@@ -29740,7 +29742,7 @@ body.dock-modal-open {
   padding: 10px 12px;
   background: var(--dock-surface-1);
   border: 1px solid var(--dock-border);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   cursor: pointer;
   text-align: left;
   transition: border-color 120ms ease, box-shadow 120ms ease;
@@ -29891,7 +29893,7 @@ body.dock-modal-open {
   gap: 12px;
   padding: 12px;
   border: 1px solid color-mix(in srgb, var(--dock-border) 80%, transparent);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface-alt) 60%, var(--dock-surface));
 }
 
@@ -29910,8 +29912,8 @@ body.dock-modal-open {
   width: 100%;
   min-height: 34px;
   padding: 0 10px;
-  border-radius: 6px;
-  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.15));
+  border-radius: var(--radius, 4px);
+  border: 1px solid var(--dock-border, var(--border));
   background: var(--dock-surface-2, #181c26);
   color: var(--dock-text, #ffffff);
   font-size: 13px;
@@ -29932,7 +29934,7 @@ body.dock-modal-open {
   flex-direction: column;
   gap: 12px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-bg, #0f1219) 75%, transparent);
   border: 1px solid color-mix(in srgb, var(--dock-border) 60%, transparent);
 }
@@ -29972,7 +29974,7 @@ body.dock-modal-open {
   display: inline-flex;
   align-items: center;
   border: 1px solid color-mix(in srgb, var(--dock-border) 80%, transparent);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-2, #181c26);
   overflow: hidden;
 }
@@ -29985,7 +29987,7 @@ body.dock-modal-open {
   justify-content: center;
   border: none;
   background: transparent;
-  color: #cbd5e1;
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 13px;
   font-weight: 700;
@@ -30002,7 +30004,7 @@ body.dock-modal-open {
   text-align: center;
   font-size: 11px;
   font-weight: 600;
-  color: #f8fafc;
+  color: var(--text-primary);
   padding: 0 4px;
 }
 
@@ -30030,7 +30032,7 @@ body.dock-modal-open {
   gap: 14px;
   padding: 14px;
   border: 1px solid color-mix(in srgb, var(--dock-border) 78%, transparent);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface-alt) 54%, var(--dock-surface));
 }
 
@@ -30603,7 +30605,7 @@ body.dock-modal-open {
   padding: 10px 8px;
   background: var(--dock-surface-1);
   border: 1px solid var(--dock-border);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   cursor: pointer;
   transition: border-color 100ms ease, box-shadow 100ms ease;
 }
@@ -30686,7 +30688,7 @@ body.dock-modal-open {
   padding: 12px 10px;
   background: var(--dock-surface-1);
   border: 1px solid var(--dock-border);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   cursor: pointer;
   transition: border-color 100ms ease, box-shadow 100ms ease;
 }
@@ -31063,7 +31065,7 @@ body.dock-modal-open {
   padding: 6px;
   background: var(--dock-surface-1);
   border: 1px solid var(--dock-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   cursor: pointer;
   transition: border-color 100ms ease, box-shadow 100ms ease;
 }
@@ -31226,7 +31228,7 @@ body.dock-modal-open {
   margin-top: 4px;
   padding: 6px 10px;
   background: var(--dock-surface-2, rgba(255, 255, 255, 0.05));
-  border: 1px dashed var(--dock-border, rgba(255, 255, 255, 0.16));
+  border: 1px dashed var(--dock-border, var(--border));
   border-radius: 6px;
   color: var(--dock-text-dim, #94a3b8);
   font-size: 11px;
@@ -31370,7 +31372,7 @@ body.dock-modal-open {
 .dtb-bg-picker__select {
   width: 100%;
   min-height: 44px;
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   padding-left: 12px;
   padding-right: 34px;
   background-position: right 12px center;
@@ -31406,7 +31408,7 @@ body.dock-modal-open {
   align-items: center;
   justify-content: center;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-1, #111827);
   color: var(--dock-accent, #60a5fa);
   cursor: pointer;
@@ -31431,7 +31433,7 @@ body.dock-modal-open {
   gap: 12px;
   padding: 10px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-0, #111827);
   color: var(--dock-text-primary, #f8fafc);
   box-shadow: 0 18px 34px rgba(0, 0, 0, 0.34);
@@ -31476,7 +31478,7 @@ body.dock-modal-open {
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--dock-text-dim, #94a3b8);
   cursor: pointer;
@@ -31508,7 +31510,7 @@ body.dock-modal-open {
   gap: 10px;
   padding: 7px 9px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--dock-text-primary, #f8fafc);
   cursor: pointer;
@@ -31579,7 +31581,7 @@ body.dock-modal-open {
   padding: 10px 12px;
   background: var(--dock-surface-1);
   border: 1px solid var(--dock-border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   cursor: pointer;
   transition: border-color 100ms ease, background 100ms ease, transform 100ms ease;
   width: 100%;
@@ -31638,7 +31640,7 @@ body.dock-modal-open {
 .dtb-color-inline__popover {
   background: var(--dock-surface-0);
   border: 1px solid var(--dock-border);
-  border-radius: 14px;
+  border-radius: var(--radius, 4px);
   padding: 12px;
   box-shadow: 0 18px 34px rgba(0, 0, 0, 0.34);
   display: flex;
@@ -31735,7 +31737,7 @@ body.dock-modal-open {
   padding: 7px 9px;
   background: rgba(15, 23, 42, 0.16);
   border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
 }
 
 .dtb-color-inline__hash {
@@ -32392,7 +32394,7 @@ body.dock-modal-open {
   min-height: 30px;
   padding: 5px 10px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-alt, #172033);
   color: var(--dock-text-dim, #94a3b8);
   font: inherit;
@@ -32411,7 +32413,7 @@ body.dock-modal-open {
 .dock-time-placement-btn--active {
   border-color: var(--dock-accent, #3b82f6);
   background: rgba(59, 130, 246, 0.14);
-  color: #93c5fd;
+  color: var(--accent-blue);
   font-weight: 700;
   box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3);
 }
@@ -32607,7 +32609,7 @@ body.dock-modal-open {
   min-height: 32px;
   padding: 6px 10px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-alt, #172033);
   color: var(--dock-text-dim, #94a3b8);
   font: inherit;
@@ -32626,7 +32628,7 @@ body.dock-modal-open {
 .dock-time-mode-btn--active {
   border-color: var(--dock-accent, #3b82f6);
   background: rgba(59, 130, 246, 0.16);
-  color: #93c5fd;
+  color: var(--accent-blue);
   font-weight: 700;
   box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3);
 }
@@ -32733,8 +32735,8 @@ body.dock-modal-open {
   right: 8px;
   bottom: 8px;
   z-index: 9000;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
   animation: dock-mv-toast-in 0.16s ease-out;
 }
@@ -33848,7 +33850,7 @@ body.dock-modal-open {
   min-height: 56px;
   padding: 8px 10px;
   border: 1px dashed var(--dock-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface);
   cursor: pointer;
   transition: border-color 0.12s;
@@ -33981,8 +33983,8 @@ body.dock-modal-open {
 .dock-mv-properties-group {
   margin: 8px 0 10px 0;
   background: rgba(255, 255, 255, 0.025);
-  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.08));
-  border-radius: 6px;
+  border: 1px solid var(--dock-border, var(--border));
+  border-radius: var(--radius, 4px);
   overflow: visible;
 }
 
@@ -34008,7 +34010,7 @@ body.dock-modal-open {
 }
 
 .dock-mv-properties-group__header--open {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border);
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
 }
@@ -34054,7 +34056,7 @@ body.dock-modal-open {
 }
 
 .dock-mv-properties-group .dock-mv-property:not(:last-child) {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border);
 }
 
 .dock-mv-properties-group .dock-mv-property__label {
@@ -34273,7 +34275,7 @@ body.dock-modal-open {
   overflow: hidden;
   background: var(--dock-bg, #0F172A);
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
   padding: 4px;
   display: flex;
@@ -34350,7 +34352,7 @@ body.dock-modal-open {
   gap: 8px;
   width: 100%;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   cursor: pointer;
   font-size: 12px;
   color: var(--dock-text, #F8FAFC);
@@ -34452,7 +34454,7 @@ body.dock-modal-open {
   padding: 10px 12px;
   background: var(--dock-surface, #1E293B);
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -34551,7 +34553,7 @@ body.dock-modal-open {
   flex-direction: column;
   gap: 6px;
   padding: 9px 11px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   border: 1px solid var(--dock-border, #334155);
   background: var(--dock-bg, #0F172A);
   cursor: pointer;
@@ -34670,7 +34672,7 @@ body.dock-modal-open {
   padding: 10px 12px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
 }
 
 .dock-mv-spacing-group-head {
@@ -34707,7 +34709,7 @@ body.dock-modal-open {
   display: inline-flex;
   align-items: center;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-bg, #0F172A);
   overflow: hidden;
 }
@@ -34743,8 +34745,8 @@ body.dock-modal-open {
   color: var(--dock-text, #F8FAFC);
   padding: 0 4px;
   user-select: none;
-  border-left: 1px solid rgba(255, 255, 255, 0.06);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
 }
 
 .dock-mv-spacing-footer {
@@ -34766,7 +34768,7 @@ body.dock-modal-open {
   overflow: hidden;
   background: var(--dock-bg);
   border: 1px solid var(--dock-border);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   display: flex;
   flex-direction: column;
   z-index: 10001;
@@ -34833,7 +34835,7 @@ body.dock-modal-open {
   min-height: 34px;
   padding: 0 10px;
   border: 1px solid var(--dock-input-border, #334155);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-input-bg, #111827);
   color: var(--dock-text-dim, #94A3B8);
 }
@@ -34951,7 +34953,7 @@ body.dock-modal-open {
   gap: 7px;
   padding: 0 9px;
   border: 1px solid var(--dock-input-border, #334155);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-input-bg, #111827);
   color: var(--dock-text-dim, #94A3B8);
 }
@@ -34990,7 +34992,7 @@ body.dock-modal-open {
   min-height: 118px;
   padding: 6px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface) 84%, transparent);
   color: var(--dock-text, #F8FAFC);
   cursor: pointer;
@@ -35128,7 +35130,7 @@ body.dock-modal-open {
   min-width: 0;
   padding: 5px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface) 84%, transparent);
   color: var(--dock-text, #F8FAFC);
   font: inherit;
@@ -35204,7 +35206,7 @@ body.dock-modal-open {
   min-height: 34px;
   padding: 8px 9px;
   border: 1px dashed var(--dock-border, #334155);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface) 68%, transparent);
   color: var(--dock-text-dim, #94A3B8);
   font-size: 11px;
@@ -35224,7 +35226,7 @@ body.dock-modal-open {
   min-height: 50px;
   padding: 8px 10px;
   border: 1px dashed var(--dock-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface);
   cursor: pointer;
   transition: border-color 0.12s;
@@ -35389,7 +35391,7 @@ body.dock-modal-open {
   padding: 16px;
   background: var(--dock-surface);
   border: 1px solid var(--dock-border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg, 6px);
   z-index: 10001;
 }
 
@@ -35680,7 +35682,7 @@ body.dock-modal-open {
   min-width: 160px;
   background: var(--dock-bg);
   border: 1px solid var(--dock-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   padding: 4px;
   margin-top: 2px;
@@ -35771,7 +35773,7 @@ body.dock-modal-open {
   min-height: 34px;
   padding: 4px 7px 4px 5px;
   border: 1px solid var(--dock-input-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-input-bg);
   color: var(--dock-text);
   font: inherit;
@@ -35854,7 +35856,7 @@ body.dock-modal-open {
   overflow: hidden;
   padding: 10px;
   border: 1px solid var(--dock-border);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-bg);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.46);
 }
@@ -35904,7 +35906,7 @@ body.dock-modal-open {
   min-height: 38px;
   padding: 0 10px;
   border: 1px solid var(--dock-border-active);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-border-active) 18%, var(--dock-surface));
   color: var(--dock-text);
   font: inherit;
@@ -35929,7 +35931,7 @@ body.dock-modal-open {
   min-height: 30px;
   padding: 0 8px;
   border: 1px solid var(--dock-input-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-input-bg);
   color: var(--dock-text-dim);
 }
@@ -35963,7 +35965,7 @@ body.dock-modal-open {
   min-height: 48px;
   padding: 5px 7px 5px 5px;
   border: 1px solid var(--dock-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface) 82%, transparent);
   color: var(--dock-text);
   font: inherit;
@@ -36038,7 +36040,7 @@ body.dock-modal-open {
   min-height: 34px;
   padding: 8px 9px;
   border: 1px dashed var(--dock-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-surface) 68%, transparent);
   color: var(--dock-text-dim);
   font-size: 11px;
@@ -36054,7 +36056,7 @@ body.dock-modal-open {
 .dock-mv-slot-image__clear {
   min-height: 30px;
   border: 1px solid color-mix(in srgb, #EF4444 42%, var(--dock-border));
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: #FCA5A5;
   font: inherit;
@@ -36076,7 +36078,7 @@ body.dock-modal-open {
   max-height: min(82vh, 540px);
   background: var(--dock-bg);
   border: 1px solid var(--dock-border);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   display: flex;
   flex-direction: column;
   z-index: 10001;
@@ -36135,7 +36137,7 @@ body.dock-modal-open {
   margin: 8px 14px;
   padding: 7px 9px;
   border: 1px solid var(--dock-input-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-input-bg);
   color: var(--dock-text-dim);
 }
@@ -36160,7 +36162,7 @@ body.dock-modal-open {
   margin: 2px 14px 0;
   padding: 3px;
   border: 1px solid var(--dock-border);
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   background: rgba(15, 23, 42, 0.55);
 }
 
@@ -36183,8 +36185,8 @@ body.dock-modal-open {
 }
 
 .dock-mv-content-picker__tab--active {
-  color: #F8FAFC;
-  background: #1D4ED8;
+  color: var(--text-primary);
+  background: var(--primary);
 }
 
 .dock-mv-content-picker__tab:hover:not(.dock-mv-content-picker__tab--active) {
@@ -36213,7 +36215,7 @@ body.dock-modal-open {
   margin: 9px 14px 0;
   padding: 8px 10px;
   border: 1px solid rgba(51, 65, 85, 0.75);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: rgba(31, 41, 55, 0.54);
 }
 
@@ -36260,7 +36262,7 @@ body.dock-modal-open {
   width: 100%;
   padding: 9px 10px;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: rgba(15, 23, 42, 0.36);
   color: var(--dock-text);
   cursor: pointer;
@@ -36294,7 +36296,7 @@ body.dock-modal-open {
   flex-shrink: 0;
   border-radius: 5px;
   background: rgba(29, 78, 216, 0.12);
-  color: #93C5FD;
+  color: var(--accent-blue);
 }
 
 .dock-mv-content-picker__item-action {
@@ -36326,7 +36328,7 @@ body.dock-modal-open {
   max-height: calc(100vh - 24px);
   background: var(--dock-bg);
   border: 1px solid var(--dock-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   display: flex;
   flex-direction: column;
   z-index: 10001;
@@ -36634,7 +36636,7 @@ body.dock-modal-open {
   height: 28px;
   margin-right: auto;
   border: 1px solid var(--dock-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-alt, #1F2937);
   color: var(--dock-text-dim, #94A3B8);
   cursor: pointer;
@@ -37558,7 +37560,7 @@ button.dock-btm-toolbar__clear--inline,
   padding: 8px 10px 10px;
   background: var(--dock-surface);
   border: 1px solid var(--dock-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   margin: 6px 8px;
 }
 
@@ -37790,7 +37792,7 @@ button.dock-btm-toolbar__clear--inline,
 
 .dock-lt-align-toggle input[type="radio"]:checked+label {
   background: var(--dock-accent);
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .dock-lt-align-toggle label .material-icons {
@@ -38040,7 +38042,7 @@ button.dock-btm-toolbar__clear--inline,
   background: var(--dock-input-bg);
   background-image: linear-gradient(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.18));
   border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
   color: var(--dock-text);
   font-size: 12.5px;
@@ -38712,7 +38714,7 @@ textarea.dock-lt-field-input {
   inset: 0;
   z-index: 900;
   background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -38724,7 +38726,7 @@ textarea.dock-lt-field-input {
   max-width: 320px;
   background: var(--dock-surface);
   border: 1px solid var(--dock-border);
-  border-radius: 16px;
+  border-radius: var(--radius-lg, 6px);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
   color: var(--dock-text);
   position: relative;
@@ -39065,7 +39067,7 @@ textarea.dock-lt-field-input {
 .dock-module--bible--compact .dock-bible-verse-row__text {
   font-size: 11.5px;
   line-height: 1.45;
-  color: #f1f5f9;
+  color: var(--text-primary);
 }
 
 /* ── Bottom toolbar: compressed ── */
@@ -39427,7 +39429,7 @@ textarea.dock-lt-field-input {
 /* ── Library overlay ── */
 .dtb-image-picker__library-overlay {
   border: 1px solid var(--dock-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface);
   padding: 8px;
   display: flex;
@@ -39722,8 +39724,8 @@ textarea.dock-lt-field-input {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   animation: dock-modal-fade-in 0.2s ease-out;
 }
 
@@ -39744,7 +39746,7 @@ textarea.dock-lt-field-input {
   flex-direction: column;
   background: var(--dock-surface, #111827);
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 16px;
+  border-radius: var(--radius-lg, 6px);
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
   overflow: hidden;
   animation: dock-modal-slide-up 0.2s ease-out;
@@ -39772,7 +39774,7 @@ textarea.dock-lt-field-input {
   text-align: center;
   background: var(--dock-surface, #111827);
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 16px;
+  border-radius: var(--radius-lg, 6px);
   padding: 24px 20px 20px;
   box-shadow: 0 20px 48px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
   animation: dock-modal-slide-up 0.2s cubic-bezier(0.16, 1, 0.3, 1);
@@ -39821,7 +39823,7 @@ textarea.dock-lt-field-input {
   justify-content: center;
   height: 38px;
   padding: 0 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg, 6px);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -39896,7 +39898,7 @@ textarea.dock-lt-field-input {
   height: 28px;
   padding: 0;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-lg, 6px);
   background: transparent;
   color: var(--dock-text-dim, #94A3B8);
   cursor: pointer;
@@ -40001,7 +40003,7 @@ textarea.dock-lt-field-input {
 .dock-modal input[type="number"],
 .dock-modal textarea {
   min-height: 40px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg, 6px);
   font-size: 14px;
   padding: 0 12px;
 }
@@ -40018,7 +40020,7 @@ textarea.dock-lt-field-input {
   width: 36px;
   height: 36px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 8px;
+  border-radius: var(--radius-lg, 6px);
   cursor: pointer;
   padding: 2px;
   background: var(--dock-surface, #111827);
@@ -40067,7 +40069,7 @@ textarea.dock-lt-field-input {
   width: 100%;
   padding: 20px 0;
   border: 2px dashed var(--dock-border, #334155);
-  border-radius: 10px;
+  border-radius: var(--radius-lg, 6px);
   background: transparent;
   color: var(--dock-text-dim, #94A3B8);
   cursor: pointer;
@@ -40163,7 +40165,7 @@ textarea.dock-lt-field-input {
 .dock-modal__fit-btn {
   flex: 1;
   padding: 6px 0;
-  border-radius: 6px;
+  border-radius: var(--radius-lg, 6px);
   border: 1px solid var(--dock-border, #334155);
   background: transparent;
   color: var(--dock-text-dim, #94A3B8);
@@ -40220,7 +40222,7 @@ textarea.dock-lt-field-input {
 
 .dock-modal__gradient-bar {
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-lg, 6px);
   margin-bottom: 8px;
 }
 
@@ -40237,7 +40239,7 @@ textarea.dock-lt-field-input {
   width: 100%;
   margin-bottom: 10px;
   border: 1px solid var(--dock-border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface);
   overflow: hidden;
 }
@@ -40408,7 +40410,7 @@ textarea.dock-lt-field-input {
 .dock-animation-tile__name {
   font-size: 11px;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -40510,7 +40512,7 @@ textarea.dock-lt-field-input {
   padding: 3px 6px;
   border-radius: 4px;
   background: rgba(22, 163, 74, 0.88);
-  color: #fff;
+  color: var(--text-primary);
   font-size: 10px;
   font-weight: 700;
   line-height: 1.1;
@@ -40568,7 +40570,7 @@ textarea.dock-lt-field-input {
   padding: 4px 8px;
   border-radius: 9999px;
   background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
   border: 1px solid rgba(255, 255, 255, 0.2);
   font-size: 10px;
   font-weight: 600;
@@ -40586,7 +40588,7 @@ textarea.dock-lt-field-input {
   justify-content: center;
   gap: 6px;
   background: rgba(10, 14, 22, 0.82);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
   color: #fff;
   pointer-events: none;
 }
@@ -41105,7 +41107,7 @@ textarea.dock-lt-field-input {
   overflow-y: auto;
   padding: 0;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-panel-bg, #1e1f24);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
   display: flex;
@@ -41269,7 +41271,7 @@ textarea.dock-lt-field-input {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.12);
+  border: 2px solid var(--border);
   border-top-color: var(--dock-accent, #6366F1);
   border-right-color: rgba(99, 102, 241, 0.6);
   box-sizing: border-box;
@@ -41297,7 +41299,7 @@ textarea.dock-lt-field-input {
   gap: 6px;
   padding: 6px 8px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-input-bg, #1F2937);
   color: var(--dock-text, #F8FAFC);
   font-size: 12px;
@@ -41328,7 +41330,7 @@ textarea.dock-lt-field-input {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(2px);
+  backdrop-filter: none;
 }
 
 /* ── Upgrade promo ── */
@@ -41336,7 +41338,7 @@ textarea.dock-lt-field-input {
   padding: 10px 12px;
   margin: 6px 0;
   border: 1px solid color-mix(in srgb, var(--dock-accent) 20%, var(--dock-border));
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-accent) 6%, var(--dock-surface));
   color: var(--dock-text, #F8FAFC);
   font-size: 12px;
@@ -41393,7 +41395,7 @@ textarea.dock-lt-field-input {
   gap: 2px;
   padding: 8px;
   border: 1px solid var(--dock-border-soft, rgba(51, 65, 85, 0.4));
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-alt, #1F2937);
 }
 
@@ -41422,7 +41424,7 @@ textarea.dock-lt-field-input {
   flex-direction: column;
   gap: 6px;
   border: 1px solid var(--dock-border-soft, rgba(51, 65, 85, 0.4));
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   overflow: hidden;
 }
 
@@ -41674,8 +41676,8 @@ textarea.dock-lt-field-input {
   flex-direction: column;
   gap: 3px;
   box-sizing: border-box;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   background: #141720;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
 }
@@ -41683,7 +41685,7 @@ textarea.dock-lt-field-input {
 :root:not(.light) .dock-bible-actions__menu {
   background: #141720 !important;
   background-color: #141720 !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
+  border-color: var(--border) !important;
 }
 
 .dock-bible-actions__menu-item,
@@ -41695,7 +41697,7 @@ textarea.dock-lt-field-input {
   padding: 8px 12px;
   gap: 10px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--dock-text, #F8FAFC);
   font: inherit;
@@ -41782,7 +41784,7 @@ textarea.dock-lt-field-input {
   min-width: 32px;
   min-height: 32px;
   flex: 0 0 32px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
 }
 
 .dock-module--bible--narrow .dock-bible-compact-actions .dock-bible-actions__overflow {
@@ -41792,7 +41794,7 @@ textarea.dock-lt-field-input {
   min-width: 32px;
   min-height: 32px;
   flex: 0 0 32px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
 }
 
 /* ── Top-right three dots & KJV trigger in search row: borderless, compact overflow, spacious KJV ── */
@@ -42147,7 +42149,7 @@ textarea.dock-lt-field-input {
 }
 
 .dock-bible-search-bar__menu-btn:hover {
-  border-color: var(--dock-accent-soft-border, rgba(255, 255, 255, 0.1));
+  border-color: var(--dock-accent-soft-border, var(--border));
   background: var(--dock-accent-soft, rgba(255, 255, 255, 0.08));
   color: var(--dock-text, #F8FAFC);
 }
@@ -42453,7 +42455,7 @@ textarea.dock-lt-field-input {
   min-width: 0;
   overflow: hidden;
   border: 1px solid var(--dock-border-soft);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface);
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
@@ -42673,7 +42675,7 @@ textarea.dock-lt-field-input {
 .dtb-studio__modal--picker {
   background: var(--qs-bg, #18151d);
   border: 1px solid var(--qs-border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg, 6px);
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
   height: auto !important;
   max-height: min(88dvh, calc((100dvh - 24px) / var(--dock-font-scale, 1))) !important;
@@ -42723,7 +42725,7 @@ textarea.dock-lt-field-input {
 .dtb-studio__modal--picker .dtb-studio__header-label {
   font-size: 14px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
   line-height: 1.25;
 }
 
@@ -42737,8 +42739,8 @@ textarea.dock-lt-field-input {
 .dtb-studio__modal--picker .dtb-studio__close--strong {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg, 6px);
+  border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.04);
   color: #a39ca9;
   cursor: pointer;
@@ -42774,8 +42776,8 @@ textarea.dock-lt-field-input {
   gap: 6px !important;
   padding: 4px !important;
   background: rgba(255, 255, 255, 0.03) !important;
-  border: 1px solid rgba(255, 255, 255, 0.06) !important;
-  border-radius: 9px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-lg, 6px) !important;
   margin-bottom: 2px !important;
   flex-shrink: 0 !important;
 }
@@ -42793,7 +42795,7 @@ textarea.dock-lt-field-input {
   width: auto !important;
   min-width: 0 !important;
   padding: 0 12px !important;
-  border-radius: 7px !important;
+  border-radius: var(--radius-lg, 6px) !important;
   font-size: 13px !important;
   font-weight: 600 !important;
   color: var(--qs-text-muted, #8e8896) !important;
@@ -42854,8 +42856,8 @@ textarea.dock-lt-field-input {
   min-width: 0;
   min-height: 30px;
   padding: 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   background: rgba(255, 255, 255, 0.03);
   color: var(--qs-text-muted, #8e8896);
   font: inherit;
@@ -42868,7 +42870,7 @@ textarea.dock-lt-field-input {
 .dtb-bg-picker__subtab:hover {
   color: #ffffff;
   background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: var(--border);
 }
 
 .dtb-bg-picker__subtab--active {
@@ -42899,14 +42901,14 @@ textarea.dock-lt-field-input {
 .dtb-studio__modal--picker .dtb-control-section,
 .dtb-control-card {
   background: var(--qs-panel, #211c26);
-  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
-  border-radius: 10px;
+  border: 1px solid var(--qs-border, var(--border));
+  border-radius: var(--radius-lg, 6px);
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin-top: 0;
-  border-top: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
+  border-top: 1px solid var(--qs-border, var(--border));
 }
 
 .dtb-studio__modal--picker .dtb-icon-segmented {
@@ -42917,7 +42919,7 @@ textarea.dock-lt-field-input {
   gap: 12px !important;
   padding: 10px 14px !important;
   background: rgba(255, 255, 255, 0.02) !important;
-  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid var(--border) !important;
   border-radius: 8px !important;
 }
 
@@ -42929,8 +42931,8 @@ textarea.dock-lt-field-input {
   gap: 10px !important;
   padding: 8px 12px !important;
   background: rgba(255, 255, 255, 0.02) !important;
-  border: 1px solid rgba(255, 255, 255, 0.06) !important;
-  border-radius: 8px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-lg, 6px) !important;
 }
 
 .dtb-studio__modal--picker .dtb-control-subsection {
@@ -42953,7 +42955,7 @@ textarea.dock-lt-field-input {
 .dtb-setting-info .dtb-position-label {
   font-size: 12.5px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--text-primary);
   line-height: 1.25;
   white-space: nowrap;
 }
@@ -42972,7 +42974,7 @@ textarea.dock-lt-field-input {
   gap: 3px !important;
   padding: 3px !important;
   background: rgba(0, 0, 0, 0.35) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid var(--border) !important;
   border-radius: 7px !important;
   flex-shrink: 0 !important;
 }
@@ -43029,8 +43031,8 @@ textarea.dock-lt-field-input {
   height: 27px;
   min-height: 27px;
   padding: 0 18px 0 8px;
-  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.1));
-  border-radius: 6px;
+  border: 1px solid var(--qs-border, var(--border));
+  border-radius: var(--radius, 4px);
   background: var(--qs-panel-2, #28222c);
   color: var(--qs-text, #f7f4f8);
   font: inherit;
@@ -43137,9 +43139,9 @@ textarea.dock-lt-field-input {
   height: 34px !important;
   min-height: 34px !important;
   padding: 4px 6px !important;
-  border-radius: 6px !important;
+  border-radius: var(--radius, 4px) !important;
   background: var(--qs-panel-2, #28222c) !important;
-  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08)) !important;
+  border: 1px solid var(--qs-border, var(--border)) !important;
   cursor: pointer !important;
   box-sizing: border-box !important;
   transition: border-color 0.15s ease, background 0.15s ease !important;
@@ -43212,8 +43214,8 @@ textarea.dock-lt-field-input {
   height: 34px;
   min-height: 34px;
   background: var(--qs-panel-2, #28222c);
-  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
-  border-radius: 6px;
+  border: 1px solid var(--qs-border, var(--border));
+  border-radius: var(--radius-lg, 6px);
   overflow: hidden;
   transition: border-color 0.15s ease;
 }
@@ -43266,8 +43268,8 @@ textarea.dock-lt-field-input {
   height: 34px;
   min-height: 34px;
   padding: 0 28px 0 10px;
-  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
-  border-radius: 6px;
+  border: 1px solid var(--qs-border, var(--border));
+  border-radius: var(--radius, 4px);
   background: var(--qs-panel-2, #28222c);
   color: var(--qs-text, #f7f4f8);
   font: inherit;
@@ -43279,7 +43281,7 @@ textarea.dock-lt-field-input {
 }
 
 .dtb-compact-select-field__select:hover {
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: var(--border);
 }
 
 .dtb-compact-select-field__select:focus-visible {
@@ -43352,8 +43354,8 @@ textarea.dock-lt-field-input {
 
 .qs-choice-card {
   background: var(--qs-panel-2, #28222c);
-  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
-  border-radius: 8px;
+  border: 1px solid var(--qs-border, var(--border));
+  border-radius: var(--radius, 4px);
   padding: 10px 6px;
   text-align: center;
   cursor: pointer;
@@ -43366,7 +43368,7 @@ textarea.dock-lt-field-input {
 
 .qs-choice-card:hover {
   background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: var(--border);
 }
 
 .qs-choice-card--active {
@@ -43401,7 +43403,7 @@ textarea.dock-lt-field-input {
   gap: 12px;
   padding: 10px 12px;
   background: var(--qs-panel-2, #28222c);
-  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--qs-border, var(--border));
   border-radius: 8px;
   margin-top: 4px;
 }
@@ -43439,8 +43441,8 @@ textarea.dock-lt-field-input {
   width: 100%;
   padding: 10px 12px;
   background: var(--qs-panel, #211c26);
-  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
-  border-radius: 8px;
+  border: 1px solid var(--qs-border, var(--border));
+  border-radius: var(--radius, 4px);
   color: #c2bcc8;
   font: inherit;
   font-size: 12px;
@@ -43451,7 +43453,7 @@ textarea.dock-lt-field-input {
 
 .dtb-more-options-header:hover {
   background: var(--qs-panel-2, #28222c);
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .dtb-more-options-title {
@@ -43464,8 +43466,8 @@ textarea.dock-lt-field-input {
   margin-top: 8px;
   padding: 12px;
   background: var(--qs-panel, #211c26);
-  border: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
-  border-radius: 8px;
+  border: 1px solid var(--qs-border, var(--border));
+  border-radius: var(--radius, 4px);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -43478,7 +43480,7 @@ textarea.dock-lt-field-input {
   align-items: stretch;
   gap: 10px;
   padding: 12px 16px;
-  border-top: 1px solid var(--qs-border, rgba(255, 255, 255, 0.08));
+  border-top: 1px solid var(--qs-border, var(--border));
   background: var(--qs-bg, #18151d);
   flex-shrink: 0;
   position: sticky;
@@ -43501,7 +43503,7 @@ textarea.dock-lt-field-input {
   padding: 12px 14px;
   background: #17131b;
   border: 1px solid rgba(240, 90, 22, 0.22);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   width: 90%;
 }
 
@@ -43524,7 +43526,7 @@ textarea.dock-lt-field-input {
   gap: 7px;
   font-size: 13px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
   text-transform: none;
   letter-spacing: normal;
 }
@@ -43564,8 +43566,8 @@ textarea.dock-lt-field-input {
   padding: 8px 12px;
   min-height: 38px;
   background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   color: #f7f4f8;
   font-size: 12.5px;
   font-weight: 600;
@@ -43614,14 +43616,14 @@ textarea.dock-lt-field-input {
   right: 0;
   z-index: 100;
   background: #19141f;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   padding: 5px;
   display: flex;
   flex-direction: column;
   gap: 3px;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(240, 90, 22, 0.2);
-  backdrop-filter: blur(16px);
+  backdrop-filter: none;
   animation: dtb-studio-fadeIn 0.15s ease;
 }
 
@@ -43631,7 +43633,7 @@ textarea.dock-lt-field-input {
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   border: 1px solid transparent;
   background: transparent;
   color: #d1cbd6;
@@ -43695,8 +43697,8 @@ textarea.dock-lt-field-input {
   align-items: center;
   gap: 4px;
   background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   padding: 3px;
 }
 
@@ -43708,7 +43710,7 @@ textarea.dock-lt-field-input {
   gap: 6px;
   padding: 6px 10px;
   min-height: 34px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   border: 1px solid transparent;
   background: transparent;
   color: #a49da9;
@@ -43744,13 +43746,13 @@ textarea.dock-lt-field-input {
 
 .dtb-studio__sync-hint {
   font-size: 11.5px;
-  color: #94a3b8;
+  color: var(--text-secondary);
   line-height: 1.35;
   padding: 2px 4px;
 }
 
 .dtb-studio__sync-hint--all {
-  color: #94a3b8;
+  color: var(--text-secondary);
 }
 
 .dtb-studio__sync-custom {
@@ -43758,7 +43760,7 @@ textarea.dock-lt-field-input {
   flex-direction: column;
   gap: 10px;
   padding-top: 8px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--border);
   animation: dtb-studio-fadeIn 0.2s ease;
 }
 
@@ -43816,7 +43818,7 @@ textarea.dock-lt-field-input {
   min-height: 30px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
   color: #a49da9;
   font-size: 11.5px;
   font-weight: 500;
@@ -43837,7 +43839,7 @@ textarea.dock-lt-field-input {
 
 .dtb-studio__sync-chip:hover {
   background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: var(--border);
   color: #ffffff;
 }
 
@@ -43865,8 +43867,8 @@ textarea.dock-lt-field-input {
   width: 32% !important;
   min-height: 42px !important;
   padding: 0 16px !important;
-  border-radius: 8px !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: var(--radius-lg, 6px) !important;
+  border: 1px solid var(--border) !important;
   background: rgba(255, 255, 255, 0.04) !important;
   color: #ffffff !important;
   font-size: 13px !important;
@@ -43876,14 +43878,14 @@ textarea.dock-lt-field-input {
 
 .dtb-studio__modal--picker .dtb-studio__footer-btn--reset:hover {
   background: rgba(255, 255, 255, 0.08) !important;
-  border-color: rgba(255, 255, 255, 0.18) !important;
+  border-color: var(--border) !important;
 }
 
 .dtb-studio__modal--picker .dtb-studio__footer-btn--save {
   flex: 1 1 auto !important;
   min-height: 42px !important;
   padding: 0 16px !important;
-  border-radius: 8px !important;
+  border-radius: var(--radius-lg, 6px) !important;
   border: 1px solid var(--qs-accent, #f05a16) !important;
   background: var(--qs-accent, #f05a16) !important;
   color: #ffffff !important;
@@ -43921,9 +43923,9 @@ textarea.dock-lt-field-input {
   width: 440px;
   max-width: min(440px, calc(100vw - 24px));
   box-sizing: border-box;
-  background: #0f172a;
+  background: var(--bg);
   border: 1px solid #334155;
-  border-radius: 8px;
+  border-radius: var(--radius-lg, 6px);
   overflow: hidden;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
   animation: dock-force-update-slide-in 0.3s ease;
@@ -43978,7 +43980,7 @@ textarea.dock-lt-field-input {
   gap: 6px;
   padding: 10px 16px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -43999,9 +44001,9 @@ textarea.dock-lt-field-input {
 }
 
 .force-update-btn--secondary {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: #1e293b;
-  color: #f8fafc;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-primary);
 }
 
 .force-update-btn--secondary:hover {
@@ -44021,7 +44023,7 @@ textarea.dock-lt-field-input {
   flex-direction: column;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: color-mix(in srgb, var(--dock-bg, #0f1219) 70%, transparent);
   border: 1px solid color-mix(in srgb, var(--dock-border) 60%, transparent);
 }
@@ -44113,7 +44115,7 @@ textarea.dock-lt-field-input {
 
 .dtb-fx-style {
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   border: 1px solid color-mix(in srgb, var(--dock-border) 85%, transparent);
   background: var(--dock-surface-2, #181c26);
   color: var(--dock-text-secondary, #cbd5e1);
@@ -44149,7 +44151,7 @@ textarea.dock-lt-field-input {
   display: grid;
   grid-template-columns: 1fr 1fr;
   padding: 2px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   border: 1px solid var(--dock-border);
   background: var(--dock-surface);
   min-width: 0;
@@ -44183,7 +44185,7 @@ textarea.dock-lt-field-input {
   gap: 4px;
   height: 30px;
   padding: 0 10px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   border: 1px solid var(--dock-border);
   background: var(--dock-surface);
   color: var(--dock-text);
@@ -44294,7 +44296,7 @@ textarea.dock-lt-field-input {
 .dtb-collapsible__head:focus-visible {
   outline: 2px solid var(--dock-accent, #3b82f6);
   outline-offset: 2px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
 }
 
 /* ── Ministry sub-tab bar: success icon (never moves or covers anything) ── */
@@ -44420,8 +44422,8 @@ textarea.dock-lt-field-input {
   align-items: center;
   gap: 6px;
   padding: 7px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius, 4px);
+  border: 1px solid var(--border);
   background: transparent;
   color: inherit;
   font-size: 12px;
@@ -44497,7 +44499,7 @@ textarea.dock-lt-field-input {
 .dtb-studio__modal--picker .dtb-bg-picker__layout--compact .dtb-bg-picker__tabs {
   gap: 4px !important;
   padding: 3px !important;
-  border-radius: 8px !important;
+  border-radius: var(--radius-lg, 6px) !important;
 }
 
 .dtb-studio__modal--picker .dtb-bg-picker__tab,
@@ -44586,7 +44588,7 @@ textarea.dock-lt-field-input {
   width: 100%;
   gap: 6px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg, 6px);
 }
 
 .dtb-studio__modal--picker .dtb-studio__sync-header {
@@ -44846,7 +44848,7 @@ textarea.dock-lt-field-input {
   overflow-y: auto;
   padding: 4px;
   border: 1px solid color-mix(in srgb, var(--dock-border) 92%, transparent);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   /* Solid, not the translucent surface token, so the media thumbnails never show through. */
   background: #141720;
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
@@ -44994,7 +44996,7 @@ textarea.dock-lt-field-input {
   min-width: 176px;
   padding: 4px;
   gap: 1px;
-  border-radius: 7px;
+  border-radius: var(--radius, 4px);
   transform: scale(var(--dock-font-scale, 1));
   transform-origin: top left;
 }

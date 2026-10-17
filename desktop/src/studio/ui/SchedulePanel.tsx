@@ -3,7 +3,7 @@
  * It reads the same schedule the Dock and the planner use.
  */
 import { useCallback, useEffect, useState } from "react";
-import { Check } from "lucide-react";
+import { Check } from "../../components/icons/NativeIcons";
 import { DOCK_SCHEDULE_CHANGED_EVENT, getOrCreateActiveSchedule } from "../../dock/dockScheduleService";
 import type { ServicePlan, ServicePlanItem } from "../../service-planner/types";
 

@@ -33,7 +33,7 @@ import {
   ShieldAlert,
   Flame,
   HelpCircle,
-} from "lucide-react";
+} from "../components/icons/NativeIcons";
 import { INTERFACE_LOCALES } from "../i18n/localeCatalog";
 import { getInterfaceLanguageLabel } from "../services/interfaceLanguage";
 import { UpgradeModal } from "../components/UpgradeModal";

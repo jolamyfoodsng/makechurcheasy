@@ -4,7 +4,7 @@
  *  - BibleVerses (bottom Content tab): the chapter's verses, wide, like a reading list.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Search } from "../../components/icons/NativeIcons";
 import { getChapterCount } from "../../bible/bibleData";
 import { BIBLE_BOOKS } from "../../bible/types";
 import { parseBibleSearch } from "../../dock/bibleSearchParser";

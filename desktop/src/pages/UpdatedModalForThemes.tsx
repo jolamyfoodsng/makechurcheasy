@@ -4,7 +4,7 @@ import {
     Bold, Italic, Underline, Strikethrough,
     AlignLeft, AlignCenter, AlignRight, AlignJustify,
     Image as ImageIcon, RefreshCw, Link, Type, Bookmark, LayoutGrid
-} from 'lucide-react';
+} from '../components/icons/NativeIcons';
 
 export default function App() {
     return (

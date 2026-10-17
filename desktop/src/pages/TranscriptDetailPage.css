@@ -1,20 +1,18 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Geist:wght@500;600&display=swap');
-
 :root {
     /* Core Colors connected to App.css design system */
-    --app-bg: #0c0e17;
-    --app-surface: #131724;
-    --app-surface-hover: #1c2132;
-    --app-surface-variant: #171b28;
+    --app-bg: var(--bg);
+    --app-surface: var(--surface);
+    --app-surface-hover: var(--surface-raised);
+    --app-surface-variant: var(--surface-raised);
     --app-border: rgba(255, 255, 255, 0.08);
     --app-border-light: rgba(255, 255, 255, 0.05);
 
     /* Primary & Text */
-    --app-primary: #4f46e5;
-    --app-primary-hover: #4338ca;
-    --app-text-main: #ffffff;
-    --app-text-muted: #94a3b8;
-    --app-text-accent: #818cf8;
+    --app-primary: var(--primary);
+    --app-primary-hover: var(--primary-hover);
+    --app-text-main: var(--text-primary);
+    --app-text-muted: var(--text-secondary);
+    --app-text-accent: var(--accent-blue);
 
     /* Highlights */
     --hl-yellow: #fef08a;
@@ -54,7 +52,7 @@ body.light {
     --hl-yellow-bg: rgba(161, 98, 7, 0.10);
     --hl-green: #15803d;
     --hl-green-bg: rgba(21, 128, 61, 0.10);
-    --hl-blue: #1d4ed8;
+    --hl-blue: var(--primary);
     --hl-blue-bg: rgba(29, 78, 216, 0.10);
     --hl-purple: #7e22ce;
     --hl-purple-bg: rgba(126, 34, 206, 0.10);
@@ -72,7 +70,7 @@ body.light {
 }
 
 body {
-    font-family: var(--font-user, 'Inter', system-ui, -apple-system, sans-serif);
+    font-family: var(--font-body);
     background-color: var(--app-bg);
     color: var(--app-text-main);
     line-height: 1.5;
@@ -129,7 +127,7 @@ a {
 
 /* Utility / Typo Helpers */
 .font-mono {
-    font-family: 'Geist', monospace;
+    font-family: var(--font-mono);
 }
 
 .text-xs {
@@ -234,9 +232,9 @@ a {
 }
 
 .btn-outline {
-    background: #1e293b;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    color: #f8fafc;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
 }
 
 .btn-outline:hover {
@@ -317,7 +315,7 @@ a {
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 10px;
-    font-family: 'Geist', monospace;
+    font-family: var(--font-mono);
     text-transform: uppercase;
 }
 
@@ -373,7 +371,7 @@ a {
 .usage-card {
     background: var(--app-bg);
     border: 1px solid var(--app-border);
-    border-radius: 12px;
+    border-radius: var(--radius, 4px);
     padding: 16px;
 }
 
@@ -384,7 +382,7 @@ a {
     color: var(--app-text-muted);
     font-weight: 600;
     margin-bottom: 8px;
-    font-family: 'Geist', monospace;
+    font-family: var(--font-mono);
 }
 
 .usage-stats {
@@ -544,7 +542,7 @@ a {
 }
 
 .player-time {
-    font-family: 'Geist', monospace;
+    font-family: var(--font-mono);
     font-size: 0.875rem;
     color: white;
     white-space: nowrap;
@@ -644,7 +642,7 @@ a {
     position: absolute;
     inset: 0;
     background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
+    backdrop-filter: none;
     z-index: 50;
     display: flex;
     justify-content: flex-end;
@@ -1039,7 +1037,7 @@ a {
     font-size: 26px;
     font-weight: 700;
     letter-spacing: -0.5px;
-    color: #ffffff;
+    color: var(--text-primary);
 }
 
 .edit-btn {
@@ -1094,7 +1092,7 @@ a {
     font-size: 0.875rem;
     background: var(--app-primary);
     color: white;
-    border-radius: 6px;
+    border-radius: var(--radius, 4px);
     border: 1px solid var(--app-primary-hover);
     cursor: pointer;
     transition: all 0.2s;
@@ -1115,7 +1113,7 @@ a {
     align-items: center;
     gap: 7px;
     padding: 8px 16px;
-    border-radius: 6px;
+    border-radius: var(--radius, 4px);
     border: 1px solid var(--app-border);
     background: var(--app-surface);
     color: var(--app-text-main);
@@ -1139,7 +1137,7 @@ a {
     min-width: 180px;
     background: var(--app-surface);
     border: 1px solid var(--app-border);
-    border-radius: 6px;
+    border-radius: var(--radius, 4px);
     padding: 4px;
     z-index: 100;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
@@ -1221,13 +1219,13 @@ a {
 
 .beta-tag {
     background: rgba(30, 58, 138, 0.4);
-    color: #93c5fd;
+    color: var(--accent-blue);
     font-size: 10px;
     padding: 2px 6px;
     border-radius: 4px;
     text-transform: uppercase;
     font-weight: 600;
-    font-family: 'Geist', monospace;
+    font-family: var(--font-mono);
 }
 
 .detail-content {
@@ -1294,7 +1292,7 @@ a {
 .t-timestamp {
     width: 80px;
     flex-shrink: 0;
-    font-family: 'Geist', monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
     color: var(--app-text-accent);
     opacity: 0.8;
@@ -1357,7 +1355,7 @@ a {
     font-size: 16px;
     font-weight: 700;
     letter-spacing: 0.2px;
-    color: #ffffff;
+    color: var(--text-primary);
 }
 
 .match-badge {
@@ -1378,7 +1376,7 @@ a {
 .s-card {
     background: #27272a;
     border: 1px solid var(--app-border);
-    border-radius: 12px;
+    border-radius: var(--radius, 4px);
     padding: 16px;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -1436,7 +1434,7 @@ a {
 .s-title {
     font-size: 15px;
     font-weight: 600;
-    color: #ffffff;
+    color: var(--text-primary);
 }
 
 .s-actions {
@@ -1444,7 +1442,7 @@ a {
     gap: 8px;
     opacity: 0;
     transition: 0.2s;
-    color: #a1a1aa;
+    color: var(--text-muted);
 }
 
 .s-card:hover .s-actions {
@@ -1467,9 +1465,9 @@ a {
 }
 
 .s-time {
-    font-family: 'Geist', monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
-    color: #a1a1aa;
+    color: var(--text-muted);
 }
 
 .quick-actions-grid {
@@ -1530,7 +1528,7 @@ a {
     flex: 1;
     background: rgba(28, 32, 39, 0.7);
     border: 1px solid var(--app-border-light);
-    border-radius: 12px;
+    border-radius: var(--radius, 4px);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -1626,7 +1624,7 @@ a {
     background: rgba(16, 185, 129, 0.1);
     border: 1px solid rgba(16, 185, 129, 0.3);
     padding: 24px;
-    border-radius: 12px;
+    border-radius: var(--radius, 4px);
     text-align: center;
     margin-bottom: 24px;
     display: flex;
@@ -1667,7 +1665,7 @@ a {
     justify-content: space-between;
     align-items: center;
     padding: 8px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid var(--border);
 }
 
 .stat-row:last-child {
@@ -1692,7 +1690,7 @@ a {
     gap: 4px;
     padding: 4px;
     background: var(--app-surface-hover);
-    border-radius: 8px;
+    border-radius: var(--radius, 4px);
     border: 1px solid var(--app-border);
 }
 
@@ -1706,7 +1704,7 @@ a {
     font-size: 0.8125rem;
     font-weight: 500;
     color: var(--app-text-muted);
-    border-radius: 6px;
+    border-radius: var(--radius, 4px);
     border: none;
     background: transparent;
     cursor: pointer;
@@ -1756,7 +1754,7 @@ a {
     flex: 0 0 36px;
     place-items: center;
     border: 1px solid var(--app-border);
-    border-radius: 8px;
+    border-radius: var(--radius, 4px);
     color: var(--app-text-muted);
     background: var(--app-surface);
 }
@@ -1803,7 +1801,7 @@ a {
 .translation-card {
     background: var(--app-surface-variant);
     border: 1px solid var(--app-border);
-    border-radius: 10px;
+    border-radius: var(--radius, 4px);
     padding: 14px 16px;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -1825,7 +1823,7 @@ a {
     padding: 8px 14px;
     background: var(--app-surface-variant);
     border: 1px solid var(--app-border);
-    border-radius: 8px;
+    border-radius: var(--radius, 4px);
     color: var(--app-text-main);
     font-size: 0.8125rem;
     font-weight: 500;

@@ -3,7 +3,7 @@
  * Click outside or press Esc to close. Rendered inside the Studio so it uses its colours.
  */
 import { useEffect, type ReactNode } from "react";
-import { X } from "lucide-react";
+import { X } from "../../components/icons/NativeIcons";
 import { isRecordingShortcut } from "../shortcuts";
 
 interface StudioModalProps {

@@ -122,7 +122,7 @@
   max-height: 204px;
   overflow-y: auto;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-bg, #0F172A);
 }
 

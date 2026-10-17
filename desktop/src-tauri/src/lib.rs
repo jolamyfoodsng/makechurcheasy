@@ -34,6 +34,8 @@ mod overlay_relay;
 mod presentation_remote;
 mod sandbox_migration;
 mod studio_camera;
+mod studio_ndi;
+mod studio_ndi_out;
 #[cfg(not(target_os = "macos"))]
 use local_llm_stub as local_llm;
 
@@ -9752,6 +9754,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             copy_to_clipboard,
             open_studio_projector,
+            studio_ndi_out::start_studio_ndi_out,
+            studio_ndi_out::stop_studio_ndi_out,
+            studio_ndi_out::get_studio_ndi_out_status,
             save_bg_image,
             save_upload_file,
             prepare_studio_video_for_program,

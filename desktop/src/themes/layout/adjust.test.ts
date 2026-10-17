@@ -149,3 +149,55 @@ describe("layout adjust: line height and title", () => {
     expect(isLayoutAdjustDefault({ layoutShowTitle: false })).toBe(false);
   });
 });
+
+describe("layout adjust: verse box grows with bigger text", () => {
+  const GROW: ThemeLayout = {
+    version: 1,
+    format: "fullscreen",
+    swap: "content",
+    layers: [
+      { id: "bg", name: "Background", type: "box", anchor: "top-left", x: 0, y: 0, w: 1920, h: 1080, style: { fill: "#123456" }, ...anim },
+      { id: "ref", name: "Reference", type: "text", content: "{reference}", anchor: "top-center", x: 960, y: 200, w: 1200, h: 60, style: { fontSize: 40 }, ...anim },
+      { id: "verse", name: "Verse", type: "text", content: "{text}", anchor: "top-center", x: 960, y: 300, w: 1400, h: 400, style: { fontSize: 60 }, ...anim },
+      { id: "tr", name: "Translation", type: "text", content: "{translation}", anchor: "top-right", x: 1660, y: 900, w: 200, h: 40, style: { fontSize: 24 }, ...anim },
+    ],
+  };
+  const verseOf = (l: ThemeLayout) => l.layers.find((x) => x.id === "verse")!;
+
+  it("does not move the box at 100%", () => {
+    expect(verseOf(applyLayoutAdjust(GROW, { layoutLineHeight: 100 }))).toBe(verseOf(GROW));
+  });
+
+  it("grows the box by the size change while there is room", () => {
+    const v = verseOf(applyLayoutAdjust(GROW, { layoutTextScale: 125 }));
+    expect(v.h).toBe(500);
+    // Only 16px of room above (reference ends at 260, keeps 24px clear); the rest goes below.
+    expect(v.y).toBe(284);
+    expect(v.x).toBe(960);
+    expect(v.w).toBe(1400);
+  });
+
+  it("stops at the reference and translation, and spills to the free side", () => {
+    const v = verseOf(applyLayoutAdjust(GROW, { layoutTextScale: 200 }));
+    // Top stops 24px under the reference (260 + 24); bottom 24px above the translation (900 - 24).
+    expect(v.y).toBe(284);
+    expect(v.y + (v.h as number)).toBe(876);
+  });
+
+  it("counts bigger line spacing too", () => {
+    expect(verseOf(applyLayoutAdjust(GROW, { layoutLineHeight: 125 })).h).toBe(500);
+  });
+
+  it("stays inside its card in a lower third", () => {
+    const v = verseOf(applyLayoutAdjust(LT, { layoutTextScale: 200 }));
+    // Band is 200 tall; the verse sat 20 from its top and 30 from its bottom.
+    expect(v.y).toBe(20);
+    expect(v.h).toBe(160);
+  });
+
+  it("leaves auto-height and smaller text alone", () => {
+    expect(verseOf(applyLayoutAdjust(GROW, { layoutTextScale: 80 })).h).toBe(400);
+    const auto = { ...GROW, layers: GROW.layers.map((l) => (l.id === "verse" ? { ...l, h: "auto" as const } : l)) };
+    expect(verseOf(applyLayoutAdjust(auto, { layoutTextScale: 150 })).h).toBe("auto");
+  });
+});

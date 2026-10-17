@@ -1,3 +1,4 @@
+import { CheckCircle } from "./icons/NativeIcons";
 import { useState, useEffect } from "react";
 
 const TRIAL_WELCOME_KEY = "mce_trial_welcome_shown";
@@ -65,8 +66,8 @@ export default function TrialModal({
         style={{
           width: "100%",
           maxWidth: "400px",
-          borderRadius: "6px",
-          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: "var(--radius)",
+          border: "1px solid var(--border)",
           background: "#141420",
           padding: "24px",
           boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
@@ -77,14 +78,14 @@ export default function TrialModal({
       >
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: "16px" }}>
-          <div style={{ fontSize: "32px", marginBottom: "8px" }}>🎉</div>
+          <CheckCircle size={32} style={{ marginBottom: 8, color: "var(--success)" }} />
           <h2
             style={{
               fontSize: "18px",
               fontWeight: 700,
               color: "#E8E8F0",
               margin: 0,
-              fontFamily: "var(--font-user, Inter, system-ui, sans-serif)",
+              fontFamily: "var(--font-body)",
             }}
           >
             {isExistingUser
@@ -101,7 +102,7 @@ export default function TrialModal({
             color: "#A0A0B8",
             textAlign: "center",
             marginBottom: "16px",
-            fontFamily: "var(--font-user, Inter, system-ui, sans-serif)",
+            fontFamily: "var(--font-body)",
           }}
         >
           {isExistingUser
@@ -112,7 +113,7 @@ export default function TrialModal({
         {/* Features list */}
         <div
           style={{
-            borderRadius: "6px",
+            borderRadius: "var(--radius)",
             border: "1px solid rgba(255,255,255,0.06)",
             background: "rgba(255,255,255,0.02)",
             padding: "12px",
@@ -127,7 +128,7 @@ export default function TrialModal({
               letterSpacing: "0.05em",
               color: "#707090",
               marginBottom: "8px",
-              fontFamily: "var(--font-user, Inter, system-ui, sans-serif)",
+              fontFamily: "var(--font-body)",
             }}
           >
             {isExistingUser ? "Your trial includes:" : "Included in your trial:"}
@@ -142,7 +143,7 @@ export default function TrialModal({
                   gap: "8px",
                   fontSize: "13px",
                   color: "#E8E8F0",
-                  fontFamily: "var(--font-user, Inter, system-ui, sans-serif)",
+                  fontFamily: "var(--font-body)",
                 }}
               >
                 <span style={{ color: "#10B981" }}>✓</span>
@@ -154,7 +155,7 @@ export default function TrialModal({
 
         {/* Trial end date */}
         <div style={{ textAlign: "center", marginBottom: "20px" }}>
-          <p style={{ fontSize: "12px", color: "#707090", margin: 0, fontFamily: "var(--font-user, Inter, system-ui, sans-serif)" }}>
+          <p style={{ fontSize: "12px", color: "#707090", margin: 0, fontFamily: "var(--font-body)" }}>
             Trial Ends
           </p>
           <p
@@ -163,7 +164,7 @@ export default function TrialModal({
               fontWeight: 600,
               color: "#E8E8F0",
               margin: 0,
-              fontFamily: "var(--font-user, Inter, system-ui, sans-serif)",
+              fontFamily: "var(--font-body)",
             }}
           >
             {endDate}
@@ -176,14 +177,14 @@ export default function TrialModal({
           style={{
             width: "100%",
             padding: "10px 0",
-            borderRadius: "6px",
+            borderRadius: "var(--radius)",
             border: "none",
-            background: "#1D4ED8",
+            background: "var(--primary)",
             color: "#ffffff",
             fontSize: "14px",
             fontWeight: 600,
             cursor: "pointer",
-            fontFamily: "var(--font-user, Inter, system-ui, sans-serif)",
+            fontFamily: "var(--font-body)",
             transition: "background 0.2s ease",
           }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "#4A4EB8")}

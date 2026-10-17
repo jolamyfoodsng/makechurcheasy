@@ -1,15 +1,15 @@
 /* Presentation setup page — clean antigravity styling */
 
 .remote-presentation-page {
-  --remote-bg: #0c0e17;
-  --remote-surface: #131724;
+  --remote-bg: var(--bg);
+  --remote-surface: var(--surface);
   --remote-elevated: #171b28;
   --remote-border: rgba(255, 255, 255, 0.08);
-  --remote-text: #ffffff;
-  --remote-text-secondary: #94a3b8;
-  --remote-text-muted: #64748b;
-  --remote-blue: #4f46e5;
-  --remote-blue-hover: #4338ca;
+  --remote-text: var(--text-primary);
+  --remote-text-secondary: var(--text-secondary);
+  --remote-text-muted: var(--text-muted);
+  --remote-blue: var(--primary);
+  --remote-blue-hover: var(--primary-hover);
   --remote-success: #10b981;
   --remote-error: #ef4444;
 
@@ -35,10 +35,10 @@
   gap: 8px;
   min-height: 44px;
   padding: 0 16px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  background: #1e293b;
-  color: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
+  background: var(--surface-raised);
+  color: var(--text-primary);
   font: inherit;
   font-size: 15px;
   font-weight: 600;
@@ -62,7 +62,7 @@
 
 .remote-eyebrow {
   margin: 0 0 8px;
-  color: #a1a1aa;
+  color: var(--text-muted);
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -73,7 +73,7 @@
   width: min(720px, 100%);
   padding: 36px;
   border: 1px solid var(--remote-border);
-  border-radius: 14px;
+  border-radius: var(--radius, 4px);
   background: #18181b;
 }
 
@@ -90,7 +90,7 @@
   margin-bottom: 20px;
   border-radius: 12px;
   background: rgba(59, 130, 246, 0.12);
-  color: #60a5fa;
+  color: var(--accent-blue);
 }
 
 .remote-connect-card__header h1,
@@ -129,7 +129,7 @@
   min-height: 100%;
   padding: 28px;
   border: 1px solid var(--remote-border);
-  border-radius: 14px;
+  border-radius: var(--radius, 4px);
   background: #27272a;
 }
 
@@ -141,12 +141,12 @@
   height: 52px;
   border-radius: 12px;
   background: rgba(59, 130, 246, 0.12);
-  color: #60a5fa;
+  color: var(--accent-blue);
 }
 
 .remote-choice-card__body h2 {
   margin: 0;
-  color: #ffffff;
+  color: var(--text-primary);
   font-size: 22px;
   font-weight: 700;
 }
@@ -212,7 +212,7 @@
   width: 100%;
   padding: 0 14px;
   border: 1px solid var(--remote-border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   outline: none;
   background: #18181b;
   color: #ffffff;
@@ -222,7 +222,7 @@
 }
 
 .remote-field input::placeholder {
-  color: #71717a;
+  color: var(--text-muted);
 }
 
 .remote-field input:focus {
@@ -253,7 +253,7 @@
   gap: 10px;
   padding: 14px;
   border: 1px solid rgba(239, 68, 68, 0.35);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: rgba(239, 68, 68, 0.1);
   color: #fca5a5;
   font-size: 14px;
@@ -301,9 +301,9 @@
 
 .remote-secondary-button,
 .remote-icon-button {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: #1e293b;
-  color: #f8fafc;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-primary);
 }
 
 .remote-secondary-button:hover,
@@ -342,7 +342,7 @@
   gap: 12px;
   padding: 14px;
   border: 1px solid var(--remote-border);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: #27272a;
 }
 
@@ -354,13 +354,13 @@
 }
 
 .remote-discovery-header strong {
-  color: #ffffff;
+  color: var(--text-primary);
   font-size: 14px;
 }
 
 .remote-discovery-header span,
 .remote-discovery-message {
-  color: #a1a1aa;
+  color: var(--text-muted);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -378,7 +378,7 @@
   min-height: 44px;
   padding: 10px 12px;
   border: 1px solid var(--remote-border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: #18181b;
   color: #ffffff;
   font: inherit;
@@ -397,7 +397,7 @@
 .remote-discovery-candidate small {
   min-width: 0;
   overflow: hidden;
-  color: #a1a1aa;
+  color: var(--text-muted);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -414,7 +414,7 @@
   min-height: 96px;
   padding: 18px;
   border: 1px solid var(--remote-border);
-  border-radius: 12px;
+  border-radius: var(--radius, 4px);
   background: #27272a;
 }
 
@@ -461,7 +461,7 @@
 .remote-presentation-header h1 {
   font-size: 24px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .remote-presentation-header p {
@@ -646,7 +646,7 @@
   gap: 10px;
   padding: 14px;
   border: 1px solid var(--remote-border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: #27272a;
 }
 
@@ -661,7 +661,7 @@
 }
 
 .remote-link-control-heading strong {
-  color: #ffffff;
+  color: var(--text-primary);
   font-size: 14px;
 }
 
@@ -682,7 +682,7 @@
   height: 36px;
   padding: 0 10px;
   border: 1px solid var(--remote-border);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: #18181b;
   color: #ffffff;
   font-size: 14px;
@@ -708,7 +708,7 @@
 .remote-video-volume {
   flex: 1;
   min-width: 0;
-  accent-color: #4f46e5;
+  accent-color: var(--primary);
 }
 
 .remote-link-field {
@@ -727,7 +727,7 @@
   width: 100%;
   padding: 0 14px;
   border: 1px solid var(--remote-border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   outline: none;
   background: #27272a;
   color: #ffffff;
@@ -754,7 +754,7 @@
   min-height: 44px;
   padding: 10px 14px;
   border: 1px solid rgba(34, 197, 94, 0.28);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   background: rgba(34, 197, 94, 0.1);
   color: #bbf7d0;
   font-size: 14px;

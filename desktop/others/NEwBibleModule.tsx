@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import './NEwBibleModule.css';
-import { Play, MicOff, Mic, ChevronDown, ChevronLeft, ChevronRight, Check, Search, X, Plus, AlertCircle, Download, Trash2, AlertTriangle } from 'lucide-react';
+import { Play, MicOff, Mic, ChevronDown, ChevronLeft, ChevronRight, Check, Search, X, Plus, AlertCircle, Download, Trash2, AlertTriangle } from '../src/components/icons/NativeIcons';
 
 export interface Verse { id: string; text: string; }
 export interface QueueItem { id: string; title: string; type: string; active?: boolean; }

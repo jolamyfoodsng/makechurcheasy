@@ -10,7 +10,7 @@ import {
   Palette,
   Video,
   X,
-} from "lucide-react";
+} from "../components/icons/NativeIcons";
 import {
   ewBackgroundImporter,
   EW_IMPORT_COMPLETE_EVENT,

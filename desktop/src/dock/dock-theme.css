@@ -18,10 +18,10 @@ body {
   overflow: hidden;
   background: var(--bg-dark, #0c0e17);
   color: var(--text-primary, #ffffff);
-  --text-primary: #ffffff;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --input-placeholder: #64748b;
+  --text-primary: inherit;
+  --text-secondary: inherit;
+  --text-muted: inherit;
+  --input-placeholder: inherit;
   color-scheme: inherit;
 }
 
@@ -31,32 +31,32 @@ html.mv-theme-light body,
 html.mv-theme-light #dock-root,
 :root[data-theme="light"] body,
 :root[data-theme="light"] #dock-root {
-  background: #F5F1EA;
-  color: #241D18;
-  --text-primary: #241D18;
-  --text-secondary: #5D4E44;
-  --text-muted: #88766A;
-  --input-placeholder: #88766A;
+  background: var(--bg);
+  color: var(--text);
+  --text-primary: var(--text);
+  --text-secondary: inherit;
+  --text-muted: inherit;
+  --input-placeholder: var(--text-muted);
 }
 
 :root.light .dock-root {
-  --dock-bg: #F5F1EA;
-  --dock-surface: #FFFDF9;
-  --dock-surface-alt: #EEE7DE;
-  --dock-surface-hover: #E5D9CE;
-  --dock-surface-overlay: #FFFDF9;
-  --dock-border: #D7C8BA;
-  --dock-border-soft: #E5D9CE;
-  --dock-border-active: #A95335;
-  --dock-text: #241D18;
-  --dock-text-secondary: #5D4E44;
-  --dock-text-dim: #88766A;
-  --dock-text-muted: #88766A;
+  --dock-bg: var(--bg);
+  --dock-surface: var(--surface);
+  --dock-surface-alt: var(--surface-raised);
+  --dock-surface-hover: var(--surface-hover);
+  --dock-surface-overlay: var(--surface);
+  --dock-border: var(--border);
+  --dock-border-soft: var(--surface-hover);
+  --dock-border-active: var(--primary);
+  --dock-text: var(--text);
+  --dock-text-secondary: var(--text-secondary);
+  --dock-text-dim: var(--text-muted);
+  --dock-text-muted: var(--text-muted);
   --dock-text-disabled: #B7A89C;
-  --input-placeholder: #88766A;
-  --dock-accent: #A95335;
-  --dock-accent-hover: #BB6747;
-  --dock-accent-pressed: #883D29;
+  --input-placeholder: var(--text-muted);
+  --dock-accent: var(--primary);
+  --dock-accent-hover: var(--primary-hover);
+  --dock-accent-pressed: var(--primary-pressed);
   --dock-accent-soft: rgba(169, 83, 53, 0.1);
   --dock-accent-soft-border: rgba(169, 83, 53, 0.24);
   --dock-green: #4E8569;
@@ -71,8 +71,8 @@ html.mv-theme-light #dock-root,
   --dock-red-text: #9B403A;
   --dock-yellow: #A6762F;
   --dock-yellow-soft: rgba(166, 118, 47, 0.1);
-  --dock-input-bg: #FFFDF9;
-  --dock-input-border: #D7C8BA;
+  --dock-input-bg: var(--surface);
+  --dock-input-border: var(--border);
 }
 
 .dock-status-bar__left,
@@ -129,12 +129,12 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-shell-chip {
-  color: #64748B;
+  color: var(--text-muted);
 }
 
 :root.light .dock-shell-titleline__app,
 :root.light .dock-shell-titleline__divider {
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 :root.light .dock-shell-chip--good {
@@ -173,7 +173,7 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-worship-subtab-bar {
-  border-color: #CBD5E1;
+  border-color: var(--border);
   background: #F1F5F9;
 }
 
@@ -183,7 +183,7 @@ html.mv-theme-light #dock-root,
 
 :root.light .dock-worship-subtab:hover {
   background: #E2E8F0;
-  color: #0F172A;
+  color: var(--text-primary);
 }
 
 :root.light .dock-worship-subtab--active {
@@ -193,7 +193,7 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-btm-segmented {
-  border-color: #CBD5E1;
+  border-color: var(--border);
   background: #FFFFFF;
 }
 
@@ -202,12 +202,12 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-btm-segmented__item:not(:last-child) {
-  border-right-color: #CBD5E1;
+  border-right-color: var(--border);
 }
 
 :root.light .dock-btm-segmented__item:not(.dock-btm-segmented__item--active):hover {
   background: #E2E8F0;
-  color: #0F172A;
+  color: var(--text-primary);
 }
 
 :root.light .dock-btm-segmented__item--active {
@@ -217,7 +217,7 @@ html.mv-theme-light #dock-root,
 
 :root.light .dock-btm-toolbar__icon-btn,
 :root.light .dock-btm-toolbar__clear--inline {
-  border-color: #CBD5E1;
+  border-color: var(--border);
   background: #FFFFFF;
   color: #334155;
 }
@@ -226,7 +226,7 @@ html.mv-theme-light #dock-root,
 :root.light .dock-btm-toolbar__clear--inline:hover {
   border-color: var(--dock-accent-soft-border);
   background: #F1F5F9;
-  color: #0F172A;
+  color: var(--text-primary);
 }
 
 :root.light .dock-btm-toolbar__icon-btn--active {
@@ -237,13 +237,13 @@ html.mv-theme-light #dock-root,
 
 :root.light .dock-btm-overflow__menu,
 :root.light .dock-btm-display-mode-menu {
-  border-color: #CBD5E1;
+  border-color: var(--border);
   background: #FFFFFF;
   box-shadow: none;
 }
 
 :root.light .dock-btm-display-mode-menu__item {
-  color: #0F172A;
+  color: var(--text-primary);
 }
 
 :root.light .dock-btm-display-mode-menu__item:hover {
@@ -261,8 +261,8 @@ html.mv-theme-light #dock-root,
 
 :root.light .dock-search-dropdown {
   background: #FFFFFF;
-  border-color: #CBD5E1;
-  color: #0F172A;
+  border-color: var(--border);
+  color: var(--text-primary);
   box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
 }
 
@@ -277,35 +277,35 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-search-dropdown__item {
-  color: #0F172A;
+  color: var(--text-primary);
 }
 
 :root.light .dock-search-dropdown__item:hover,
 :root.light .dock-search-dropdown__item--active,
 :root.light .dock-search-dropdown__item--favorite:hover {
   background: var(--dock-accent-soft);
-  color: #0F172A;
+  color: var(--text-primary);
 }
 
 :root.light .dock-search-dropdown__item svg {
-  color: #64748B;
+  color: var(--text-muted);
 }
 
 :root.light .dock-search-dropdown__label {
-  color: #0F172A;
+  color: var(--text-primary);
 }
 
 :root.light .dock-search-dropdown__label {
-  color: #4f46e5;
+  color: var(--accent-blue);
 }
 
 :root.light .dock-search-dropdown__item:hover .dock-search-dropdown__label,
 :root.light .dock-search-dropdown__item--active .dock-search-dropdown__label {
-  color: #4338ca;
+  color: var(--primary-hover);
 }
 
 :root.light .dock-search-dropdown__snippet {
-  color: #0f172a;
+  color: var(--text-primary);
   opacity: 1;
 }
 
@@ -322,40 +322,40 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-search-dropdown__goto-btn {
-  color: #64748B;
+  color: var(--text-muted);
 }
 
 :root.light .dock-search-dropdown__goto-btn:hover {
-  color: #0F172A;
+  color: var(--text-primary);
   background: var(--dock-accent-soft);
   border-color: color-mix(in srgb, var(--dock-accent) 30%, transparent);
 }
 
 :root.light .dock-search-dropdown__chip {
   background: #f1f5f9;
-  border-color: #cbd5e1;
-  color: #0f172a;
+  border-color: var(--border);
+  color: var(--text-primary);
 }
 
 :root.light .dock-search-dropdown__chip:hover {
   background: var(--dock-accent-soft);
   border-color: color-mix(in srgb, var(--dock-accent) 40%, transparent);
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
 :root.light .dock-search-dropdown__chip .dock-search-dropdown__label {
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
 :root.light .dock-search-dropdown__item--recent {
   background: color-mix(in srgb, var(--dock-accent) 12%, #f1f5f9);
   border-color: color-mix(in srgb, var(--dock-accent) 40%, #cbd5e1);
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
 :root.light .dock-search-dropdown__item--recent .dock-search-dropdown__label {
   font-weight: 700;
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
 :root.light .dock-search-dropdown__item--recent svg {
@@ -373,7 +373,7 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dock-bible-favorites-modal__item-ref {
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
 :root.light .dock-bible-favorites-modal__item-snippet {
@@ -417,17 +417,17 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dtb-position-btn {
-  color: #64748B;
+  color: var(--text-muted);
 }
 
 :root.light .dtb-position-btn:hover {
   background: #E2E8F0;
-  color: #0F172A;
+  color: var(--text-primary);
 }
 
 :root.light .dtb-position-btn--active {
   background: #FFFFFF;
-  color: #0F172A;
+  color: var(--text-primary);
   box-shadow: 0 0 0 1px rgba(100, 116, 139, 0.18);
 }
 
@@ -442,12 +442,12 @@ html.mv-theme-light #dock-root,
 
 :root.light .dtb-icon-segmented__button:hover {
   background: #E2E8F0;
-  color: #0F172A;
+  color: var(--text-primary);
 }
 
 :root.light .dtb-icon-segmented__button--active {
   background: #FFFFFF;
-  color: #0F172A;
+  color: var(--text-primary);
   box-shadow: 0 0 0 1px rgba(29, 78, 216, 0.35), 0 1px 2px rgba(15, 23, 42, 0.12);
 }
 
@@ -457,7 +457,7 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dtb-compare-layout-trigger {
-  border-color: #CBD5E1;
+  border-color: var(--border);
   background: #FFFFFF;
   color: var(--dock-accent);
 }
@@ -469,30 +469,30 @@ html.mv-theme-light #dock-root,
 }
 
 :root.light .dtb-compare-layout-popover {
-  border-color: #CBD5E1;
+  border-color: var(--border);
   background: #FFFFFF;
-  color: #0F172A;
+  color: var(--text-primary);
   box-shadow: 0 18px 34px rgba(15, 23, 42, 0.16);
 }
 
 :root.light .dtb-compare-layout-popover__header strong,
 :root.light .dtb-compare-layout-popover__option-label {
-  color: #0F172A;
+  color: var(--text-primary);
 }
 
 :root.light .dtb-compare-layout-popover__eyebrow,
 :root.light .dtb-compare-layout-popover__label,
 :root.light .dtb-compare-layout-popover__close,
 :root.light .dtb-compare-layout-popover__option-check {
-  color: #64748B;
+  color: var(--text-muted);
 }
 
 :root.light .dtb-compare-layout-popover__close:hover,
 :root.light .dtb-compare-layout-popover__option:hover,
 :root.light .dtb-compare-layout-popover__option--active {
-  border-color: #CBD5E1;
+  border-color: var(--border);
   background: #F1F5F9;
-  color: #0F172A;
+  color: var(--text-primary);
 }
 
 :root.light .dtb-compare-layout-popover__option-icon {
@@ -1031,7 +1031,7 @@ html.mv-theme-light #dock-root,
 
 :root.light .dock-bible-verse-row--selected .dock-bible-verse-row__text,
 :root.light .dock-bible-verse-row--highlighted .dock-bible-verse-row__text {
-  color: #111827;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
@@ -1049,12 +1049,12 @@ html.mv-theme-light #dock-root,
 :root.light .dock-theme-quick__trigger:hover,
 :root.light .dock-theme-quick.is-open .dock-theme-quick__trigger,
 :root.light .dock-theme-studio.is-open .dock-theme-quick__trigger {
-  color: #111827;
+  color: var(--text-primary);
 }
 
 :root.light .dock-bible-browser__chapter-option--active,
 :root.light .dock-bible-browser__verse-option--active {
-  color: #111827;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
@@ -1065,11 +1065,11 @@ html.mv-theme-light #dock-root,
 
 :root.light .dock-media-card__action-icon--program:hover,
 :root.light .dock-media-card__action-icon--active-program {
-  color: #111827;
+  color: var(--text-primary);
 }
 
 :root.light .dock-media-card__segmented-btn--active {
-  color: #111827;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
@@ -1151,7 +1151,7 @@ html.mv-theme-light #dock-root,
 
 .dock-root :where(.dock-card, .dock-lyric-card, .dock-console-panel, .dock-settings-menu) {
   border-color: var(--dock-border-soft) !important;
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
 }
 
 .dock-root .dock-bottom-nav__item {
@@ -1243,7 +1243,7 @@ html.mv-theme-light #dock-root,
 }
 
 .dtb-shadow-thickness-section {
-  border-top: 1px solid var(--dock-border-soft, rgba(255, 255, 255, 0.08));
+  border-top: 1px solid var(--dock-border-soft, var(--border));
   padding-top: 12px;
   margin-top: 12px;
 }
@@ -1297,40 +1297,40 @@ html.mv-theme-light #dock-root,
 
 /* ── Language Confirmation Modal Theme Support ── */
 :root.light .dock-language-modal {
-  background: var(--dock-surface, #FFFDF9);
-  border-color: var(--dock-border, #D7C8BA);
+  background: var(--dock-surface, var(--surface));
+  border-color: var(--dock-border, var(--border));
   box-shadow: 0 20px 48px rgba(36, 29, 24, 0.14), 0 0 0 1px rgba(0, 0, 0, 0.04);
 }
 
 :root.light .dock-language-modal__title {
-  color: var(--dock-text, #241D18);
+  color: var(--dock-text, var(--text));
 }
 
 :root.light .dock-language-modal__desc {
-  color: var(--dock-text-secondary, #5D4E44);
+  color: var(--dock-text-secondary, var(--text-secondary));
 }
 
 :root.light .dock-language-modal__btn--cancel {
-  background: var(--dock-surface-alt, #EEE7DE);
-  border-color: var(--dock-border, #D7C8BA);
-  color: var(--dock-text, #241D18);
+  background: var(--dock-surface-alt, var(--surface-raised));
+  border-color: var(--dock-border, var(--border));
+  color: var(--dock-text, var(--text));
 }
 
 :root.light .dock-language-modal__btn--cancel:hover {
-  background: var(--dock-surface-hover, #E5D9CE);
-  color: var(--dock-text, #241D18);
+  background: var(--dock-surface-hover, var(--surface-hover));
+  color: var(--dock-text, var(--text));
 }
 
 :root.light .dock-bible-reader__quick-edit-toolbar-btn {
-  background: var(--dock-surface-alt, #EEE7DE);
-  border-color: var(--dock-border, #D7C8BA);
-  color: var(--dock-text, #241D18);
+  background: var(--dock-surface-alt, var(--surface-raised));
+  border-color: var(--dock-border, var(--border));
+  color: var(--dock-text, var(--text));
 }
 
 :root.light .dock-bible-reader__quick-edit-toolbar-btn:hover {
   background: var(--dock-accent-soft, rgba(169, 83, 53, 0.12));
-  border-color: var(--dock-accent, #A95335);
-  color: var(--dock-accent, #A95335);
+  border-color: var(--dock-accent, var(--primary));
+  color: var(--dock-accent, var(--primary));
   box-shadow: 0 2px 8px rgba(169, 83, 53, 0.18);
 }
 

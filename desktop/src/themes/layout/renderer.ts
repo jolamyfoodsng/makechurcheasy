@@ -10,7 +10,7 @@
  *   • Animations use the Web Animations API on transform / opacity / clip-path.
  *   • `will-change` is set only while an animation runs.
  *   • Loops pause while the theme is hidden; the stage is visibility:hidden.
- *   • Text auto-fit is a bounded binary search (≤ 7 measurements) per change.
+ *   • Text auto-fit is a bounded binary search (≤ 10 measurements) per change.
  */
 import {
   isSplitPreset,
@@ -962,9 +962,15 @@ export class ThemeRenderer {
       t.style.fontSize = `${max}px`;
       return;
     }
+    // minFontSize is a preferred floor, not a hard one: in a fixed box a long
+    // verse with a big size or line-height would otherwise be cut off mid-line.
     let lo = min;
     let hi = max;
-    for (let i = 0; i < 7 && hi - lo > 1; i++) {
+    if (fixed && !fits(min)) {
+      lo = 8;
+      hi = min;
+    }
+    for (let i = 0; i < 8 && hi - lo > 1; i++) {
       const mid = Math.floor((lo + hi) / 2);
       if (fits(mid)) lo = mid;
       else hi = mid;

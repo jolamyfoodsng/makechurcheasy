@@ -47,7 +47,7 @@ import {
   Lock,
   HelpCircle,
   ExternalLink,
-} from "lucide-react";
+} from "./icons/NativeIcons";
 import "../pages/BroadcastPage.css";
 import "./BroadcastSettingsPanel.css";
 
@@ -817,9 +817,9 @@ export function BroadcastSettingsPanel({
         >
           <div
             style={{
-              background: "#18181b",
-              border: "1px solid rgba(255, 255, 255, 0.12)",
-              borderRadius: "12px",
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius)",
               padding: "28px 32px",
               maxWidth: "460px",
               width: "100%",
@@ -831,14 +831,14 @@ export function BroadcastSettingsPanel({
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255, 255, 255, 0.1)", paddingBottom: "14px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border)", paddingBottom: "14px" }}>
               <h3 style={{ margin: 0, fontSize: "20px", fontWeight: 700, color: "#ffffff" }}>
                 {editingPerson ? "Edit Speaker Profile" : "Add Speaker Profile"}
               </h3>
               <button
                 type="button"
                 onClick={() => setShowPersonModal(false)}
-                style={{ background: "transparent", border: "none", color: "#a1a1aa", cursor: "pointer", padding: "4px" }}
+                style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px" }}
               >
                 <X size={20} />
               </button>
@@ -858,7 +858,7 @@ export function BroadcastSettingsPanel({
                   border: "1px solid rgba(255, 255, 255, 0.14)",
                   color: "#ffffff",
                   padding: "10px 14px",
-                  borderRadius: "8px",
+                  borderRadius: "var(--radius)",
                   fontSize: "15px",
                   outline: "none",
                 }}
@@ -879,7 +879,7 @@ export function BroadcastSettingsPanel({
                   border: "1px solid rgba(255, 255, 255, 0.14)",
                   color: "#ffffff",
                   padding: "10px 14px",
-                  borderRadius: "8px",
+                  borderRadius: "var(--radius)",
                   fontSize: "15px",
                   outline: "none",
                 }}
@@ -909,18 +909,18 @@ export function BroadcastSettingsPanel({
               </div>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "12px", paddingTop: "14px", borderTop: "1px solid rgba(255, 255, 255, 0.1)" }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "12px", paddingTop: "14px", borderTop: "1px solid var(--border)" }}>
               <button
                 type="button"
                 onClick={() => setShowPersonModal(false)}
-                style={{ padding: "8px 18px", borderRadius: "6px", background: "rgba(255, 255, 255, 0.08)", color: "#ffffff", border: "1px solid rgba(255, 255, 255, 0.14)", cursor: "pointer", fontSize: "14px", fontWeight: 500 }}
+                style={{ padding: "8px 18px", borderRadius: "var(--radius)", background: "rgba(255, 255, 255, 0.08)", color: "#ffffff", border: "1px solid rgba(255, 255, 255, 0.14)", cursor: "pointer", fontSize: "14px", fontWeight: 500 }}
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleSavePerson}
-                style={{ padding: "8px 18px", borderRadius: "6px", background: "#6366f1", color: "#ffffff", fontWeight: 600, border: "none", cursor: "pointer", fontSize: "14px" }}
+                style={{ padding: "8px 18px", borderRadius: "var(--radius)", background: "#6366f1", color: "#ffffff", fontWeight: 600, border: "none", cursor: "pointer", fontSize: "14px" }}
               >
                 Save Profile
               </button>
@@ -947,9 +947,9 @@ export function BroadcastSettingsPanel({
         >
           <div
             style={{
-              background: "#18181b",
-              border: "1px solid rgba(255, 255, 255, 0.12)",
-              borderRadius: "12px",
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius)",
               padding: "28px 32px",
               maxWidth: "480px",
               width: "100%",
@@ -961,14 +961,14 @@ export function BroadcastSettingsPanel({
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid rgba(255, 255, 255, 0.1)", paddingBottom: "14px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--border)", paddingBottom: "14px" }}>
               <h3 style={{ margin: 0, fontSize: "20px", fontWeight: 700, color: "#ffffff" }}>
                 {editingChannel?.channel ? "Edit Social Destination" : "Add Social Destination"}
               </h3>
               <button
                 type="button"
                 onClick={() => setShowChannelModal(false)}
-                style={{ background: "transparent", border: "none", color: "#a1a1aa", cursor: "pointer", padding: "4px" }}
+                style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", padding: "4px" }}
               >
                 <X size={20} />
               </button>
@@ -990,7 +990,7 @@ export function BroadcastSettingsPanel({
                   border: "1px solid rgba(255, 255, 255, 0.14)",
                   color: "#ffffff",
                   padding: "10px 14px",
-                  borderRadius: "8px",
+                  borderRadius: "var(--radius)",
                   fontSize: "15px",
                   outline: "none",
                 }}
@@ -1019,7 +1019,7 @@ export function BroadcastSettingsPanel({
                   border: "1px solid rgba(255, 255, 255, 0.14)",
                   color: "#ffffff",
                   padding: "10px 14px",
-                  borderRadius: "8px",
+                  borderRadius: "var(--radius)",
                   fontSize: "15px",
                   outline: "none",
                 }}
@@ -1037,7 +1037,7 @@ export function BroadcastSettingsPanel({
                   style={{
                     background: "transparent",
                     border: "none",
-                    color: "#a1a1aa",
+                    color: "var(--text-muted)",
                     fontSize: "13px",
                     cursor: "pointer",
                     display: "flex",
@@ -1060,7 +1060,7 @@ export function BroadcastSettingsPanel({
                   border: "1px solid rgba(255, 255, 255, 0.14)",
                   color: "#ffffff",
                   padding: "10px 14px",
-                  borderRadius: "8px",
+                  borderRadius: "var(--radius)",
                   fontSize: "15px",
                   fontFamily: "monospace",
                   outline: "none",
@@ -1105,7 +1105,7 @@ export function BroadcastSettingsPanel({
                     border: "1px solid rgba(255, 255, 255, 0.14)",
                     color: "#ffffff",
                     padding: "10px 14px",
-                    borderRadius: "8px",
+                    borderRadius: "var(--radius)",
                     fontSize: "15px",
                     outline: "none",
                   }}
@@ -1115,7 +1115,7 @@ export function BroadcastSettingsPanel({
                   <option value="Backup YouTube ingest server">Backup YouTube ingest server</option>
                   <option value="Backup YouTube ingest server (legacy RTMP)">Backup YouTube ingest server (legacy RTMP)</option>
                 </select>
-                <span style={{ fontSize: "13px", color: "#a1a1aa" }}>
+                <span style={{ fontSize: "13px", color: "var(--text-muted)" }}>
                   Standard RTMP matches your YouTube Studio URL (rtmp://a.rtmp.youtube.com/live2) for reliable delivery.
                 </span>
               </div>
@@ -1136,7 +1136,7 @@ export function BroadcastSettingsPanel({
                     border: "1px solid rgba(255, 255, 255, 0.14)",
                     color: "#ffffff",
                     padding: "10px 14px",
-                    borderRadius: "8px",
+                    borderRadius: "var(--radius)",
                     fontSize: "15px",
                     fontFamily: "monospace",
                     outline: "none",
@@ -1145,18 +1145,18 @@ export function BroadcastSettingsPanel({
               </div>
             )}
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "12px", paddingTop: "14px", borderTop: "1px solid rgba(255, 255, 255, 0.1)" }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "12px", paddingTop: "14px", borderTop: "1px solid var(--border)" }}>
               <button
                 type="button"
                 onClick={() => setShowChannelModal(false)}
-                style={{ padding: "8px 18px", borderRadius: "6px", background: "rgba(255, 255, 255, 0.08)", color: "#ffffff", border: "1px solid rgba(255, 255, 255, 0.14)", cursor: "pointer", fontSize: "14px", fontWeight: 500 }}
+                style={{ padding: "8px 18px", borderRadius: "var(--radius)", background: "rgba(255, 255, 255, 0.08)", color: "#ffffff", border: "1px solid rgba(255, 255, 255, 0.14)", cursor: "pointer", fontSize: "14px", fontWeight: 500 }}
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleSaveChannel}
-                style={{ padding: "8px 18px", borderRadius: "6px", background: "#6366f1", color: "#ffffff", fontWeight: 600, border: "none", cursor: "pointer", fontSize: "14px" }}
+                style={{ padding: "8px 18px", borderRadius: "var(--radius)", background: "#6366f1", color: "#ffffff", fontWeight: 600, border: "none", cursor: "pointer", fontSize: "14px" }}
               >
                 Save Channel
               </button>

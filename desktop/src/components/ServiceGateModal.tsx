@@ -102,7 +102,7 @@ export function ServiceGateModal({ open, onClose, onStartService, action }: Serv
             style={{
               padding: "8px 16px",
               borderRadius: 6,
-              border: "1px solid rgba(255,255,255,0.1)",
+              border: "1px solid var(--border)",
               background: "transparent",
               color: "rgba(255,255,255,0.7)",
               fontSize: 13,

@@ -60,6 +60,8 @@ socket2 = "0.6"
 # The Studio camera is opened once by the app itself (like OBS), then shown in every window.
 nokhwa = { version = "0.10", default-features = false, features = ["input-native"] }
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
+# NDI sources as a Studio camera: the NDI runtime is loaded only when it is installed (studio_ndi.rs).
+libloading = "0.8"
 tauri-plugin-updater = "2"
 # Lets the OBS Dock paste with Ctrl/Cmd+V: OBS's browser dock can't read the clipboard itself.
 arboard = { version = "3", default-features = false }

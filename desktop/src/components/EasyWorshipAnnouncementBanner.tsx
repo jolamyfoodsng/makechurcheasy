@@ -5,7 +5,7 @@ import {
   FolderDown,
   Loader2,
   X,
-} from "lucide-react";
+} from "./icons/NativeIcons";
 import {
   ewBackgroundImporter,
   EW_IMPORT_COMPLETE_EVENT,

@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Copy, Plus, Trash2, Zap, Bold } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, Plus, Trash2, Zap, Bold } from "../components/icons/NativeIcons";
 import { getCountdowns, syncCountdownsToDock } from "../countdowns/countdownStore";
 import {
   createMessage,
@@ -225,7 +225,7 @@ function TimerCard({
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ width: 22, height: 22, borderRadius: 11, background: "#1c2132", color: "#a1a1aa", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{index + 1}</span>
+        <span style={{ width: 22, height: 22, borderRadius: 11, background: "var(--surface-hover)", color: "var(--text-muted)", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{index + 1}</span>
         <input aria-label="Timer name" value={timer.name} onChange={(e) => onChange({ name: e.target.value })} placeholder="Timer name" style={{ ...inputStyle, fontWeight: 600, flex: 2 }} />
         <input aria-label="Speaker" value={timer.speaker} onChange={(e) => onChange({ speaker: e.target.value })} placeholder="Speaker (optional)" style={{ ...inputStyle, flex: 1.4 }} />
         <button type="button" title="Move up" aria-label="Move timer up" disabled={index === 0} onClick={(e) => { e.stopPropagation(); onMove(-1); }} style={{ ...iconBtn, opacity: index === 0 ? 0.35 : 1 }}><ChevronUp size={15} /></button>
@@ -265,7 +265,7 @@ function TimerCard({
         </div>
       </div>
 
-      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: timer.kind === "countdown" ? "#e2e8f0" : "#64748b" }}>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: timer.kind === "countdown" ? "var(--text-primary)" : "var(--text-muted)" }}>
         <input type="checkbox" checked={timer.autoNext} disabled={timer.kind !== "countdown"} onChange={(e) => onChange({ autoNext: e.target.checked })} />
         Start the next timer automatically when this one reaches zero
       </label>
@@ -301,7 +301,7 @@ function PresenterLink() {
   return (
     <div style={{ maxWidth: PREVIEW_W, border: "1px solid var(--border)", background: "var(--surface)", borderRadius: 10, padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ fontSize: 13, fontWeight: 700, color: "#fff" }}>Presenter screen</div>
-      <p style={{ fontSize: 12, color: "#94a3b8", margin: 0, lineHeight: 1.45 }}>
+      <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0, lineHeight: 1.45 }}>
         Open this link on a monitor, tablet or phone on the same Wi-Fi. The speaker sees the running timer, the next timer and your messages.
       </p>
       <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} aria-label="Presenter link" style={{ ...inputStyle, fontSize: 12 }} />
@@ -453,7 +453,7 @@ export default function RundownsView() {
               style={{ padding: "10px 12px", borderRadius: 8, cursor: "pointer", border: `1px solid ${rd.id === activeId ? "var(--primary)" : "transparent"}`, background: rd.id === activeId ? "rgba(99,102,241,0.1)" : "transparent" }}
             >
               <div style={{ fontSize: 13.5, fontWeight: 600, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rd.name || "Untitled"}</div>
-              <div style={{ fontSize: 11.5, color: "#a1a1aa", marginTop: 2 }}>
+              <div style={{ fontSize: 11.5, color: "var(--text-muted)", marginTop: 2 }}>
                 {rd.timers.length} timer{rd.timers.length === 1 ? "" : "s"} · {formatDuration(rd.timers.reduce((sum, t) => sum + (t.kind === "countdown" ? t.durationSeconds : 0), 0))} total
               </div>
               {rd.id === activeId && (
@@ -479,13 +479,13 @@ export default function RundownsView() {
                   <label style={labelStyle}>Rundown name</label>
                   <input value={active.name} onChange={(e) => patchActive({ name: e.target.value })} style={{ ...inputStyle, fontSize: 15, fontWeight: 700 }} />
                 </div>
-                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#e2e8f0", paddingBottom: 8 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-primary)", paddingBottom: 8 }}>
                   <input type="checkbox" checked={active.showProgressBar} onChange={(e) => patchActive({ showProgressBar: e.target.checked })} />
                   Show progress bar
                 </label>
               </div>
 
-              <p style={{ fontSize: 12.5, color: "#94a3b8", lineHeight: 1.5, margin: 0 }}>
+              <p style={{ fontSize: 12.5, color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 }}>
                 Build your timers here, then run them from the OBS Dock: <b>Time → Rundown</b>. Colours go green, yellow, then red as time runs out. Designs come from the <b>Designs</b> tab.
               </p>
 
@@ -495,7 +495,7 @@ export default function RundownsView() {
                   <button type="button" onClick={() => { const t = createTimer({ name: `Timer ${active.timers.length + 1}` }); patchActive({ timers: [...active.timers, t] }); setSelectedTimerId(t.id); }} style={{ ...iconBtn, width: "auto", padding: "0 12px", gap: 6, fontSize: 12.5, color: "#fff" }}><Plus size={14} /> Add timer</button>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {active.timers.length === 0 && <div style={{ fontSize: 13, color: "#94a3b8" }}>No timers yet. Add your first one.</div>}
+                  {active.timers.length === 0 && <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>No timers yet. Add your first one.</div>}
                   {active.timers.map((t, i) => (
                     <TimerCard
                       key={t.id}
@@ -530,7 +530,7 @@ export default function RundownsView() {
                       <button type="button" title="Delete message" aria-label="Delete message" onClick={(e) => { e.stopPropagation(); patchActive({ messages: active.messages.filter((x) => x.id !== m.id) }); }} style={{ ...iconBtn, color: "#f87171" }}><Trash2 size={14} /></button>
                     </div>
                   ))}
-                  {active.messages.length === 0 && <div style={{ fontSize: 13, color: "#94a3b8" }}>No messages yet. Messages are quick notes you can show to the speaker from the Dock.</div>}
+                  {active.messages.length === 0 && <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>No messages yet. Messages are quick notes you can show to the speaker from the Dock.</div>}
                 </div>
               </section>
             </div>
@@ -544,7 +544,7 @@ export default function RundownsView() {
                   <button key={lv} type="button" onClick={() => setPreviewLevel(lv)} style={{ ...iconBtn, width: "auto", padding: "0 12px", fontSize: 12, textTransform: "capitalize", color: "#fff", background: previewLevel === lv ? { green: "#15803d", yellow: "#a16207", red: "#b91c1c" }[lv] : "transparent" }}>{lv}</button>
                 ))}
               </div>
-              <p style={{ fontSize: 11.5, color: "#94a3b8", margin: 0, maxWidth: PREVIEW_W }}>Click a timer to preview it. Click a message to preview it on screen.</p>
+              <p style={{ fontSize: 11.5, color: "var(--text-secondary)", margin: 0, maxWidth: PREVIEW_W }}>Click a timer to preview it. Click a message to preview it on screen.</p>
               <PresenterLink />
             </div>
           </div>

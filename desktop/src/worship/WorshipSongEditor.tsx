@@ -7,7 +7,7 @@
  * Replaces the old SongFormModal in SongsTab.tsx.
  */
 
-import { ListX, Music, Redo, Save, Scissors, Undo, Wand2, X } from "lucide-react";
+import { ListX, Music, Redo, Save, Scissors, Undo, Wand2, X } from "../components/icons/NativeIcons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
 import { DEFAULT_THEME_SETTINGS, type BibleTheme, type BibleThemeSettings } from "../bible/types";

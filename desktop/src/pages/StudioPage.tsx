@@ -24,11 +24,14 @@ import {
   Eye,
   FileText,
   Image as ImageIcon,
+  Info,
   Maximize2,
   ChevronDown,
   Minimize2,
   Monitor,
   MonitorOff,
+  MonitorPlay,
+  Lock,
   Music,
   Play,
   Type as TextIcon,
@@ -37,7 +40,7 @@ import {
   Sun,
   Wifi,
   X,
-} from "lucide-react";
+} from "../components/icons/NativeIcons";
 import { useNavigate } from "react-router-dom";
 import { useThemeCreateGate } from "../hooks/useThemeCreateGate";
 import type { BibleTheme } from "../bible/types";
@@ -63,8 +66,11 @@ import { getChapter } from "../bible/bibleData";
 import { formatBiblePassageReference, parseBiblePassageReference } from "../dock/bibleMultiPassage";
 import { useAuth } from "../contexts/AuthContext";
 import { getEffectivePlan } from "../services/licenseService";
+import { isProUnlocked } from "../services/proLicense";
+import { openDashboardSubscriptionPlans } from "../services/subscriptionNavigation";
 import {
   DEFAULT_MEDIA_CONTROL,
+  alternateFrameUrl,
   bibleRangeSlide,
   bibleSlides,
   clearProgram,
@@ -83,6 +89,7 @@ import {
   setProgramMix,
   setProgramScroll,
   setProgramScreen,
+  setAltOutputMode,
   setStudioTextScale,
   setStudioTextStyle,
   stopProgramAudio,
@@ -159,6 +166,7 @@ import {
   openProjector,
   takeSurpriseCloseNote,
   pickDefaultMonitorKey,
+  readSavedAltMonitor,
   saveOutputMonitor,
   type OpenProjector,
   type ProjectorFeed,
@@ -427,6 +435,10 @@ const WorshipSongModal = lazy(() => import("../worship/WorshipSongModal"));
 export default function StudioPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const canUseAlternateOutput = getEffectivePlan(user) !== "free" || isProUnlocked();
+  const promptAlternateOutputUpgrade = useCallback(() => {
+    void openDashboardSubscriptionPlans();
+  }, []);
   const [layout, setLayout] = useState<StudioLayout>(readLayout);
   const section = layout.section;
   // Text has two tabs: Worship (songs) and Notes. `view` is what is really open.
@@ -757,6 +769,8 @@ export default function StudioPage() {
   const [copied, setCopied] = useState(false);
   const [menu, setMenu] = useState<{ x: number; y: number; feed: ProjectorFeed } | null>(null);
   const [outputPop, setOutputPop] = useState<{ x: number; y: number } | null>(null);
+  const [outputHelp, setOutputHelp] = useState<"output" | "alternate" | null>(null);
+  const outputMenuRef = useRef<HTMLDivElement>(null);
   // New users get a pointer to "Start output" until they open the output once (or dismiss it).
   const [outputHintSeen, setOutputHintSeen] = useState(() => {
     try { return localStorage.getItem("mce-studio-output-hint-seen") === "1"; } catch { return false; }
@@ -768,6 +782,20 @@ export default function StudioPage() {
   /** The screen chosen in the Output menu's drop-down ("window" = a new window). */
   const [outPick, setOutPick] = useState("");
   const outputOpen = projectorList.some((p) => p.feed === "program");
+  // Alternate output: a second screen with the same item in its own look (e.g. Lower Third for the stream).
+  const [altPick, setAltPick] = useState("");
+  const [altLook, setAltLookState] = useState<StudioMode>(() => {
+    try { return localStorage.getItem("mce-studio-alt-look") === "fullscreen" ? "fullscreen" : "lower-third"; } catch { return "lower-third"; }
+  });
+  const setAltLook = useCallback((mode: StudioMode) => {
+    setAltLookState(mode);
+    try { localStorage.setItem("mce-studio-alt-look", mode); } catch { /* ignore */ }
+  }, []);
+  const altProjector = projectorList.find((p) => p.feed === "alt");
+  const altOpen = Boolean(altProjector);
+  // Keep a separate alternate packet ready for the Studio's Alternate preview tab,
+  // even before a projector or NDI receiver is connected.
+  useEffect(() => { void setAltOutputMode(canUseAlternateOutput ? altLook : null); }, [canUseAlternateOutput, altLook]);
   const closingOutputRef = useRef(false);
   const hadOutputRef = useRef(outputOpen);
 
@@ -988,7 +1016,7 @@ export default function StudioPage() {
     // Full screen <-> Lower third was changed in Preview: the old look animates out first, then the new one in.
     const liveNow = liveSlideRef.current;
     if (liveNow && liveNow.module !== "media" && slide.module !== "media" && screenRef.current === "live" && liveModeRef.current && liveModeRef.current !== displayMode && transition !== "cut") {
-      await clearProgram(liveModeRef.current);
+      await clearProgram(liveModeRef.current, { preserveAlternate: true });
       await new Promise((resolve) => window.setTimeout(resolve, 480));
     }
     const ok = await goLive(outgoing, themes, displayMode, transition);
@@ -1074,7 +1102,7 @@ export default function StudioPage() {
     }
     switchingRef.current = true;
     try {
-      await clearProgram(displayMode);
+      await clearProgram(displayMode, { preserveAlternate: true });
       await new Promise((resolve) => window.setTimeout(resolve, 480));
       patchLayout({ displayMode: mode });
       const ok = await goLive(live, themes, mode, "fade");
@@ -2057,6 +2085,12 @@ export default function StudioPage() {
 
   // ── Projectors ──
   const openProjectorOn = useCallback(async (feed: ProjectorFeed, target: string) => {
+    if (feed === "alt" && !canUseAlternateOutput) {
+      setMenu(null);
+      setOutputPop(null);
+      promptAlternateOutputUpgrade();
+      return;
+    }
     setBusy(true);
     setMenu(null);
     try {
@@ -2064,8 +2098,12 @@ export default function StudioPage() {
         setMonitorKey(target);
         saveOutputMonitor(target);
       }
+      // A screen holds one projector: putting another one there replaces the Output, so that is not a surprise close.
+      if (feed !== "program" && target !== "window" && listOpenProjectors().some((p) => p.feed === "program" && p.monitorKey === target)) {
+        closingOutputRef.current = true;
+      }
       const opened = await openProjector(feed, target);
-      const what = feed === "program" ? "Output" : "Preview";
+      const what = feed === "program" ? "Output" : feed === "alt" ? "Alternate output" : "Preview";
       if (opened.reused) say(`${what} is already open${opened.monitorKey ? ` on ${opened.where}` : " in a window"}.`);
       else say(opened.monitorKey ? `${what} is on ${opened.where}. Press Esc on it to close it.` : `${what} opened in a window.`);
     } catch (error) {
@@ -2073,13 +2111,17 @@ export default function StudioPage() {
     } finally {
       setBusy(false);
     }
-  }, [say]);
+  }, [canUseAlternateOutput, promptAlternateOutputUpgrade, say]);
 
   const handleCloseOutput = useCallback(async (feed: ProjectorFeed = "program") => {
     setMenu(null);
     if (feed === "program") closingOutputRef.current = true;
     await closeAllProjectors(feed);
   }, []);
+
+  useEffect(() => {
+    if (!canUseAlternateOutput && altOpen) void handleCloseOutput("alt");
+  }, [canUseAlternateOutput, altOpen, handleCloseOutput]);
 
   // One click: send the Output to the projector/TV. With a second screen it goes there; with only this screen it opens a window.
   const startOutput = useCallback(async () => {
@@ -2227,8 +2269,28 @@ export default function StudioPage() {
     const saved = monitors.find((m) => m.key === monitorKey);
     const other = monitors.find((m) => !m.isControlScreen);
     setOutPick(current ? (current.monitorKey || "window") : (saved?.key ?? other?.key ?? monitors[0]?.key ?? "window"));
+    // The alternate output starts on its own screen: where it is, the saved one, or a free screen.
+    const alt = projectorList.find((p) => p.feed === "alt");
+    const taken = current?.monitorKey ?? saved?.key ?? other?.key;
+    const savedAlt = monitors.find((m) => m.key === readSavedAltMonitor() && m.key !== taken);
+    const freeAlt = monitors.find((m) => !m.isControlScreen && m.key !== taken);
+    setAltPick(alt ? (alt.monitorKey || "window") : (savedAlt?.key ?? freeAlt?.key ?? "window"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [Boolean(outputPop)]);
+
+  useEffect(() => {
+    if (!outputPop) setOutputHelp(null);
+  }, [outputPop]);
+
+  const outputMenuOpen = Boolean(outputPop);
+  useEffect(() => {
+    if (!outputMenuOpen) return;
+    const trigger = document.activeElement;
+    outputMenuRef.current?.querySelector<HTMLSelectElement>("select")?.focus();
+    return () => {
+      if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus();
+    };
+  }, [outputMenuOpen]);
 
   // The Output menu shows whether the camera is reaching the screen (refreshed while it is open).
   const [, setRelayTick] = useState(0);
@@ -2328,6 +2390,7 @@ export default function StudioPage() {
   // ── Labels ──
   const previewUrl = base ? previewMonitorUrl(base) : "";
   const outputUrl = base ? programFrameUrl(base) : "";
+  const alternateUrl = base ? alternateFrameUrl(base) : "";
   const outputMonitorName = projectorList.find((p) => p.feed === "program")?.where ?? "";
   const liveKey = liveSlide?.key ?? "";
   const versesOf = (slide: StudioSlide | null): number[] => {
@@ -2623,9 +2686,9 @@ export default function StudioPage() {
                 const r = e.currentTarget.getBoundingClientRect();
                 setOutputPop((cur) => (cur ? null : { x: Math.max(8, Math.min(window.innerWidth - 348, r.right - 340)), y: r.bottom + 6 }));
               }}
-              title={outputOpen ? `Output is on ${outputMonitorName || "a screen"}. Click for options.` : monitors.some((m) => !m.isControlScreen) ? "Send the Studio to the projector or TV" : "Open the output in a window you can drag to a projector"}
+              title={outputOpen ? `Output is on ${outputMonitorName || "a screen"}${altProjector ? `, alternate output on ${altProjector.where}` : ""}. Click for options.` : monitors.some((m) => !m.isControlScreen) ? "Send the Studio to the projector or TV" : "Open the output in a window you can drag to a projector"}
             >
-              <Monitor size={15} /> <span className="st-headbtn__label">{outputOpen ? "Output on" : "Start output"}</span>
+              <Monitor size={15} /> <span className="st-headbtn__label">{outputOpen ? (altOpen ? "Outputs on" : "Output on") : "Start output"}</span>
             </button>
             <button
               type="button"
@@ -2758,6 +2821,9 @@ export default function StudioPage() {
                 onTab={setPreviewTab}
                 previewUrl={previewUrl}
                 outputUrl={outputUrl}
+                alternateUrl={alternateUrl}
+                canUseAlternateOutput={canUseAlternateOutput}
+                onUpgradeAlternate={promptAlternateOutputUpgrade}
                 previewSlide={previewSlide}
                 liveSlide={liveSlide}
                 screen={screen}
@@ -2770,6 +2836,8 @@ export default function StudioPage() {
                 }}
                 displayMode={displayMode}
                 onDisplayMode={(mode: StudioMode) => void changeDisplayMode(mode)}
+                alternateMode={altLook}
+                onAlternateMode={setAltLook}
                 hasLook={Boolean(lookModule)}
                 currentTheme={currentTheme}
                 onOpenThemes={() => setThemeModal(true)}
@@ -3044,9 +3112,46 @@ export default function StudioPage() {
       {outputPop && (
         <>
           <div className="studio-menu-backdrop" onClick={() => setOutputPop(null)} onContextMenu={(e) => { e.preventDefault(); setOutputPop(null); }} />
-          <div className="studio-menu st-outpop" style={{ left: outputPop.x, top: outputPop.y }} role="menu">
-            <div className="st-outpop__title"><Monitor size={14} /> Output · projector or TV</div>
-            <p className="st-outpop__hint">{outputOpen ? `The output is on ${outputMonitorName || "a screen"}. Pick a screen and press the button to move it.` : "Pick the screen the congregation sees, then press the button."}</p>
+          <div
+            className="studio-menu st-outpop"
+            ref={outputMenuRef}
+            style={{ left: outputPop.x, top: outputPop.y }}
+            role="dialog"
+            aria-label="Output settings"
+            onClick={(event) => {
+              const target = event.target as HTMLElement;
+              if (outputHelp && !target.closest(".st-outpop__help, .st-outpop__info")) setOutputHelp(null);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
+                if (outputHelp) setOutputHelp(null);
+                else setOutputPop(null);
+              }
+            }}
+          >
+            <div className="st-outpop__heading">
+              <div className="st-outpop__title"><Monitor size={14} /> Output · projector or TV</div>
+              <button
+                type="button"
+                className="st-outpop__info"
+                aria-label="About the output screen"
+                aria-expanded={outputHelp === "output"}
+                aria-controls={outputHelp === "output" ? "st-output-help" : undefined}
+                title="About the output screen"
+                onClick={() => setOutputHelp((current) => current === "output" ? null : "output")}
+              >
+                <Info size={14} />
+              </button>
+              {outputHelp === "output" && (
+                <div id="st-output-help" className="st-outpop__help" role="note">
+                  <p>{outputOpen ? `The output is on ${outputMonitorName || "a screen"}. Choose another screen, then move the output there.` : "Choose the screen that should show the presentation, then start the output."}</p>
+                  {monitors.length < 2 && <p>Only this screen was found. Connect a projector or TV with HDMI to see it here.</p>}
+                  <p>Press Esc on the output to close it, or D to check what it is receiving.</p>
+                </div>
+              )}
+            </div>
             <label className="st-outpop__field">
               <span>Screen</span>
               <select value={outPick} onChange={(e) => setOutPick(e.target.value)} disabled={busy} aria-label="Screen for the output">
@@ -3058,38 +3163,87 @@ export default function StudioPage() {
             </label>
             <div className="st-outpop__btns">
               <button type="button" className="st-outpop__go" disabled={busy || !outPick} onClick={() => { setOutputPop(null); void openProjectorOn("program", outPick); }}>
-                <Monitor size={14} /> <span>{outputOpen ? "Move output to this screen" : "Go to this screen"}</span>
+                <Monitor size={14} /> <span>{outputOpen ? "Move output" : "Start output"}</span>
               </button>
               <button type="button" className="st-outpop__stopbtn" disabled={!outputOpen || busy} onClick={() => { setOutputPop(null); void handleCloseOutput("program"); }} title={outputOpen ? "Close the output screen" : "No output is open"}>
                 <X size={14} /> <span>Stop output</span>
               </button>
             </div>
             <div className="studio-menu__divider" />
-            <button type="button" role="menuitem" onClick={() => { setOutputPop(null); setSettingsPanel(true); }}>
+            <div className="st-outpop__heading">
+              <div className="st-outpop__title"><MonitorPlay size={14} /> Alternate output {!canUseAlternateOutput && <span className="st-outpop__pro">PRO</span>}</div>
+              <button
+                type="button"
+                className="st-outpop__info"
+                aria-label="About the alternate output"
+                aria-expanded={outputHelp === "alternate"}
+                aria-controls={outputHelp === "alternate" ? "st-alternate-help" : undefined}
+                title="About the alternate output"
+                onClick={() => setOutputHelp((current) => current === "alternate" ? null : "alternate")}
+              >
+                <Info size={14} />
+              </button>
+              {outputHelp === "alternate" && (
+                <div id="st-alternate-help" className="st-outpop__help" role="note">
+                  <p>{altProjector
+                    ? `On ${altProjector.where}: the same item, with the words as ${altLook === "lower-third" ? "a lower third" : "full screen"}.`
+                    : "A second screen shows the same item in its own look. For example, use a lower third for the live stream while the main screen shows full screen."}</p>
+                  {!canUseAlternateOutput && <p>Alternate outputs are included with Pro and trial access.</p>}
+                  <p className={liveCamera?.enabled && !cameraRelayStatus.ok ? "is-warning" : ""}>
+                    {liveCamera?.enabled
+                      ? `Camera to the screen: ${cameraRelayStatus.ok ? "sending" : cameraRelayStatus.text}.`
+                      : "Camera is not live. Turn it on and press Go Live to show it on the output."}
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="st-outpop__row">
+              <label className="st-outpop__field">
+                <span>Words</span>
+                <select value={altLook} disabled={!canUseAlternateOutput} onChange={(e) => setAltLook(e.target.value === "fullscreen" ? "fullscreen" : "lower-third")} aria-label="Look of the words on the alternate output">
+                  <option value="lower-third">Lower third</option>
+                  <option value="fullscreen">Full screen</option>
+                </select>
+              </label>
+              <label className="st-outpop__field">
+                <span>Screen</span>
+                <select value={altPick} onChange={(e) => setAltPick(e.target.value)} disabled={!canUseAlternateOutput || busy} aria-label="Screen for the alternate output">
+                  {monitors.map((m) => (
+                    <option key={m.key} value={m.key}>{monitorLabel(m)}{m.isControlScreen ? " (this screen)" : ""}{projectorList.some((p) => p.feed === "program" && p.monitorKey === m.key) ? " (Output)" : ""}</option>
+                  ))}
+                  <option value="window">New window</option>
+                </select>
+              </label>
+            </div>
+            <div className="st-outpop__btns">
+              <button type="button" className="st-outpop__go" disabled={busy || (canUseAlternateOutput && !altPick)} onClick={() => {
+                if (!canUseAlternateOutput) { setOutputPop(null); promptAlternateOutputUpgrade(); return; }
+                setOutputPop(null);
+                void openProjectorOn("alt", altPick);
+              }}>
+                {canUseAlternateOutput ? <MonitorPlay size={14} /> : <Lock size={14} />} <span>{canUseAlternateOutput ? (altOpen ? "Move here" : "Start alternate") : "Unlock Pro"}</span>
+              </button>
+              <button type="button" className="st-outpop__stopbtn" disabled={!altOpen || busy} onClick={() => { setOutputPop(null); void handleCloseOutput("alt"); }} title={altOpen ? "Close the alternate output" : "No alternate output is open"}>
+                <X size={14} /> <span>Stop</span>
+              </button>
+            </div>
+            <div className="studio-menu__divider" />
+            <button type="button" className="st-outpop__share" onClick={() => { setOutputPop(null); setSettingsTab("general"); setSettingsFocus(undefined); setSettingsPanel(true); }}>
               <Wifi size={14} /> <span>Share over Wi-Fi…</span>
             </button>
-            <p className="st-outpop__hint">
-              {monitors.length < 2 ? "Only this screen was found. Plug in a projector or TV (HDMI) to see it here. " : ""}
-              Press Esc on the output to close it. Press D on it to see what it is receiving.
-            </p>
-            <p className={`st-outpop__hint st-outpop__cam${liveCamera?.enabled && !cameraRelayStatus.ok ? " is-bad" : ""}`}>
-              {liveCamera?.enabled
-                ? `Camera to the screen: ${cameraRelayStatus.ok ? "sending" : cameraRelayStatus.text}.`
-                : "Camera: not live. Turn the camera on and press Go Live to show it on the output."}
-            </p>
           </div>
         </>
       )}
 
       {menu && (() => {
-        const feedName = menu.feed === "program" ? "Output" : "Preview";
+        const feedName = menu.feed === "program" ? "Main output" : menu.feed === "alt" ? "Alternate output" : "Preview";
         const open = projectorList.filter((p) => p.feed === menu.feed);
         return (
           <>
             <div className="studio-menu-backdrop" onClick={() => setMenu(null)} onContextMenu={(e) => { e.preventDefault(); setMenu(null); }} />
             <div className="studio-menu" style={{ left: menu.x, top: menu.y }} role="menu">
               <div className="studio-menu__item studio-menu__item--sub" role="menuitem" aria-haspopup="menu" tabIndex={0}>
-                {menu.feed === "program" ? <Monitor size={14} /> : <Eye size={14} />}
+                {menu.feed === "program" ? <Monitor size={14} /> : menu.feed === "alt" ? <MonitorPlay size={14} /> : <Eye size={14} />}
                 <span>Open {feedName} on a screen</span>
                 <ChevronRight size={14} />
                 <div className="studio-menu studio-menu--flyout" role="menu">

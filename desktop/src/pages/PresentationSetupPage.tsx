@@ -20,7 +20,7 @@ import {
   Volume2,
   VolumeX,
   Wifi,
-} from "lucide-react";
+} from "../components/icons/NativeIcons";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "react-router-dom";
 

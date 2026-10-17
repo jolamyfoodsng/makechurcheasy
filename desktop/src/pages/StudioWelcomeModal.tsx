@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Image as ImageIcon, Monitor, Music, Sparkles } from "lucide-react";
+import { BookOpen, Image as ImageIcon, Monitor, Music, Sparkles } from "../components/icons/NativeIcons";
 import ModalDialog from "../components/ModalDialog";
 import { clearStudioWelcomePending, hasStudioWelcomePending } from "../services/workspacePreference";
 import "./StudioWelcomeModal.css";

@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Upload } from "lucide-react";
+import { Upload } from "../../components/icons/NativeIcons";
 import { dockObsClient } from "../dockObsClient";
 import { ensureObsConnected } from "../obsConnectionGuard";
 import type { DockPresentationOutputTarget } from "../dockPresentationTarget";
@@ -1319,7 +1319,7 @@ export default function DockCountdownsTab({
                   <div style={{ display: "flex", gap: 4 }}>
                     {(["solid", "gradient", "image", "video", "transparent"] as BackgroundType[]).map((bgType) => (
                       <button key={bgType} type="button" onClick={() => { setEditBgUploadError(""); setEditBg((prev) => ({ ...prev, type: bgType })); }}
-                        style={{ flex: 1, padding: "5px 0", borderRadius: 6, fontSize: 11, fontWeight: 500, border: `1px solid ${editBg.type === bgType ? "#6366f1" : "var(--dock-border, rgba(255,255,255,0.1))"}`, background: editBg.type === bgType ? "rgba(99,102,241,0.2)" : "transparent", color: editBg.type === bgType ? "#818cf8" : "var(--dock-text-dim)", cursor: "pointer", textTransform: "capitalize" }}>
+                        style={{ flex: 1, padding: "5px 0", borderRadius: 6, fontSize: 11, fontWeight: 500, border: `1px solid ${editBg.type === bgType ? "#6366f1" : "var(--dock-border, rgba(255,255,255,0.1))"}`, background: editBg.type === bgType ? "rgba(99,102,241,0.2)" : "transparent", color: editBg.type === bgType ? "var(--accent-blue)" : "var(--dock-text-dim)", cursor: "pointer", textTransform: "capitalize" }}>
                         {t(`countdowns.backgroundType.${bgType}`, bgType)}
                       </button>
                     ))}
@@ -1407,7 +1407,7 @@ export default function DockCountdownsTab({
                               setEditMediaLoading(false);
                             }}
                               style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                              📁 {t("common.library", "Library")}
+                              <Icon name="folder" size={14} /> {t("common.library", "Library")}
                             </button>
                           </div>
                           {editBgUploadError && (
@@ -1419,7 +1419,7 @@ export default function DockCountdownsTab({
                       <div style={{ display: "flex", gap: 4 }}>
                         {(["cover", "contain", "stretch"] as ImageFit[]).map((fit) => (
                           <button key={fit} type="button" onClick={() => setEditBg((p) => ({ ...p, imageFit: fit }))}
-                            style={{ flex: 1, padding: "4px 0", borderRadius: 6, fontSize: 10, fontWeight: 500, border: `1px solid ${editBg.imageFit === fit ? "#6366f1" : "var(--dock-border, rgba(255,255,255,0.1))"}`, background: editBg.imageFit === fit ? "rgba(99,102,241,0.2)" : "transparent", color: editBg.imageFit === fit ? "#818cf8" : "var(--dock-text-dim)", cursor: "pointer", textTransform: "capitalize" }}>
+                            style={{ flex: 1, padding: "4px 0", borderRadius: 6, fontSize: 10, fontWeight: 500, border: `1px solid ${editBg.imageFit === fit ? "#6366f1" : "var(--dock-border, rgba(255,255,255,0.1))"}`, background: editBg.imageFit === fit ? "rgba(99,102,241,0.2)" : "transparent", color: editBg.imageFit === fit ? "var(--accent-blue)" : "var(--dock-text-dim)", cursor: "pointer", textTransform: "capitalize" }}>
                             {t(`countdowns.imageFit.${fit}`, fit)}
                           </button>
                         ))}
@@ -1473,7 +1473,7 @@ export default function DockCountdownsTab({
                               setEditMediaLoading(false);
                             }}
                               style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--dock-border, rgba(255,255,255,0.15))", background: "rgba(0,0,0,0.2)", color: "var(--dock-text-dim)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                              📁 {t("common.library", "Library")}
+                              <Icon name="folder" size={14} /> {t("common.library", "Library")}
                             </button>
                           </div>
                           {editBgUploadError && (

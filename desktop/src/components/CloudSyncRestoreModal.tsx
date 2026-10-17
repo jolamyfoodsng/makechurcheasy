@@ -11,7 +11,7 @@ import {
   RefreshCw,
   X,
   Layers,
-} from "lucide-react";
+} from "./icons/NativeIcons";
 import {
   fetchLatestCloudSnapshot,
   restoreSnapshot,
@@ -100,8 +100,8 @@ export function CloudSyncRestoreModal({
           width: "100%",
           maxWidth: "540px",
           background: "#18181c",
-          border: "1px solid rgba(255, 255, 255, 0.08)",
-          borderRadius: "14px",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius)",
           boxShadow: "0 20px 50px rgba(0, 0, 0, 0.5)",
           overflow: "hidden",
           display: "flex",
@@ -115,7 +115,7 @@ export function CloudSyncRestoreModal({
             alignItems: "center",
             justifyContent: "space-between",
             padding: "1.25rem 1.5rem",
-            borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+            borderBottom: "1px solid var(--border)",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
@@ -128,7 +128,7 @@ export function CloudSyncRestoreModal({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "#818cf8",
+                color: "var(--accent-blue)",
               }}
             >
               <Cloud size={20} />
@@ -164,7 +164,7 @@ export function CloudSyncRestoreModal({
             style={{
               background: "transparent",
               border: "none",
-              color: "#94a3b8",
+              color: "var(--text-secondary)",
               cursor: "pointer",
               padding: 4,
               borderRadius: 6,
@@ -177,7 +177,7 @@ export function CloudSyncRestoreModal({
         {/* Content Body */}
         <div style={{ padding: "1.5rem", display: "flex", flexDirection: "column", gap: "1.25rem" }}>
           {loading ? (
-            <div style={{ padding: "2.5rem 0", textAlign: "center", color: "#94a3b8" }}>
+            <div style={{ padding: "2.5rem 0", textAlign: "center", color: "var(--text-secondary)" }}>
               <RefreshCw size={28} className="spin-animation" style={{ margin: "0 auto 12px" }} />
               <p style={{ margin: 0, fontSize: "0.9rem" }}>
                 {t("cloudSync.checkingCloud", "Checking for latest cloud backup...")}
@@ -201,12 +201,12 @@ export function CloudSyncRestoreModal({
               <span>{error}</span>
             </div>
           ) : !snapshot ? (
-            <div style={{ padding: "2rem 0", textAlign: "center", color: "#94a3b8" }}>
+            <div style={{ padding: "2rem 0", textAlign: "center", color: "var(--text-secondary)" }}>
               <Cloud size={36} style={{ margin: "0 auto 12px", opacity: 0.5 }} />
-              <h4 style={{ margin: "0 0 6px 0", color: "#f8fafc" }}>
+              <h4 style={{ margin: "0 0 6px 0", color: "var(--text-primary)" }}>
                 {t("cloudSync.noBackupsFound", "No Cloud Backups Found")}
               </h4>
-              <p style={{ margin: 0, fontSize: "0.85rem", color: "#94a3b8" }}>
+              <p style={{ margin: 0, fontSize: "0.85rem", color: "var(--text-secondary)" }}>
                 {t(
                   "cloudSync.noBackupsFoundDesc",
                   "Back up this computer first, or ensure you are logged into the same church account."
@@ -219,7 +219,7 @@ export function CloudSyncRestoreModal({
               <h4 style={{ margin: "0 0 8px 0", color: "#ffffff", fontSize: "1.15rem" }}>
                 {t("cloudSync.restoreSuccess", "Restoration Complete!")}
               </h4>
-              <p style={{ margin: "0 0 16px 0", fontSize: "0.875rem", color: "#94a3b8" }}>
+              <p style={{ margin: "0 0 16px 0", fontSize: "0.875rem", color: "var(--text-secondary)" }}>
                 {t(
                   "cloudSync.restoreSummaryText",
                   "Successfully loaded {{songs}} songs, {{profiles}} broadcast profiles, and settings into this computer.",
@@ -236,7 +236,7 @@ export function CloudSyncRestoreModal({
                   window.location.reload();
                 }}
                 style={{
-                  background: "#4f46e5",
+                  background: "var(--primary)",
                   color: "#fff",
                   padding: "0.6rem 1.5rem",
                   borderRadius: 8,
@@ -256,14 +256,14 @@ export function CloudSyncRestoreModal({
                   padding: "1rem 1.25rem",
                   borderRadius: 10,
                   background: "#202026",
-                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  border: "1px solid var(--border)",
                   display: "flex",
                   flexDirection: "column",
                   gap: "0.75rem",
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
+                  <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
                     {t("cloudSync.sourceDevice", "Source Machine:")}
                   </span>
                   <strong style={{ fontSize: "0.85rem", color: "#ffffff" }}>
@@ -271,7 +271,7 @@ export function CloudSyncRestoreModal({
                   </strong>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
+                  <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>
                     {t("cloudSync.backupDate", "Backup Timestamp:")}
                   </span>
                   <span style={{ fontSize: "0.85rem", color: "#cbd5e1" }}>
@@ -301,7 +301,7 @@ export function CloudSyncRestoreModal({
                 >
                   <Music size={18} style={{ color: "#4ade80" }} />
                   <div>
-                    <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>Worship Songs</div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Worship Songs</div>
                     <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#ffffff" }}>
                       {manifest?.counts.worshipSongs || 0} Songs
                     </div>
@@ -319,9 +319,9 @@ export function CloudSyncRestoreModal({
                     gap: "0.6rem",
                   }}
                 >
-                  <Radio size={18} style={{ color: "#818cf8" }} />
+                  <Radio size={18} style={{ color: "var(--accent-blue)" }} />
                   <div>
-                    <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>Broadcast Engine</div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Broadcast Engine</div>
                     <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#ffffff" }}>
                       {manifest?.counts.broadcastProfiles || 0} Profiles (
                       {manifest?.counts.broadcastChannels || 0} Ch)
@@ -342,7 +342,7 @@ export function CloudSyncRestoreModal({
                 >
                   <FileText size={18} style={{ color: "#fbbf24" }} />
                   <div>
-                    <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>Preacher Notes</div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Preacher Notes</div>
                     <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#ffffff" }}>
                       {manifest?.counts.notesCount || 0} Notes
                     </div>
@@ -362,7 +362,7 @@ export function CloudSyncRestoreModal({
                 >
                   <Paintbrush size={18} style={{ color: "#c084fc" }} />
                   <div>
-                    <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>Church Branding</div>
+                    <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Church Branding</div>
                     <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#ffffff" }}>
                       Themes & OBS
                     </div>
@@ -378,7 +378,7 @@ export function CloudSyncRestoreModal({
                     alignItems: "center",
                     gap: "0.6rem",
                     fontSize: "0.85rem",
-                    color: "#f8fafc",
+                    color: "var(--text-primary)",
                     cursor: "pointer",
                   }}
                 >
@@ -436,8 +436,8 @@ export function CloudSyncRestoreModal({
                   disabled={restoring}
                   style={{
                     background: "rgba(255, 255, 255, 0.06)",
-                    border: "1px solid rgba(255, 255, 255, 0.12)",
-                    color: "#f8fafc",
+                    border: "1px solid var(--border)",
+                    color: "var(--text-primary)",
                     padding: "0.6rem 1.25rem",
                     borderRadius: 8,
                     fontSize: "0.875rem",
@@ -452,7 +452,7 @@ export function CloudSyncRestoreModal({
                   onClick={handleRestore}
                   disabled={restoring}
                   style={{
-                    background: "#4f46e5",
+                    background: "var(--primary)",
                     border: "none",
                     color: "#ffffff",
                     padding: "0.6rem 1.4rem",

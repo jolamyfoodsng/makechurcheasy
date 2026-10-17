@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, X, ChevronDown } from "lucide-react";
+import { Search, X, ChevronDown } from "./icons/NativeIcons";
 import { countries } from "../services/countries";
 
 interface CountryPickerProps {

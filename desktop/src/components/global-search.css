@@ -13,8 +13,8 @@
   justify-content: center;
   padding-top: 10vh;
   background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   animation: gsFadeIn 0.15s ease-out;
 }
 
@@ -37,7 +37,7 @@
   flex-direction: column;
   background: var(--surface-dark);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg, 6px);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-subtle);
   overflow: hidden;
   animation: gsSlideIn 0.18s ease-out;

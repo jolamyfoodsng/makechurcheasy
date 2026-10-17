@@ -8,7 +8,7 @@
  *               to project" turns them into slides and puts them in today's schedule.
  */
 import { useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { ArrowDown, ArrowUp, Check, Mic, MicOff, Pencil, Plus, Presentation, RefreshCw, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Mic, MicOff, Pencil, Plus, Presentation, RefreshCw, Trash2, X } from "../../components/icons/NativeIcons";
 import { loadDockNotes, saveDockNotes, type DockNote } from "../../dock/dockNotesStorage";
 import type { VoiceBibleCandidate } from "../../services/voiceBibleTypes";
 import type { StudioVerseAi } from "../useVerseAi";

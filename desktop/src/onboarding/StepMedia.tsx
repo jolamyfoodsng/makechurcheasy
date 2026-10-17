@@ -7,7 +7,7 @@
 
 import {
   ChevronRight
-} from "lucide-react";
+} from "../components/icons/NativeIcons";
 
 /* ── Mock Data ── */
 

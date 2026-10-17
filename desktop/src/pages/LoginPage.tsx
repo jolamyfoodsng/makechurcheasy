@@ -1,3 +1,4 @@
+import { Settings, QrCode, LoaderCircle, Mail } from "../components/icons/NativeIcons";
 import { AppLogo } from "@/components/AppLogo";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -265,7 +266,7 @@ export default function LoginPage() {
         minHeight: "100vh",
         alignItems: "center",
         justifyContent: "center",
-        background: "#0c0e17",
+        background: "var(--bg)",
         padding: "24px",
       }}
     >
@@ -288,11 +289,11 @@ export default function LoginPage() {
             padding: "48px",
             maxWidth: "400px",
           }}>
-            <div style={{ fontSize: "48px", marginBottom: "16px" }}>🔧</div>
-            <h1 style={{ fontSize: "24px", fontWeight: 600, color: "#f0f0f5", marginBottom: "12px" }}>
+            <Settings size={48} style={{ marginBottom: 16, color: "var(--text-secondary)" }} />
+            <h1 style={{ fontSize: "24px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "12px" }}>
               {t("login.maintenance.title")}
             </h1>
-            <p style={{ fontSize: "16px", color: "#a0a0b0", lineHeight: 1.6 }}>
+            <p style={{ fontSize: "16px", color: "var(--text-secondary)", lineHeight: 1.6 }}>
               {(readDesktopConfigCache() || DEFAULT_DESKTOP_CONFIG).security.maintenanceMessage?.trim() ||
                 t("login.maintenance.message")}
             </p>
@@ -312,13 +313,13 @@ export default function LoginPage() {
             style={{
               fontSize: "20px",
               fontWeight: 600,
-              color: "#f0f0f5",
+              color: "var(--text-primary)",
               marginBottom: "6px",
             }}
           >
             MakeChurchEazy
           </h1>
-          <p style={{ fontSize: "13px", color: "#9898a8" }}>
+          <p style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
             {t("login.subtitle")}
           </p>
         </div>
@@ -347,12 +348,12 @@ export default function LoginPage() {
               style={{
                 width: "100%",
                 height: "42px",
-                borderRadius: "6px",
-                border: "1px solid rgba(255, 255, 255, 0.12)",
-                background: "#1e293b",
+                borderRadius: "var(--radius)",
+                border: "1px solid var(--border)",
+                background: "var(--surface-raised)",
                 fontSize: "13px",
                 fontWeight: 500,
-                color: "#f8fafc",
+                color: "var(--text-primary)",
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
@@ -360,16 +361,7 @@ export default function LoginPage() {
                 gap: "8px",
               }}
               title={t("login.tooltip.scanQr")}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="7" height="7" rx="1" />
-                <rect x="14" y="3" width="7" height="7" rx="1" />
-                <rect x="3" y="14" width="7" height="7" rx="1" />
-                <rect x="14" y="14" width="3" height="3" />
-                <line x1="21" y1="14" x2="21" y2="14.01" />
-                <line x1="14" y1="21" x2="14" y2="21.01" />
-                <line x1="21" y1="17" x2="21" y2="21" />
-                <line x1="17" y1="21" x2="21" y2="21" />
-              </svg>
+              <QrCode size={16} />
               {t("login.btn.scanQr")}
             </button>
 
@@ -382,7 +374,7 @@ export default function LoginPage() {
               }}
             >
               <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.12)" }} />
-              <span style={{ fontSize: "11px", color: "#6a6a7a" }}>or</span>
+              <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>or</span>
               <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.12)" }} />
             </div>
 
@@ -404,12 +396,12 @@ export default function LoginPage() {
               style={{
                 width: "100%",
                 height: "42px",
-                borderRadius: "6px",
-                border: "1px solid rgba(255, 255, 255, 0.12)",
-                background: "#1e293b",
+                borderRadius: "var(--radius)",
+                border: "1px solid var(--border)",
+                background: "var(--surface-raised)",
                 fontSize: "13px",
                 fontWeight: 500,
-                color: "#f8fafc",
+                color: "var(--text-primary)",
                 cursor: "pointer",
               }}
               title="Continue">
@@ -425,7 +417,7 @@ export default function LoginPage() {
               }}
             >
               <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.12)" }} />
-              <span style={{ fontSize: "11px", color: "#6a6a7a" }}>or</span>
+              <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>or</span>
               <div style={{ flex: 1, height: "1px", background: "rgba(255, 255, 255, 0.12)" }} />
             </div>
 
@@ -437,12 +429,12 @@ export default function LoginPage() {
               style={{
                 width: "100%",
                 height: "42px",
-                borderRadius: "6px",
-                border: "1px solid rgba(255, 255, 255, 0.12)",
-                background: "#1e293b",
+                borderRadius: "var(--radius)",
+                border: "1px solid var(--border)",
+                background: "var(--surface-raised)",
                 fontSize: "13px",
                 fontWeight: 500,
-                color: "#f8fafc",
+                color: "var(--text-primary)",
                 cursor: "pointer",
               }}
               title="Enter Pairing Code">
@@ -452,13 +444,13 @@ export default function LoginPage() {
             <p
               style={{
                 fontSize: "11px",
-                color: "#6a6a7a",
+                color: "var(--text-muted)",
                 marginTop: "12px",
                 lineHeight: 1.5,
               }}
             >
               Get a pairing code from{" "}
-              <span style={{ color: "#9898a8" }}>makechurcheazy.com/devices</span>
+              <span style={{ color: "var(--text-secondary)" }}>makechurcheazy.com/devices</span>
             </p>
 
           </div>
@@ -485,7 +477,7 @@ export default function LoginPage() {
             {/* Generating spinner */}
             {regenerating ? (
               <div style={{ marginBottom: "16px" }}>
-                <div style={{ fontSize: "13px", color: "#9898a8", marginBottom: "8px" }}>
+                <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "8px" }}>
                   Generating a new authorization code...
                 </div>
                 <button
@@ -493,9 +485,9 @@ export default function LoginPage() {
                   style={{
                     width: "100%",
                     height: "38px",
-                    borderRadius: "6px",
+                    borderRadius: "var(--radius)",
                     border: "none",
-                    background: "#4F46E5",
+                    background: "var(--primary)",
                     fontSize: "13px",
                     fontWeight: 600,
                     color: "#fff",
@@ -507,9 +499,7 @@ export default function LoginPage() {
                     gap: "8px",
                   }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ animation: "spin 1s linear infinite" }}>
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="56" strokeDashoffset="14" />
-                  </svg>
+                  <LoaderCircle size={14} style={{ animation: "spin 1s linear infinite" }} />
                   Generating...
                 </button>
               </div>
@@ -522,7 +512,7 @@ export default function LoginPage() {
                 fontSize: "32px",
                 fontWeight: 700,
                 letterSpacing: "0.15em",
-                color: "#818cf8",
+                color: "var(--accent-blue)",
               }}
             >
               {displayPairingCode}
@@ -546,7 +536,7 @@ export default function LoginPage() {
                   animation: countdown > 0 ? "pulse 2s infinite" : "none",
                 }}
               />
-              <span style={{ fontSize: "13px", color: "#9898a8" }}>
+              <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
                 {countdown > 0
                   ? `Waiting for authorization... ${formatCountdown(countdown)}`
                   : "Code expired"}
@@ -555,7 +545,7 @@ export default function LoginPage() {
 
             {countdown > 0 ? (
               <>
-                <p style={{ fontSize: "12px", color: "#6a6a7a", marginBottom: "12px" }}>
+                <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "12px" }}>
                   Check your browser to authorize this device.
                 </p>
                 <div style={{ marginBottom: "24px" }}>
@@ -565,9 +555,9 @@ export default function LoginPage() {
                       style={{
                         flex: 1,
                         height: "36px",
-                        borderRadius: "6px",
+                        borderRadius: "var(--radius)",
                         border: "1px solid #4F46E5",
-                        background: "#4F46E5",
+                        background: "var(--primary)",
                         fontSize: "12px",
                         fontWeight: 600,
                         color: "#fff",
@@ -587,12 +577,12 @@ export default function LoginPage() {
                       style={{
                         flex: 1,
                         height: "36px",
-                        borderRadius: "6px",
-                        border: "1px solid rgba(255, 255, 255, 0.12)",
-                        background: copied ? "#22c55e" : "#1e293b",
+                        borderRadius: "var(--radius)",
+                        border: "1px solid var(--border)",
+                        background: copied ? "#22c55e" : "var(--surface-raised)",
                         fontSize: "12px",
                         fontWeight: 500,
-                        color: copied ? "#fff" : "#f8fafc",
+                        color: copied ? "#fff" : "var(--text-primary)",
                         cursor: "pointer",
                         transition: "all 0.15s",
                       }}
@@ -604,7 +594,7 @@ export default function LoginPage() {
               </>
             ) : (
               <>
-                <p style={{ fontSize: "12px", color: "#6a6a7a", marginBottom: "16px", lineHeight: 1.5 }}>
+                <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "16px", lineHeight: 1.5 }}>
                   This authorization code has expired.
                 </p>
                 <button
@@ -612,9 +602,9 @@ export default function LoginPage() {
                   style={{
                     width: "100%",
                     height: "38px",
-                    borderRadius: "6px",
+                    borderRadius: "var(--radius)",
                     border: "none",
-                    background: "#4F46E5",
+                    background: "var(--primary)",
                     fontSize: "13px",
                     fontWeight: 600,
                     color: "#fff",
@@ -644,7 +634,7 @@ export default function LoginPage() {
                 background: "transparent",
                 fontSize: "13px",
                 fontWeight: 500,
-                color: "#9898a8",
+                color: "var(--text-secondary)",
                 cursor: "pointer",
               }}
               title="Cancel">
@@ -685,7 +675,7 @@ export default function LoginPage() {
                 display: "block",
                 fontSize: "12px",
                 fontWeight: 500,
-                color: "#9898a8",
+                color: "var(--text-secondary)",
                 marginBottom: "6px",
               }}
             >
@@ -694,13 +684,13 @@ export default function LoginPage() {
             <p
               style={{
                 fontSize: "11px",
-                color: "#6a6a7a",
+                color: "var(--text-muted)",
                 marginBottom: "10px",
                 lineHeight: "1.5",
               }}
             >
               Generate a code from{" "}
-              <span style={{ color: "#9898a8" }}>
+              <span style={{ color: "var(--text-secondary)" }}>
                 MakeChurchEazy
               </span>{" "}
               in your browser, then enter it here.
@@ -721,13 +711,13 @@ export default function LoginPage() {
                 height: "42px",
                 borderRadius: "4px",
                 border: "1px solid #2a2a3a",
-                background: redeeming ? "#18181f" : "#12121a",
+                background: redeeming ? "var(--surface-raised)" : "var(--input-bg)",
                 padding: "0 14px",
                 fontSize: "18px",
                 fontFamily: "monospace",
                 fontWeight: 700,
                 letterSpacing: "0.15em",
-                color: redeeming ? "#6a6a7a" : "#f0f0f5",
+                color: redeeming ? "var(--text-muted)" : "var(--text-primary)",
                 outline: "none",
                 textAlign: "center",
                 marginBottom: "12px",
@@ -750,7 +740,7 @@ export default function LoginPage() {
                   background: "transparent",
                   fontSize: "13px",
                   fontWeight: 500,
-                  color: "#9898a8",
+                  color: "var(--text-secondary)",
                   cursor: "pointer",
                 }}
                 title="Go back">
@@ -762,9 +752,9 @@ export default function LoginPage() {
                 style={{
                   flex: 2,
                   height: "38px",
-                  borderRadius: "6px",
+                  borderRadius: "var(--radius)",
                   border: "none",
-                  background: redeeming ? "#3a3a5a" : "#4F46E5",
+                  background: redeeming ? "#3a3a5a" : "var(--primary)",
                   fontSize: "13px",
                   fontWeight: 600,
                   color: "#fff",
@@ -778,9 +768,7 @@ export default function LoginPage() {
                 title="Authorize">
                 {redeeming ? (
                   <>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ animation: "spin 1s linear infinite" }}>
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="56" strokeDashoffset="14" />
-                    </svg>
+                    <LoaderCircle size={14} style={{ animation: "spin 1s linear infinite" }} />
                     Pairing…
                   </>
                 ) : "Authorize"}
@@ -809,7 +797,7 @@ export default function LoginPage() {
 
             {regenerating ? (
               <div style={{ marginBottom: "16px" }}>
-                <div style={{ fontSize: "13px", color: "#9898a8", marginBottom: "12px" }}>
+                <div style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "12px" }}>
                   Generating a new authorization code...
                 </div>
                 <button
@@ -817,9 +805,9 @@ export default function LoginPage() {
                   style={{
                     width: "100%",
                     height: "38px",
-                    borderRadius: "6px",
+                    borderRadius: "var(--radius)",
                     border: "none",
-                    background: "#4F46E5",
+                    background: "var(--primary)",
                     fontSize: "13px",
                     fontWeight: 600,
                     color: "#fff",
@@ -831,16 +819,14 @@ export default function LoginPage() {
                     gap: "8px",
                   }}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ animation: "spin 1s linear infinite" }}>
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeDasharray="56" strokeDashoffset="14" />
-                  </svg>
+                  <LoaderCircle size={14} style={{ animation: "spin 1s linear infinite" }} />
                   Generating...
                 </button>
               </div>
             ) : (
               <>
 
-            <p style={{ fontSize: "13px", color: "#9898a8", marginBottom: "16px" }}>
+            <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginBottom: "16px" }}>
               Scan this QR code with your phone to log in
             </p>
 
@@ -849,7 +835,7 @@ export default function LoginPage() {
                 style={{
                   display: "inline-block",
                   padding: "16px",
-                  borderRadius: "12px",
+                  borderRadius: "var(--radius)",
                   background: "#000",
                   marginBottom: "16px",
                 }}
@@ -870,13 +856,13 @@ export default function LoginPage() {
                   height: "240px",
                   alignItems: "center",
                   justifyContent: "center",
-                  borderRadius: "12px",
+                  borderRadius: "var(--radius)",
                   background: "#16161f",
                   border: "1px solid #2a2a3a",
                   marginBottom: "16px",
                 }}
               >
-                <span style={{ color: "#6a6a7a", fontSize: "13px" }}>Generating...</span>
+                <span style={{ color: "var(--text-muted)", fontSize: "13px" }}>Generating...</span>
               </div>
             )}
 
@@ -886,7 +872,7 @@ export default function LoginPage() {
                 fontSize: "20px",
                 fontWeight: 700,
                 letterSpacing: "0.15em",
-                color: "#f0f0f5",
+                color: "var(--text-primary)",
                 marginBottom: "8px",
               }}
             >
@@ -911,7 +897,7 @@ export default function LoginPage() {
                   animation: countdown > 0 ? "pulse 2s infinite" : "none",
                 }}
               />
-              <span style={{ fontSize: "13px", color: "#9898a8" }}>
+              <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
                 {countdown > 0
                   ? `Expires in ${formatCountdown(countdown)}`
                   : "Code expired"}
@@ -920,7 +906,7 @@ export default function LoginPage() {
 
             {countdown <= 0 && (
               <>
-                <p style={{ fontSize: "12px", color: "#6a6a7a", marginBottom: "16px", lineHeight: 1.5 }}>
+                <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "16px", lineHeight: 1.5 }}>
                   This authorization code has expired.
                 </p>
                 <button
@@ -928,9 +914,9 @@ export default function LoginPage() {
                   style={{
                     width: "100%",
                     height: "38px",
-                    borderRadius: "6px",
+                    borderRadius: "var(--radius)",
                     border: "none",
-                    background: "#4F46E5",
+                    background: "var(--primary)",
                     fontSize: "13px",
                     fontWeight: 600,
                     color: "#fff",
@@ -956,12 +942,12 @@ export default function LoginPage() {
               style={{
                 width: "100%",
                 height: "38px",
-                borderRadius: "6px",
-                border: "1px solid rgba(255, 255, 255, 0.12)",
+                borderRadius: "var(--radius)",
+                border: "1px solid var(--border)",
                 background: "transparent",
                 fontSize: "13px",
                 fontWeight: 500,
-                color: "#9898a8",
+                color: "var(--text-secondary)",
                 cursor: "pointer",
               }}
               title="Cancel">
@@ -1009,9 +995,9 @@ export default function LoginPage() {
             style={{
               width: "100%",
               maxWidth: "380px",
-              background: "#131724",
-              borderRadius: "8px",
-              border: "1px solid rgba(255, 255, 255, 0.12)",
+              background: "var(--surface)",
+              borderRadius: "var(--radius)",
+              border: "1px solid var(--border)",
               padding: "28px",
               boxShadow: "0 16px 48px rgba(0,0,0,0.6)",
             }}
@@ -1030,19 +1016,16 @@ export default function LoginPage() {
                   marginBottom: "12px",
                 }}
               >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="5" width="18" height="14" rx="2" />
-                  <polyline points="3 7 12 13 21 7" />
-                </svg>
+                <Mail size={24} color="var(--error)" />
               </div>
-              <h2 style={{ fontSize: "16px", fontWeight: 600, color: "#f0f0f5", margin: "0 0 6px" }}>
+              <h2 style={{ fontSize: "16px", fontWeight: 600, color: "var(--text-primary)", margin: "0 0 6px" }}>
                 Email Verification Required
               </h2>
-              <p style={{ fontSize: "13px", color: "#9898a8", margin: 0, lineHeight: 1.5 }}>
+              <p style={{ fontSize: "13px", color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
                 {verificationMessage}
               </p>
               {verificationEmail && (
-                <p style={{ fontSize: "12px", color: "#6a6a7a", margin: "8px 0 0", wordBreak: "break-all" }}>
+                <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "8px 0 0", wordBreak: "break-all" }}>
                   {verificationName ? `${verificationName} — ` : ""}{verificationEmail}
                 </p>
               )}
@@ -1064,7 +1047,7 @@ export default function LoginPage() {
                 background: "transparent",
                 fontSize: "12px",
                 fontWeight: 500,
-                color: "#6a6a7a",
+                color: "var(--text-muted)",
                 cursor: "pointer",
               }}
               title="Cancel">
@@ -1091,9 +1074,9 @@ export default function LoginPage() {
               alignItems: "center",
               gap: "12px",
               padding: "12px 16px",
-              borderRadius: "8px",
-              background: "#131724",
-              border: "1px solid rgba(255, 255, 255, 0.12)",
+              borderRadius: "var(--radius)",
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
               boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
             }}
           >
@@ -1102,7 +1085,7 @@ export default function LoginPage() {
                 width: "32px",
                 height: "32px",
                 borderRadius: "50%",
-                background: "#4F46E5",
+                background: "var(--primary)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -1114,10 +1097,10 @@ export default function LoginPage() {
               ✓
             </div>
             <div>
-              <p style={{ fontSize: "13px", fontWeight: 600, color: "#f0f0f5", margin: 0 }}>
+              <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", margin: 0 }}>
                 Welcome back
               </p>
-              <p style={{ fontSize: "11px", color: "#9898a8", margin: 0 }}>
+              <p style={{ fontSize: "11px", color: "var(--text-secondary)", margin: 0 }}>
                 Good to see you again.
               </p>
             </div>

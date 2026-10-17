@@ -6,7 +6,7 @@
  * clocks and rundown timers; the preview bar lets you try each.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link2, Pause, Play, Redo2, Save, Send, Undo2 } from "lucide-react";
+import { Link2, Pause, Play, Redo2, Save, Send, Undo2 } from "../components/icons/NativeIcons";
 import ThemeLayoutPreview from "../themes/layout/ThemeLayoutPreview";
 import LayerPanel from "../themes/layout/editor/LayerPanel";
 import LayerCanvasOverlay from "../themes/layout/editor/LayerCanvasOverlay";
@@ -344,7 +344,7 @@ export default function CountdownLayerEditor({ design, onChange }: Props) {
             </>
           )}
         </div>
-        {notice && <div style={{ padding: "8px 16px", fontSize: 13, color: "#e2e8f0", background: "#1e293b", borderTop: "1px solid rgba(255,255,255,0.1)" }}>{notice}</div>}
+        {notice && <div style={{ padding: "8px 16px", fontSize: 13, color: "var(--text-primary)", background: "var(--surface-raised)", borderTop: "1px solid var(--border)" }}>{notice}</div>}
       </div>
 
       {/* ── Right panel ── */}

@@ -3,7 +3,7 @@
  * the layers list (top = drawn last) and an inspector for the selected layer.
  */
 import { useRef, useState } from "react";
-import { Eye, EyeOff, Lock, Unlock } from "lucide-react";
+import { Eye, EyeOff, Lock, Unlock } from "../../../components/icons/NativeIcons";
 import "./layerEditor.css";
 import type { AnimationPreset, LayerAnimation, LayerStyle, LayerType, SegmentStyle, ThemeLayer, ThemeLayout, WarnLevel } from "../types";
 import {

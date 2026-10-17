@@ -11,7 +11,7 @@
  * The » button folds it to a slim rail (mic button, counts) to give the reader more room.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronsLeft, ChevronsRight, ListOrdered, Mic, MicOff, Pencil, Plus, RefreshCw, Scissors, Search, SlidersHorizontal, Sparkles, Trash2, X, Zap } from "lucide-react";
+import { Check, ChevronsLeft, ChevronsRight, ListOrdered, Mic, MicOff, Pencil, Plus, RefreshCw, Scissors, Search, SlidersHorizontal, Sparkles, Trash2, X, Zap } from "../../components/icons/NativeIcons";
 import type { StudioVerseAi } from "../useVerseAi";
 import StudioMenu, { menuAt, type StudioMenuState } from "./StudioMenu";
 

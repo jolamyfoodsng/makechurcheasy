@@ -1,13 +1,14 @@
 /**
  * SettingsModal.tsx — Studio settings in one dialog: quick controls (what a click does, the
- * change between slides, text size) and the Output (projector / TV, Wi-Fi link, NDI).
+ * change between slides, text size) and the Output (projector / TV, Wi-Fi link, NDI in and out).
  */
 import { useEffect, useState } from "react";
-import { Check, Copy, Image as ImageIcon, Minus, Monitor, MonitorOff, Plus, Radio, RotateCcw, Wifi } from "lucide-react";
+import { Check, Copy, Image as ImageIcon, Minus, Monitor, MonitorOff, Plus, Radio, RotateCcw, Wifi } from "../../components/icons/NativeIcons";
 import type { StudioTransition } from "../studioEngine";
 import { monitorLabel, type StudioMonitor } from "../studioOutputWindow";
 import StudioModal from "./StudioModal";
 import ShortcutsPanel from "./ShortcutsPanel";
+import NdiOutSection from "./NdiOutSection";
 import "./ShortcutsPanel.css";
 
 export type SettingsTab = "general" | "shortcuts";
@@ -213,8 +214,10 @@ export default function SettingsModal(props: SettingsModalProps) {
           same Wi-Fi as this computer. No Wi-Fi? Turn on a phone hotspot, join it from both devices, and use the link shown here.
           The link shows what the Studio is sending, so it only works while the Studio is open.
         </p>
-        <p className="st-set__hint st-set__hint--soon"><Radio size={12} /> NDI is coming soon, for video switchers and other computers on your network.</p>
+        <p className="st-set__hint"><Radio size={12} /> NDI® in: NDI cameras and other computers on your network show up in the Camera list (install the free NDI Tools from ndi.video first).</p>
       </section>
+
+      <NdiOutSection />
 
       <section className="st-set">
         <h3><Monitor size={14} /> Output · projector or TV (HDMI)</h3>

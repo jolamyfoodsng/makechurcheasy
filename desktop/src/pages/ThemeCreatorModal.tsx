@@ -40,7 +40,7 @@ import {
   Eye,
   Grid3X3,
   ArrowRightLeft,
-} from "lucide-react";
+} from "../components/icons/NativeIcons";
 import type {
   BibleTheme,
   BibleThemeCategory,
@@ -1391,7 +1391,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                 height: `${tvHeight}px`,
                 position: "relative",
                 overflow: "hidden",
-                borderRadius: "8px",
+                borderRadius: "var(--radius)",
                 backgroundColor: activeVariant === "fullscreen"
                   ? (settings.backgroundColor && settings.backgroundColor !== "transparent" ? settings.backgroundColor : "#0f1118")
                   : "#0f1118",
@@ -1839,7 +1839,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
                     </div>
                     <div className="typography-row" style={{ marginTop: "8px" }}>
                       <span className="tc-label-mono">CARD COLOR</span>
-                      <label className="color-box" style={{ backgroundColor: settings.boxBackground !== "transparent" ? settings.boxBackground : "#1e293b" }}>
+                      <label className="color-box" style={{ backgroundColor: settings.boxBackground !== "transparent" ? settings.boxBackground : "var(--surface-raised)" }}>
                         <input type="color" value={settings.boxBackground.startsWith("#") ? settings.boxBackground : "#1e293b"} onChange={(e) => patch({ boxBackground: e.target.value })} style={{ position: "absolute", width: 0, height: 0, opacity: 0, pointerEvents: "none" }} />
                       </label>
                     </div>

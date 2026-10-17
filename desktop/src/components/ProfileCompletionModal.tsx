@@ -1,3 +1,4 @@
+import { User } from "./icons/NativeIcons";
 /**
  * ProfileCompletionModal — Blocks app usage until required profile fields are filled.
  *
@@ -99,7 +100,7 @@ export default function ProfileCompletionModal({ user, onComplete }: ProfileComp
       >
         {/* Header */}
         <div className="pcm-header">
-          <div className="pcm-icon">👤</div>
+          <div className="pcm-icon"><User size={28} /></div>
           <h2 className="pcm-title">Complete Your Profile</h2>
           <p className="pcm-description">
             We noticed your country information is missing. Please select your country to continue using MakeChurchEazy.

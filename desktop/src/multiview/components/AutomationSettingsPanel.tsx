@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Play, RefreshCw, Zap } from "lucide-react";
+import { Play, RefreshCw, Zap } from "../../components/icons/NativeIcons";
 import {
   getAutomationRules,
   getMacros,

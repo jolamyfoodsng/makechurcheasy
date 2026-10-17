@@ -30,7 +30,7 @@ import {
   Layers,
   CloudOff,
   CheckCircle2,
-} from "lucide-react";
+} from "../components/icons/NativeIcons";
 import {
   BarChart,
   Bar,

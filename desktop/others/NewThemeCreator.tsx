@@ -6,7 +6,7 @@ import {
     Palette, Image as ImageIcon, MonitorPlay, Component, Square, PenTool,
     AlignLeft, AlignCenter, AlignRight, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd,
     Star, Download, Upload, Play
-} from 'lucide-react';
+} from '../src/components/icons/NativeIcons';
 
 /* ─── Helpers ─── */
 

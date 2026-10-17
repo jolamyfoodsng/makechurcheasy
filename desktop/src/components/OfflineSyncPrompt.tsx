@@ -9,7 +9,7 @@
  * The pop-up closes by itself once a sync succeeds.
  */
 import { useEffect, useState } from "react";
-import { WifiOff, CalendarX } from "lucide-react";
+import { WifiOff, CalendarX } from "./icons/NativeIcons";
 import ModalDialog from "./ModalDialog";
 import { retryVerification, useLicenseGuardState } from "@/services/licenseGuard";
 import { isSyncPromptSnoozed, snoozeSyncPrompt } from "@/services/offlineEntitlement";

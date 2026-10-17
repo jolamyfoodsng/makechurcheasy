@@ -6,7 +6,7 @@
  *
  */
 
-import { Lock, ExternalLink } from "lucide-react";
+import { Lock, ExternalLink } from "./icons/NativeIcons";
 import { useTranslation } from "react-i18next";
 import { checkEntitlementSync, type FeatureKey } from "../services/entitlementClient";
 import { getEffectivePlan } from "../services/licenseService";

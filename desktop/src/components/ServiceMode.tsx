@@ -1,3 +1,4 @@
+import { Folder } from "./icons/NativeIcons";
 /**
  * ServiceMode — Single-screen production dashboard
  *
@@ -740,7 +741,7 @@ export function ServiceMode({
                                 {layoutState.logoUrl && (
                                     <>
                                         <p className="logo-path-display">
-                                            📁 {layoutState.logoUrl}
+                                            <Folder size={14} /> {layoutState.logoUrl}
                                         </p>
                                         <button
                                             className="btn-text-danger"

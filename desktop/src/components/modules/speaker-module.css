@@ -51,7 +51,7 @@
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   cursor: pointer;
   border: 1px solid transparent;
   transition: all 0.15s;
@@ -319,7 +319,7 @@
   align-items: center;
   gap: 4px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--surface-hover);
   color: var(--text-secondary);
   font-size: 11px;
@@ -485,7 +485,7 @@
   width: 100%;
   padding: 7px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--bg-card);
   color: var(--text-secondary);
   font-size: 11px;
@@ -791,7 +791,7 @@
 }
 
 .speaker-module-btn {
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -837,7 +837,7 @@
 
 .speaker-module-broadcast-status {
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   padding: 10px;
   background: rgba(255, 255, 255, 0.02);
 }
@@ -876,12 +876,12 @@
 .speaker-module-status-badge--off-air {
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-muted);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
 }
 
 .speaker-module-output-control {
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius, 4px);
   padding: 10px;
   background: rgba(255, 255, 255, 0.02);
 }
@@ -1007,7 +1007,7 @@
   aspect-ratio: 16 / 9;
   border-radius: 4px;
   border: 1px solid var(--border);
-  background: #131724;
+  background: var(--surface);
   position: relative;
   overflow: hidden;
 }
@@ -1045,7 +1045,7 @@
   border-left: 3px solid var(--primary);
   border-radius: 0 6px 6px 0;
   background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(2px);
+  backdrop-filter: none;
   padding: 8px 10px;
   opacity: 0;
   transform: translateY(4px);
@@ -1142,7 +1142,7 @@
   inset: 0;
   z-index: 5000;
   background: rgba(0, 0, 0, 0.66);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1155,7 +1155,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border-radius: 12px;
+  border-radius: var(--radius-lg, 6px);
   border: 1px solid var(--border);
   background: var(--surface-dark);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
@@ -1699,7 +1699,7 @@
   padding: 7px 4px;
   background: #181824;
   border: 1px solid #2e2e3e;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   color: #999;
   font-size: 9px;
   font-weight: 600;
@@ -1764,9 +1764,9 @@
   align-items: center;
   justify-content: center;
   padding: 6px 14px;
-  background: #0F172A;
+  background: var(--bg);
   border: 1px solid #333;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   color: #aab;
   font-size: 10px;
   cursor: pointer;
@@ -1821,7 +1821,7 @@
 .speaker-module-visibility-track {
   width: 34px;
   height: 18px;
-  border-radius: 9px;
+  border-radius: var(--radius, 4px);
   background: var(--surface-hover, #333);
   border: 1px solid var(--border, #2C2C2C);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
@@ -1897,7 +1897,7 @@
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: rgba(255, 255, 255, 0.02);
   transition: background 0.12s;
 }

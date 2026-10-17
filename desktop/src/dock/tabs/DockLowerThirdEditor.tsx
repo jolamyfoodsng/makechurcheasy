@@ -1,3 +1,4 @@
+import { Camera, X, ImagePlus, RotateCcw } from "../../components/icons/NativeIcons";
 /**
  * DockLowerThirdEditor.tsx — Full-featured lower-third editor for the Dock
  *
@@ -1023,7 +1024,7 @@ export default function DockLowerThirdEditor({
                               className="dock-lt-image-picker-action"
                               onClick={(e) => { e.stopPropagation(); imageFileInputRef.current?.click(); }}
                             >
-                              <span className="material-icons" style={{ fontSize: 14 }}>photo_camera</span>
+                              <Camera size={14} />
                               <span>{t("common.change", "Change")}</span>
                             </button>
                             <button
@@ -1031,7 +1032,7 @@ export default function DockLowerThirdEditor({
                               className="dock-lt-image-picker-action dock-lt-image-picker-action--remove"
                               onClick={(e) => { e.stopPropagation(); handleImageRemove(); }}
                             >
-                              <span className="material-icons" style={{ fontSize: 14 }}>close</span>
+                              <X size={14} />
                               <span>{t("common.remove", "Remove")}</span>
                             </button>
                           </div>
@@ -1039,9 +1040,7 @@ export default function DockLowerThirdEditor({
                       </>
                     ) : (
                       <div className="dock-lt-image-picker-empty">
-                        <span className="material-icons" style={{ fontSize: 20, color: "var(--dock-text-dim)" }}>
-                          add_photo_alternate
-                        </span>
+                        <ImagePlus size={20} color="var(--dock-text-dim)" />
                         <span className="dock-lt-image-picker-empty-text">{t("lowerThird.dropImageOrClick", "Drop image or click")}</span>
                       </div>
                     )}
@@ -1356,9 +1355,7 @@ export default function DockLowerThirdEditor({
                   fontFamily: "inherit",
                 }}
               >
-                <span className="material-icons" style={{ fontSize: 12, verticalAlign: "middle", marginRight: 2 }}>
-                  restart_alt
-                </span>
+                <RotateCcw size={12} style={{ marginRight: 2 }} />
                 Reset all
               </button>
 

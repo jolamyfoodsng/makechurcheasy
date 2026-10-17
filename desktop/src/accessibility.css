@@ -7,7 +7,7 @@
 :root.light,
 html.mv-theme-light,
 :root[data-theme="light"] {
-  --mce-focus-ring: #1D4ED8;
+  --mce-focus-ring: var(--primary);
 }
 
 /* Search inputs stay quiet across every routed surface. Chromium adds its own

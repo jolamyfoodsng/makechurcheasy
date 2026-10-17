@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Clock, Crown, Tag, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Clock, Crown, Tag, X } from "./icons/NativeIcons";
 import { useNavigate } from "react-router-dom";
 import {
   clearCachedDesktopAnnouncement,

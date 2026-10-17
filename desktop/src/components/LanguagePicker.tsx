@@ -1,4 +1,4 @@
-import { ChevronDown, Search, X } from 'lucide-react';
+import { ChevronDown, Search, X } from './icons/NativeIcons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import allLanguageData from '../../full_langugae_list.json';

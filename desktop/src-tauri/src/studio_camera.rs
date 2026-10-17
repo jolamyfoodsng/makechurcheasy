@@ -5,10 +5,14 @@
 //! source all just show that one feed. No window opens a camera of its own, and nothing is
 //! negotiated per window, so hiding or showing the camera can never drop or reopen it.
 //!
+//! An NDI® source on the network can be the camera too (studio_ndi.rs): its pictures go into
+//! the same frame slot, so nothing else needs to know where they come from.
+//!
 //! Local routes (all on the app's own server, 127.0.0.1):
 //!   GET  api/studio-cam/status   -> {"available":true,"running":bool,"name":"..","error":"..","frames":n}
-//!   GET  api/studio-cam/devices  -> {"devices":[{"index":0,"name":".."}],"error":".."}
-//!   POST api/studio-cam/start    {"index":0}  starts (or switches) the capture, answers at once
+//!   GET  api/studio-cam/devices  -> {"devices":[{"index":0,"name":".."},{"ndi":"PC (Cam)","name":"PC (Cam)"}],
+//!                                    "error":"..","ndiError":".."}
+//!   POST api/studio-cam/start    {"index":0} or {"ndi":"PC (Cam)"}  starts (or switches) the capture, answers at once
 //!   POST api/studio-cam/stop     closes the camera
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -142,10 +146,51 @@ fn finish_run(id: u64, publish: fn(Vec<u8>), error: Option<String>) {
     publish(Vec::new());
 }
 
-/// Opens camera `index` on its own thread and sends every newest JPEG to `publish`
+/// What the Studio camera captures: a camera on this computer, or an NDI source on the network.
+enum Source {
+    Device(u32),
+    Ndi(String),
+}
+
+impl Source {
+    fn key(&self) -> String {
+        match self {
+            Source::Device(index) => format!("#{index}"),
+            Source::Ndi(name) => format!("ndi:{name}"),
+        }
+    }
+}
+
+/// Receives an NDI source on the capture thread (same rules as a camera: newest JPEG to `publish`).
+fn run_ndi(
+    id: u64,
+    name: &str,
+    stop: &AtomicBool,
+    running: &AtomicBool,
+    frames: &AtomicU64,
+    publish: fn(Vec<u8>),
+) {
+    let result = crate::studio_ndi::run_capture(
+        name,
+        || !stop.load(Ordering::SeqCst) && is_current_run(id),
+        || running.store(true, Ordering::SeqCst),
+        |bytes| {
+            if let Ok(_gate) = frame_gate().lock() {
+                if is_current_run(id) {
+                    frames.fetch_add(1, Ordering::Relaxed);
+                    publish(bytes);
+                }
+            }
+        },
+    );
+    finish_run(id, publish, result.err());
+}
+
+/// Opens the camera (or NDI source) on its own thread and sends every newest JPEG to `publish`
 /// (an empty frame means "camera off"). Switching camera stops the previous capture first.
 /// Returns true when this exact camera was already opening or running.
-fn start_capture(index: u32, name: String, publish: fn(Vec<u8>)) -> bool {
+fn start_capture(source: Source, publish: fn(Vec<u8>)) -> bool {
+    let name = source.key();
     let Ok(_control) = capture_control().lock() else {
         set_error("The camera could not be started. Try again.");
         return false;
@@ -187,6 +232,13 @@ fn start_capture(index: u32, name: String, publish: fn(Vec<u8>)) -> bool {
     set_error("");
     ACTIVE_RUN_ID.store(id, Ordering::SeqCst);
     thread::spawn(move || {
+        let index = match source {
+            Source::Device(index) => index,
+            Source::Ndi(ndi_name) => {
+                run_ndi(id, &ndi_name, &stop, &running, &frames, publish);
+                return;
+            }
+        };
         // `Closest` requires the requested FourCC to exist exactly. FaceTime and Continuity
         // cameras often expose NV12 (or another decodable format), not MJPEG, so asking for
         // 1280x720 MJPEG makes Camera::new fail before capture starts. Let nokhwa choose the
@@ -313,23 +365,59 @@ pub fn handle(mut request: tiny_http::Request, clean: &str, publish: fn(Vec<u8>)
                 ),
             );
         }
-        "api/studio-cam/devices" => match list_cameras() {
-            Ok(list) => {
-                let items: Vec<String> = list
+        "api/studio-cam/devices" => {
+            let (cameras, error) = match list_cameras() {
+                Ok(list) => (list, String::new()),
+                Err(e) => (Vec::new(), e),
+            };
+            let (ndi_sources, ndi_error) = match crate::studio_ndi::list_sources() {
+                Ok(list) => (list, String::new()),
+                Err(e) => (Vec::new(), e),
+            };
+            let mut items: Vec<String> = cameras
+                .iter()
+                .map(|(i, n)| format!(r#"{{"index":{},"name":{}}}"#, i, json_escape(n)))
+                .collect();
+            items.extend(
+                ndi_sources
                     .iter()
-                    .map(|(i, n)| format!(r#"{{"index":{},"name":{}}}"#, i, json_escape(n)))
-                    .collect();
-                respond(request, 200, format!(r#"{{"devices":[{}],"error":""}}"#, items.join(",")));
-            }
-            Err(e) => respond(request, 200, format!(r#"{{"devices":[],"error":{}}}"#, json_escape(&e))),
-        },
+                    .map(|n| format!(r#"{{"ndi":{0},"name":{0}}}"#, json_escape(n))),
+            );
+            respond(
+                request,
+                200,
+                format!(
+                    r#"{{"devices":[{}],"error":{},"ndiError":{}}}"#,
+                    items.join(","),
+                    json_escape(&error),
+                    json_escape(&ndi_error)
+                ),
+            );
+        }
         "api/studio-cam/start" => {
             let mut body = String::new();
             let _ = request.as_reader().read_to_string(&mut body);
-            let index = serde_json::from_str::<serde_json::Value>(&body)
-                .ok()
+            let value = serde_json::from_str::<serde_json::Value>(&body).ok();
+            let ndi_name = value
+                .as_ref()
+                .and_then(|v| v.get("ndi").and_then(|n| n.as_str()))
+                .map(|n| n.trim().to_string())
+                .filter(|n| !n.is_empty());
+            let index = value
+                .as_ref()
                 .and_then(|v| v.get("index").and_then(|i| i.as_u64()))
                 .unwrap_or(0) as u32;
+            // An NDI source is on the network, not a camera: no camera access needed.
+            if let Some(ndi_name) = ndi_name {
+                let ndi_error = crate::studio_ndi::runtime_error();
+                if !ndi_error.is_empty() {
+                    respond(request, 200, format!(r#"{{"ok":false,"error":{}}}"#, json_escape(&ndi_error)));
+                    return;
+                }
+                let already = start_capture(Source::Ndi(ndi_name), publish);
+                respond(request, 200, format!(r#"{{"ok":true,"already":{}}}"#, already));
+                return;
+            }
             if !ensure_permission() {
                 respond(
                     request,
@@ -340,7 +428,7 @@ pub fn handle(mut request: tiny_http::Request, clean: &str, publish: fn(Vec<u8>)
             }
             // Same camera already opening/running: leave it alone, so quick state refreshes do not
             // restart capture while the native driver is still opening the device.
-            let already = start_capture(index, format!("#{index}"), publish);
+            let already = start_capture(Source::Device(index), publish);
             let body = if already {
                 r#"{"ok":true,"already":true}"#.to_string()
             } else {

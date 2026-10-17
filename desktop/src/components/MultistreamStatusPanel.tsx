@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { Send } from "lucide-react";
+import { Send } from "./icons/NativeIcons";
 import type { BroadcastPersonProfile } from "../services/broadcastSettingsService";
 import type { MultistreamUsageInfo } from "../services/broadcastUsageService";
 import {
@@ -187,7 +187,7 @@ export function MultistreamStatusPanel({
             <button
               type="button"
               onClick={onUpgrade}
-              style={{ ...applyBtn, background: "transparent", color: "#818CF8", padding: 0 }}
+              style={{ ...applyBtn, background: "transparent", color: "var(--accent-blue)", padding: 0 }}
             >
               Upgrade
             </button>

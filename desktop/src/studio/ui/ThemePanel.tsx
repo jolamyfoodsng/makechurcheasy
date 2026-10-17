@@ -5,7 +5,7 @@
  *  when you press Send to Screen (or at once in Straight to screen mode).
  */
 import { useMemo, useState } from "react";
-import { Check, Palette, Pencil } from "lucide-react";
+import { Check, Palette, Pencil } from "../../components/icons/NativeIcons";
 import type { BibleTheme } from "../../bible/types";
 import type { StudioMode } from "../studioEngine";
 import ThemeLayoutPreview, { SAMPLE_THEME_CONTENT } from "../../themes/layout/ThemeLayoutPreview";

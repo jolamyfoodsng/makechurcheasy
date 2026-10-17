@@ -3,7 +3,7 @@ export { normalizeLmOverlayMode } from "../../services/lmSettings";
 import { resolveScriptureProjection, isConfidentScriptureSuggestion } from "../../services/scriptureProjection";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { Copy, Edit2, MonitorUp, Check, StickyNote, MoreHorizontal, X } from "lucide-react";
+import { Copy, Edit2, MonitorUp, Check, StickyNote, MoreHorizontal, X } from "../../components/icons/NativeIcons";
 import { useAppTheme } from "../../hooks/useAppTheme";
 import { dockObsClient, type DockObsStatus } from "../dockObsClient";
 import {
@@ -1918,7 +1918,7 @@ export default function DockLmTab({
                       onClick={() => void handlePushVerse(c, "queue")}
                       title={presentationLinkMode ? "Click to show on the presentation screen" : "Click to push to OBS"}
                     >
-                      📌 {c.label}
+                      <Icon name="push_pin" size={14} /> {c.label}
                       <button
                         style={S.pinnedChipClose}
                         onClick={(e) => { e.stopPropagation(); handleUnpinVerse(key); }}
@@ -2392,7 +2392,7 @@ export default function DockLmTab({
             padding: "8px 14px",
             background: "#1e2029",
             color: "#f9fafb",
-            border: "1px solid rgba(255, 255, 255, 0.15)",
+            border: "1px solid var(--border)",
             borderRadius: 6,
             boxShadow: "0 6px 18px rgba(0,0,0,0.4)",
             fontSize: 12,
@@ -2408,7 +2408,7 @@ export default function DockLmTab({
             style={{
               background: "transparent",
               border: "none",
-              color: "#9ca3af",
+              color: "var(--text-secondary)",
               cursor: "pointer",
               marginLeft: 4,
             }}

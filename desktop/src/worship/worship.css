@@ -25,7 +25,7 @@
   .worship-import-title,
   .worship-section-head h3,
   .worship-live-strip-title) {
-  font-family: var(--font-heading, "Inter", "SF Pro Display", system-ui, sans-serif);
+  font-family: var(--font-body);
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -460,7 +460,7 @@ button.worship-online-action.at-limit {
 .worship-lang-badge.yoruba {
   border: 1px solid rgba(59, 130, 246, 0.3);
   background: rgba(59, 130, 246, 0.08);
-  color: #93c5fd;
+  color: var(--accent-blue);
 }
 
 .worship-lang-badge.english {
@@ -1247,7 +1247,7 @@ button.worship-online-action.at-limit {
   inset: 0;
   z-index: 5000;
   background: rgba(0, 0, 0, 0.66);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1260,7 +1260,7 @@ button.worship-online-action.at-limit {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  border-radius: 12px;
+  border-radius: var(--radius-lg, 6px);
   border: 1px solid var(--b-border, #2C2C2C);
   background: var(--b-surface, #1E1E1E);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
@@ -1918,7 +1918,7 @@ button.worship-online-action.at-limit {
 }
 
 .worship-btn-primary:hover {
-  background: #4338ca;
+  background: var(--primary-hover);
 }
 
 .worship-btn-primary svg {
@@ -2114,7 +2114,7 @@ button.worship-online-action.at-limit {
 .worship-live-strip {
   flex-shrink: 0;
   border-top: 1px solid var(--b-border, #2C2C2C);
-  background: #0c0e17;
+  background: var(--bg);
   padding: 10px 12px 12px;
   display: flex;
   flex-direction: column;

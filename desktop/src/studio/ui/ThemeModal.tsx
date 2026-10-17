@@ -4,7 +4,7 @@
  * to use it, or open the Themes page to edit it.
  */
 import { useMemo } from "react";
-import { Check, Pencil, Palette } from "lucide-react";
+import { Check, Pencil, Palette } from "../../components/icons/NativeIcons";
 import type { BibleTheme } from "../../bible/types";
 import { resolveOverlayAssetUrl } from "../../services/overlayUrl";
 import { themeSettingsForMode, type StudioMode } from "../studioEngine";

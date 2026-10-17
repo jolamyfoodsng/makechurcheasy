@@ -1424,7 +1424,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
                 onClick={() => setShowPresetPicker(true)}
                 style={{
                   background: "none",
-                  border: "1px solid rgba(255,255,255,0.1)",
+                  border: "1px solid var(--border)",
                   borderRadius: 6,
                   color: "rgba(255,255,255,0.6)",
                   cursor: "pointer",
@@ -2064,7 +2064,7 @@ export function LowerThirdsModule({ isActive = true }: LowerThirdsModuleProps) {
             </div>
 
 
-            <div style={{ borderTop: "1px solid rgba(255,255,255,0.1)", margin: "20px 0" }} >
+            <div style={{ borderTop: "1px solid var(--border)", margin: "20px 0" }} >
 
 
 

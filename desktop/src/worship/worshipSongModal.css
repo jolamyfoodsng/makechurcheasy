@@ -73,7 +73,7 @@ body.ws-modal-open {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .ws-modal-title {
@@ -81,7 +81,7 @@ body.ws-modal-open {
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
-  font-family: var(--font-heading, "Inter", "SF Pro Display", system-ui, sans-serif);
+  font-family: var(--font-body);
 }
 
 .ws-modal-close {
@@ -660,7 +660,7 @@ body.ws-modal-open {
 :root.light .ws-modal-backdrop,
 html.mv-theme-light .ws-modal-backdrop {
   background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
+  backdrop-filter: none;
 }
 
 :root.light .ws-modal,
@@ -675,7 +675,7 @@ html.mv-theme-light .ws-modal--fullscreen {
 
 :root.light .ws-modal-header-icon,
 html.mv-theme-light .ws-modal-header-icon {
-  color: #fff;
+  color: var(--text-primary);
 }
 
 :root.light .ws-slide-card-label,

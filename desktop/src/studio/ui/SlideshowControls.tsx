@@ -6,7 +6,7 @@
  *  [thumb][thumb][THUMB][thumb] …   click one to jump to it
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { Film, Image as ImageIcon, Pause, Play, Repeat, Shuffle, SkipBack, SkipForward, Square, StepBack } from "lucide-react";
+import { Film, Image as ImageIcon, Pause, Play, Repeat, Shuffle, SkipBack, SkipForward, Square, StepBack } from "../../components/icons/NativeIcons";
 import type { MediaItem } from "../../library/libraryTypes";
 import { mediaPath } from "../studioSlides";
 import { SLIDESHOW_INTERVALS, type SlideshowState } from "../useSlideshow";

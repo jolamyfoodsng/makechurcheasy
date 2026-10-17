@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, Globe2 } from "lucide-react";
+import { ChevronDown, Globe2 } from "./icons/NativeIcons";
 import { INTERFACE_LOCALES } from "../i18n/localeCatalog";
 import {
   applyInterfaceLanguagePreference,

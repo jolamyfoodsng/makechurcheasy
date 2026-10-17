@@ -1,3 +1,4 @@
+import { X } from "../../components/icons/NativeIcons";
 /**
  * DockUpgradeModal.tsx — Compact upgrade prompt for OBS Browser Dock
  *
@@ -6,7 +7,7 @@
  */
 
 import { useTranslation } from "react-i18next";
-import { Lock, Zap } from "lucide-react";
+import { Lock, Zap } from "../../components/icons/NativeIcons";
 import { UPGRADE_ENTRY_PRICE_NGN, UPGRADE_PROMO_FALLBACK } from "../../lib/upgradePromo";
 import { openDashboardSubscriptionPlans } from "../../services/subscriptionNavigation";
 
@@ -28,7 +29,7 @@ export function DockUpgradeModal({ open, onClose, message }: DockUpgradeModalPro
     <div className="ssm-backdrop" onClick={onClose}>
       <div className="ssm-modal" onClick={(e) => e.stopPropagation()}>
         <button className="um-close" onClick={onClose} aria-label={t('common.close')} title={t('common.close')}>
-          <span className="material-icons" style={{ fontSize: 18 }}>close</span>
+          <X size={18} />
         </button>
 
         <div className="dock-upgrade">

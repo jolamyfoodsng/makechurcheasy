@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Play, ChevronDown, ChevronLeft, ChevronRight, Check, Search, X, Plus, Download, Palette } from "lucide-react";
+import { Play, ChevronDown, ChevronLeft, ChevronRight, Check, Search, X, Plus, Download, Palette } from "../icons/NativeIcons";
 import CreditsDisplay from "../CreditsDisplay";
 import BackgroundPickerCard from "../../dock/components/BackgroundPickerCard";
 import type { DockFullscreenQuickThemeSettings } from "../../dock/components/DockFullscreenThemeQuickSettings";

@@ -1,4 +1,4 @@
-import { Lock } from "lucide-react";
+import { Lock } from "./icons/NativeIcons";
 import type { CSSProperties, ReactNode } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { UPGRADE_PROMO_FALLBACK } from "../lib/upgradePromo";

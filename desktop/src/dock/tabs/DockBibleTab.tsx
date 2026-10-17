@@ -7894,7 +7894,7 @@ function DockBibleTab({
                 {chapterPickerSearch && (
                   <button
                     type="button"
-                    style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", padding: 0 }}
+                    style={{ background: "none", border: "none", color: "var(--text-secondary)", cursor: "pointer", padding: 0 }}
                     onClick={() => setChapterPickerSearch("")}
                     aria-label={t("common.clear")}
                   >
@@ -8258,7 +8258,7 @@ function DockBibleTab({
                                 {result.isInstalled ? "INSTALLED" : "DOWNLOAD"}
                               </span>
                               {result.trigger === "//" || result.trigger === "||" ? (
-                                <span style={{ fontSize: "10px", padding: "1px 5px", borderRadius: "3px", background: "rgba(59, 130, 246, 0.2)", color: "#60a5fa", fontWeight: 700 }}>
+                                <span style={{ fontSize: "10px", padding: "1px 5px", borderRadius: "3px", background: "rgba(59, 130, 246, 0.2)", color: "var(--accent-blue)", fontWeight: 700 }}>
                                   COMPARE
                                 </span>
                               ) : null}
@@ -8270,7 +8270,7 @@ function DockBibleTab({
                             </span>
                           )}
                           {result.modeOverride && (
-                            <span style={{ fontSize: "10px", padding: "1px 5px", borderRadius: "3px", background: "rgba(59, 130, 246, 0.2)", color: "#60a5fa", fontWeight: 700 }}>
+                            <span style={{ fontSize: "10px", padding: "1px 5px", borderRadius: "3px", background: "rgba(59, 130, 246, 0.2)", color: "var(--accent-blue)", fontWeight: 700 }}>
                               {result.modeOverride === "lower-third" ? "LOWER-3RD" : "FULLSCREEN"}
                             </span>
                           )}

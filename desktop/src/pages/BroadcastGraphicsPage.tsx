@@ -34,7 +34,7 @@ import {
   LayoutGrid,
   ArrowRight,
   Radio,
-} from "lucide-react";
+} from "../components/icons/NativeIcons";
 import "./BroadcastGraphicsPage.css";
 import { useAuth } from "../contexts/AuthContext";
 import { getEffectivePlan } from "../services/licenseService";
@@ -338,7 +338,7 @@ function ScreenModal({ onClose, label, children }: { onClose: () => void; label:
         justifyContent: "center",
         padding: 24,
         boxSizing: "border-box",
-        color: "#f8fafc",
+        color: "var(--text-primary)",
         overscrollBehavior: "contain",
       }}
     >
@@ -1979,7 +1979,7 @@ export default function BroadcastGraphicsPage() {
               <div className="bg-modal-header">
                 <div>
                   <h3 className="bg-modal-header__title">Choose a Template to Start</h3>
-                  <span style={{ fontSize: 13, color: "#94a3b8" }}>
+                  <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
                     Select a broadcast template to customize for your church
                   </span>
                 </div>
@@ -2054,7 +2054,7 @@ export default function BroadcastGraphicsPage() {
                   <h3 className="bg-modal-header__title">
                     {editorState.savedId ? "Edit Graphic" : "Customize & Use Graphic"}
                   </h3>
-                  <span style={{ fontSize: 13, color: "#94a3b8" }}>
+                  <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
                     Base Template: {editorState.template.name}
                   </span>
                 </div>
@@ -2171,7 +2171,7 @@ export default function BroadcastGraphicsPage() {
                                       cursor: "pointer",
                                       border: `1px solid ${on ? "#6366f1" : "rgba(148,163,184,0.35)"}`,
                                       background: on ? "rgba(99,102,241,0.22)" : "transparent",
-                                      color: on ? "#e0e7ff" : "#94a3b8",
+                                      color: on ? "#e0e7ff" : "var(--text-secondary)",
                                     }}
                                   >
                                     {on ? `${picked.indexOf(o.value) + 1}. ` : ""}
@@ -2199,7 +2199,7 @@ export default function BroadcastGraphicsPage() {
                                   placeItems: "center",
                                   overflow: "hidden",
                                   fontSize: 11,
-                                  color: "#94a3b8",
+                                  color: "var(--text-secondary)",
                                   background: "repeating-conic-gradient(#232733 0 25%, #191c25 0 50%) 0 0/12px 12px",
                                 }}
                               >
@@ -2228,7 +2228,7 @@ export default function BroadcastGraphicsPage() {
                                 </button>
                               )}
                             </div>
-                            <span style={{ fontSize: 11, color: "#94a3b8" }}>
+                            <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>
                               Leave empty to use your church logo from Settings (or the placeholder text).
                             </span>
                           </div>
@@ -2487,7 +2487,7 @@ export default function BroadcastGraphicsPage() {
               <div className="bg-modal-header">
                 <div>
                   <h3 className="bg-modal-header__title">{previewTicker.name}</h3>
-                  <span style={{ fontSize: 13, color: "#94a3b8" }}>
+                  <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>
                     Marquee Ticker Preview
                   </span>
                 </div>
@@ -2570,7 +2570,7 @@ export default function BroadcastGraphicsPage() {
               borderRadius: 8,
               background: "#151f32",
               border: toast.type === "success" ? "1px solid #22c55e" : "1px solid #ef4444",
-              color: "#f8fafc",
+              color: "var(--text-primary)",
               fontSize: 13,
               fontWeight: 500,
               boxShadow: "0 4px 20px rgba(0,0,0,0.45)",

@@ -1,3 +1,4 @@
+import Icon from "../components/Icon";
 /**
  * CountdownsPage.tsx — Countdown timer management for OBS
  *
@@ -20,7 +21,7 @@ import {
   Clock,
   Timer,
   MoreVertical,
-} from "lucide-react";
+} from "../components/icons/NativeIcons";
 import {
   getCountdowns,
   saveCountdown,
@@ -231,7 +232,7 @@ function CountdownPreview({ cd, timer }: { cd: CountdownConfig; timer: ReturnTyp
               {timer.formatted.split("").map((ch, i) => (
                 <span key={i} style={ch === ":"
                   ? { color: "rgba(255,255,255,0.4)", fontSize: 36, fontWeight: 300, alignSelf: "flex-start", marginTop: 8, margin: "0 4px" }
-                  : { background: "rgba(255,255,255,0.1)", backdropFilter: "blur(4px)", borderRadius: 8, width: 52, height: 60, display: "flex", alignItems: "center", justifyContent: "center", color: timerColor, fontFamily: timerFont, fontSize: 36, fontWeight: timerWeight, border: "1px solid rgba(255,255,255,0.1)" }
+                  : { background: "rgba(255,255,255,0.1)", backdropFilter: "blur(4px)", borderRadius: 8, width: 52, height: 60, display: "flex", alignItems: "center", justifyContent: "center", color: timerColor, fontFamily: timerFont, fontSize: 36, fontWeight: timerWeight, border: "1px solid var(--border)" }
                 }>{ch}</span>
               ))}
             </div>
@@ -288,23 +289,23 @@ function CountdownPreview({ cd, timer }: { cd: CountdownConfig; timer: ReturnTyp
 
 type SettingsTab = "timer" | "background" | "text" | "animation" | "obs";
 const TAB_LIST: { key: SettingsTab; label: string; icon: string }[] = [
-  { key: "timer", label: "Timer", icon: "⏱" },
-  { key: "background", label: "Background", icon: "🎨" },
-  { key: "text", label: "Text", icon: "Aa" },
-  { key: "animation", label: "Animation", icon: "✨" },
-  { key: "obs", label: "OBS", icon: "📡" },
+  { key: "timer", label: "Timer", icon: "timer" },
+  { key: "background", label: "Background", icon: "palette" },
+  { key: "text", label: "Text", icon: "text_fields" },
+  { key: "animation", label: "Animation", icon: "animation" },
+  { key: "obs", label: "OBS", icon: "cast" },
 ];
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#a1a1aa", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</label>
+      <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</label>
       {children}
     </div>
   );
 }
 
-const inputStyle: React.CSSProperties = { width: "100%", height: 38, padding: "0 12px", background: "#171b28", border: "1px solid rgba(255, 255, 255, 0.12)", borderRadius: 8, fontSize: 14, color: "#ffffff", outline: "none" };
+const inputStyle: React.CSSProperties = { width: "100%", height: 38, padding: "0 12px", background: "var(--input-bg)", border: "1px solid var(--input-border)", borderRadius: 4, fontSize: 14, color: "var(--input-text)" };
 const selectStyle: React.CSSProperties = { ...inputStyle, appearance: "none" as const };
 
 function TimerSettings({ cd, onUpdate }: { cd: CountdownConfig; onUpdate: (u: Partial<CountdownConfig>) => void }) {
@@ -568,7 +569,7 @@ function BackgroundSettings({ cd, onUpdate }: { cd: CountdownConfig; onUpdate: (
               </button>
               <button onClick={() => { setShowMediaPicker("image"); loadMediaLibrary("image"); }}
                 style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--border)", background: "var(--input-bg)", color: "var(--text-secondary)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                📁 Media Library
+                <Icon name="folder" size={16} /> Media Library
               </button>
             </div>
           )}
@@ -651,7 +652,7 @@ function BackgroundSettings({ cd, onUpdate }: { cd: CountdownConfig; onUpdate: (
               </button>
               <button onClick={() => { setShowMediaPicker("video"); loadMediaLibrary("video"); }}
                 style={{ flex: 1, padding: "10px 0", borderRadius: 8, border: "1px dashed var(--border)", background: "var(--input-bg)", color: "var(--text-secondary)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                📁 Media Library
+                <Icon name="folder" size={16} /> Media Library
               </button>
             </div>
           )}
@@ -753,7 +754,7 @@ function BackgroundSettings({ cd, onUpdate }: { cd: CountdownConfig; onUpdate: (
       <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10, marginTop: 4 }}>
         <button onClick={() => setShowBuiltins(!showBuiltins)}
           style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text-secondary)", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span>🎨 Built-in Backgrounds</span>
+          <span><Icon name="palette" size={16} /> Built-in Backgrounds</span>
           <span style={{ fontSize: 10 }}>{showBuiltins ? "▲" : "▼"}</span>
         </button>
 
@@ -1074,7 +1075,7 @@ function CountdownDesignsView() {
                 style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer", marginBottom: 4, border: `1px solid ${activeId === cd.id ? "var(--primary)" : "transparent"}`, background: activeId === cd.id ? "var(--primary-soft)" : "transparent", transition: "all 0.12s" }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cd.title || "Untitled"}</div>
-                  <div style={{ fontSize: 12, color: "#a1a1aa", marginTop: 2 }}>{formatDesignLength(cd.timer.durationSeconds)}{cd.layout ? " · layer design" : ""}</div>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{formatDesignLength(cd.timer.durationSeconds)}{cd.layout ? " · layer design" : ""}</div>
                 </div>
                 <div style={{ position: "relative" }}>
                   <button onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === cd.id ? null : cd.id); }}
@@ -1086,7 +1087,7 @@ function CountdownDesignsView() {
                   {menuOpen === cd.id && (
                     <>
                       <div style={{ position: "fixed", inset: 0, zIndex: 10 }} onClick={() => setMenuOpen(null)} />
-                      <div style={{ position: "absolute", right: 0, top: "100%", marginTop: 4, width: 160, background: "#171b28", borderRadius: 8, border: "1px solid rgba(255, 255, 255, 0.12)", boxShadow: "0 8px 24px rgba(0,0,0,0.5)", padding: 6, zIndex: 20 }}>
+                      <div style={{ position: "absolute", right: 0, top: "100%", marginTop: 4, width: 160, background: "var(--surface-raised)", borderRadius: 8, border: "1px solid var(--border)", boxShadow: "0 8px 24px rgba(0,0,0,0.5)", padding: 6, zIndex: 20 }}>
                         <button onClick={(e) => { e.stopPropagation(); handleDuplicate(cd); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", fontSize: 13, background: "transparent", border: "none", color: "#ffffff", cursor: "pointer", borderRadius: 6 }}>
                           <Copy size={14} /> Duplicate
                         </button>
@@ -1122,7 +1123,7 @@ function CountdownDesignsView() {
         {/* Toolbar */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderBottom: "1px solid var(--border)", background: "var(--surface)", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Timer size={18} style={{ color: "#60a5fa" }} />
+            <Timer size={18} style={{ color: "var(--accent-blue)" }} />
             <span style={{ fontSize: 16, fontWeight: 700, color: "#ffffff" }}>Countdowns</span>
           </div>
           {active && (
@@ -1131,12 +1132,12 @@ function CountdownDesignsView() {
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: timer.isRunning ? "rgba(234, 179, 8, 0.2)" : "rgba(34, 197, 94, 0.2)", color: timer.isRunning ? "#facc15" : "#4ade80" }}>
                 {timer.isRunning ? <><Pause size={14} /> Pause</> : <><Play size={14} /> Play</>}
               </button>
-              <button onClick={timer.reset} style={{ padding: 7, borderRadius: 8, background: "transparent", border: "1px solid rgba(255, 255, 255, 0.12)", color: "#d4d4d8", cursor: "pointer" }} title="Reset">
+              <button onClick={timer.reset} style={{ padding: 7, borderRadius: 8, background: "transparent", border: "1px solid var(--border)", color: "#d4d4d8", cursor: "pointer" }} title="Reset">
                 <RotateCcw size={14} />
               </button>
               <div style={{ width: 1, height: 22, background: "rgba(255, 255, 255, 0.12)" }} />
               <button onClick={() => handleUpdate({})}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "#1e293b", color: "#f8fafc", border: "1px solid rgba(255, 255, 255, 0.12)", cursor: "pointer" }}>
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, background: "var(--surface-raised)", color: "var(--text-primary)", border: "1px solid var(--border)", cursor: "pointer" }}>
                 <Save size={14} /> Save
               </button>
               <button onClick={handleSendToOBS}
@@ -1181,8 +1182,8 @@ function CountdownDesignsView() {
           <div style={{ display: "flex", gap: 3, padding: 8, borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
             {TAB_LIST.map((tab) => (
               <button key={tab.key} onClick={() => setSettingsTab(tab.key)}
-                style={{ flex: 1, padding: "8px 0", borderRadius: 6, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", background: settingsTab === tab.key ? "var(--surface-raised)" : "transparent", color: settingsTab === tab.key ? "#ffffff" : "var(--text-muted)", transition: "all 0.12s" }}>
-                <span style={{ marginRight: 4 }}>{tab.icon}</span>{tab.label}
+                style={{ flex: 1, padding: "8px 0", borderRadius: 6, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", background: settingsTab === tab.key ? "var(--surface-raised)" : "transparent", color: settingsTab === tab.key ? "var(--text-primary)" : "var(--text-muted)", transition: "all 0.12s" }}>
+                <Icon name={tab.icon} size={16} style={{ marginRight: 4 }} />{tab.label}
               </button>
             ))}
           </div>
@@ -1326,7 +1327,7 @@ export default function CountdownsPage() {
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", borderBottom: "1px solid var(--border)", background: "var(--surface)", flexShrink: 0 }}>
         <button type="button" style={tabStyle(mode === "designs")} onClick={() => choose("designs")}>Designs</button>
         <button type="button" style={tabStyle(mode === "rundowns")} onClick={() => choose("rundowns")}>Rundowns</button>
-        <span style={{ marginLeft: 10, fontSize: 12, color: "#94a3b8" }}>
+        <span style={{ marginLeft: 10, fontSize: 12, color: "var(--text-secondary)" }}>
           {mode === "designs" ? "Design how your countdown looks." : "Build timers and messages for a service, then run them from the OBS Dock."}
         </span>
       </div>

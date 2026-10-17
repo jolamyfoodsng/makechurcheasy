@@ -294,8 +294,8 @@ function PublicPresentationRoute() {
   }, [sessionId]);
 
   return (
-    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#000", color: "#f8fafc" }}>
-      <div style={{ display: "grid", gap: 10, justifyItems: "center", fontFamily: "Inter, system-ui, sans-serif" }}>
+    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#000", color: "var(--text-primary)" }}>
+      <div style={{ display: "grid", gap: 10, justifyItems: "center", fontFamily: "var(--font-body)" }}>
         <Icon name={error ? "warning" : "present_to_all"} size={28} />
         <span>{error || "Opening presentation screen..."}</span>
       </div>

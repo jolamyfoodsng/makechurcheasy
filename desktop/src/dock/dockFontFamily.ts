@@ -49,7 +49,7 @@ export const DOCK_FONT_SCALE_OPTIONS = [
   { id: "extra-large", label: "Extra large (125%)", value: 1.25 },
 ] as const;
 
-export const DEFAULT_DOCK_FONT_FAMILY = '"CMG Sans", "Questrial", "Charis SIL", "Noto Sans", sans-serif';
+export const DEFAULT_DOCK_FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, "Charis SIL", "Noto Sans", sans-serif';
 const GENERIC_FONT_FAMILIES = new Set([
   "cursive",
   "fantasy",

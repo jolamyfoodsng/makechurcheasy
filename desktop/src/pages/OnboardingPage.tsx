@@ -28,7 +28,7 @@ import {
   MonitorPlay,
   Clapperboard,
   Tv,
-} from "lucide-react";
+} from "../components/icons/NativeIcons";
 import { obsService } from "../services/obsService";
 import { getOverlayBaseUrlSync, useDockBaseUrl } from "../services/overlayUrl";
 import { getDeviceId } from "../services/authService";

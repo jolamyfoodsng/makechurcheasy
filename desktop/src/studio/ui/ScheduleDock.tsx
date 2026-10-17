@@ -29,7 +29,7 @@ import {
   Search,
   Trash2,
   X,
-} from "lucide-react";
+} from "../../components/icons/NativeIcons";
 import {
   DOCK_HISTORY_CHANGED_EVENT,
   DOCK_SCHEDULE_CHANGED_EVENT,

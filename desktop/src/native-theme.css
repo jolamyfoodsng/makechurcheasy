@@ -1,0 +1,247 @@
+/* Shared native-style tokens. Runtime appearance preferences override these defaults. */
+:root {
+  color-scheme: dark;
+
+  /* Native-style shared accent */
+  --primary: #0067C0;
+  --primary-hover: #005BAA;
+  --primary-pressed: #004F94;
+  --primary-rgb: 0, 103, 192;
+  --primary-soft: rgba(0, 103, 192, 0.14);
+  --primary-soft-border: rgba(0, 103, 192, 0.35);
+
+  /* Accent */
+  --accent-blue: #60A9EB;
+  --accent-blue-hover: #8BC2F2;
+  --accent-blue-rgb: 96, 169, 235;
+
+  /* Neutral application surfaces */
+  --bg: #18181b;
+  --bg-secondary: #202023;
+  --bg-dark: #18181b;
+  --surface: #202023;
+  --surface-dark: #202023;
+  --surface-raised: #2c2c30;
+  --surface-hover: #38383d;
+  --surface-overlay: #202023;
+  --surface-active: #38383d;
+  --card-bg: var(--surface);
+  --card-bg-hover: var(--surface-hover);
+  --toolbar-bg: #202023;
+  --toolbar-border: rgba(255, 255, 255, 0.08);
+
+  /* Text hierarchy */
+  --text: #f4f4f5;
+  --text-primary: #ffffff;
+  --text-secondary: #d1d1d6;
+  --text-muted: #a1a1aa;
+  --text-disabled: #71717a;
+
+  /* Control and surface borders */
+  --border: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-primary: #0067C0;
+  --border-strong: rgba(255, 255, 255, 0.14);
+
+  /* Status */
+  --success: #10B981;
+  --success-rgb: 16, 185, 129;
+  --success-button: #059669;
+  --success-hover: #10B981;
+  --success-pressed: #047857;
+  --success-bg: rgba(16, 185, 129, 0.12);
+  --success-border: rgba(16, 185, 129, 0.3);
+  --warning: #F59E0B;
+  --warning-hover: #FBBF24;
+  --warning-bg: rgba(245, 158, 11, 0.12);
+  --error: #EF4444;
+  --error-rgb: 239, 68, 68;
+  --error-hover: #F87171;
+  --error-pressed: #DC2626;
+  --error-bg: rgba(239, 68, 68, 0.12);
+  --error-border: rgba(239, 68, 68, 0.3);
+  --danger-text: #FCA5A5;
+
+  /* Controls */
+  --input-bg: #2c2c30;
+  --input-border: rgba(255, 255, 255, 0.12);
+  --input-focus: #0067C0;
+  --input-text: #ffffff;
+  --input-placeholder: #a1a1aa;
+
+  /* Sidebar Navigation */
+  --sidebar-nav-active-bg: rgba(96, 169, 235, 0.16);
+  --sidebar-nav-active-border: rgba(96, 169, 235, 0.32);
+  --sidebar-nav-active-color: #FFFFFF;
+  --sidebar-nav-active-icon: #8BC2F2;
+  --sidebar-nav-hover-bg: rgba(255, 255, 255, 0.05);
+  --sidebar-nav-hover-color: var(--text);
+
+  /* State */
+  --active-selected-state: #0067C0;
+  --active-selected-surface: rgba(0, 103, 192, 0.14);
+  --preview-state: #0067C0;
+  --program-state: #10B981;
+  --focus-ring: rgba(0, 103, 192, 0.35);
+  --tab-text-inactive: #a1a1aa;
+  --tab-text-active: #ffffff;
+  --tab-hover-bg: rgba(0, 103, 192, 0.08);
+  --tab-indicator: #0067C0;
+  --tab-disabled: #71717a;
+
+  /* Shape */
+  --radius: 4px;
+  --radius-lg: 6px;
+  --radius-full: 9999px;
+
+  /* Live indicator */
+  --live-color: #10B981;
+  --live-rgb: 16, 185, 129;
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* Motion */
+  --transition: 150ms ease;
+
+  /* Fonts - Default OS-agnostic native system stack */
+  --font-african-latin: "Questrial", "Charis SIL", "Noto Sans";
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", system-ui, "Charis SIL", "Noto Sans", sans-serif;
+  --font-heading: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "SF Mono", "Cascadia Code", "Segoe UI Mono", "Menlo", "Consolas", monospace;
+  --font-ui-size: 14px;
+  --letter-spacing-body: 0;
+}
+
+/* macOS Native Settings (Apple Human Interface Guidelines: SF Pro, optical metrics) */
+:root[data-platform="macos"] {
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro", "Helvetica Neue", "Charis SIL", "Noto Sans", sans-serif;
+  --font-heading: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro", "Helvetica Neue", sans-serif;
+  --font-mono: "SF Mono", "Menlo", "Monaco", monospace;
+  --font-ui-size: 14px;
+  --letter-spacing-body: -0.01em;
+}
+
+/* Windows Native Settings (Microsoft Fluent 2: Segoe UI Variable, Windows metrics) */
+:root[data-platform="windows"] {
+  --font-body: "Segoe UI Variable Text", "Segoe UI", -apple-system, system-ui, "Charis SIL", "Noto Sans", sans-serif;
+  --font-heading: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Code", "Segoe UI Mono", "Consolas", "Courier New", monospace;
+  --font-ui-size: 14px;
+  --letter-spacing-body: 0;
+}
+
+/* ── Light Mode ── */
+:root.light,
+:root[data-theme="light"],
+html[data-theme="light"],
+html.mv-theme-light,
+body.light {
+  color-scheme: light;
+  --primary: #0067C0;
+  --primary-hover: #005BAA;
+  --primary-pressed: #004F94;
+  --primary-rgb: 0, 103, 192;
+  --primary-soft: rgba(0, 103, 192, 0.06);
+  --primary-soft-border: rgba(0, 103, 192, 0.2);
+
+  --accent-blue: #0067C0;
+  --accent-blue-hover: #005BAA;
+  --accent-blue-rgb: 0, 103, 192;
+
+  --bg: #F3F3F3;
+  --bg-secondary: #EBEBED;
+  --bg-dark: #F3F3F3;
+  --surface: #FFFFFF;
+  --surface-dark: #FFFFFF;
+  --surface-hover: #EBEBED;
+  --surface-raised: #F3F3F3;
+  --surface-overlay: #EBEBED;
+  --surface-active: rgba(0, 103, 192, 0.06);
+  --card-bg: #FFFFFF;
+  --card-bg-hover: #F3F3F3;
+  --toolbar-bg: #FFFFFF;
+  --toolbar-border: #D1D1D6;
+
+  --text: #1C1C1E;
+  --text-primary: #1C1C1E;
+  --text-secondary: #48484A;
+  --text-muted: #636366;
+  --text-disabled: #8E8E93;
+
+  --border: #D1D1D6;
+  --border-subtle: #EBEBED;
+  --border-primary: rgba(0, 103, 192, 0.25);
+  --border-strong: #8E8E93;
+
+  --error: #B91C1C;
+  --error-bg: rgba(239, 68, 68, 0.06);
+  --error-border: rgba(239, 68, 68, 0.18);
+  --error-hover: #991B1B;
+  --error-pressed: #7F1D1D;
+  --danger-text: #B91C1C;
+  --success: #15803D;
+  --success-rgb: 34, 197, 94;
+  --success-bg: rgba(34, 197, 94, 0.08);
+  --success-button: #15803D;
+  --success-hover: #166534;
+  --success-pressed: #15803D;
+  --success-border: rgba(34, 197, 94, 0.18);
+  --warning: #B45309;
+  --warning-bg: rgba(245, 158, 11, 0.08);
+  --warning-hover: #92400E;
+  --input-bg: #FFFFFF;
+  --input-border: #B8B8BD;
+  --input-focus: #0067C0;
+  --input-text: #1C1C1E;
+  --input-placeholder: #636366;
+
+  /* Sidebar Navigation */
+  --sidebar-nav-active-bg: rgba(0, 103, 192, 0.10);
+  --sidebar-nav-active-border: rgba(0, 103, 192, 0.24);
+  --sidebar-nav-active-color: #0067C0;
+  --sidebar-nav-active-icon: #0067C0;
+  --sidebar-nav-hover-bg: rgba(15, 23, 42, 0.05);
+  --sidebar-nav-hover-color: #1C1C1E;
+
+  --active-selected-state: #0067C0;
+  --active-selected-surface: rgba(0, 103, 192, 0.06);
+  --preview-state: #0067C0;
+  --program-state: #22C55E;
+  --focus-ring: rgba(0, 103, 192, 0.2);
+  --tab-text-inactive: #636366;
+  --tab-text-active: #1C1C1E;
+  --tab-hover-bg: rgba(0, 103, 192, 0.06);
+  --tab-indicator: #0067C0;
+  --tab-disabled: #8E8E93;
+
+  --live-color: #B91C1C;
+  --live-rgb: 239, 68, 68;
+}
+
+/* Shared sizing used by app pages, dialogs, and standalone docks. */
+:root {
+  --font-sans: var(--font-body);
+  --font-headline: var(--font-heading);
+  --control-height: 34px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --text-on-accent: #fff;
+}
+
+/* Consistent keyboard and native form feedback across lazy-loaded pages. */
+html :is(button, a, input, select, textarea, [role="button"], [role="tab"]):focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+:where(input, select, textarea) { color-scheme: inherit; }
+:where(input[type="checkbox"], input[type="radio"], input[type="range"]) { accent-color: var(--primary); }
+:where(button, input, select, textarea) { font-family: var(--font-body); }
+:where(button:disabled, input:disabled, select:disabled, textarea:disabled) { cursor: default; }
+@media (prefers-reduced-motion: reduce) {
+  .native-icon { animation: none !important; transition: none !important; }
+}

@@ -21,6 +21,10 @@
     Studio's Preview works. The overlay pages ignore the relay (mceRelay=0), so the
     Dock / OBS can never paint over the projector by accident.
 
+    ?feed=alt is the alternate output: everything Program shows, but the words come from
+    `alt.packets` (the same item in its own look, e.g. Lower Third while the room sees Full Screen).
+    It never plays sound, so the sound is not heard twice.
+
     The in-app Program monitor loads this same page with ?monitor=1. Other screens on
     the same Wi-Fi can open it too (the Studio's "Share over Wi-Fi" link).
   -->
@@ -283,8 +287,10 @@ video { outline: none; }
         document.documentElement.style.background = 'transparent';
         document.body.style.background = 'transparent';
       }
-      // program (default) or preview: which part of the Studio state this screen shows.
-      var feed = params.get('feed') === 'preview' ? 'preview' : 'program';
+      // program (default), alt or preview: which part of the Studio state this screen shows.
+      var feed = params.get('feed') === 'preview' ? 'preview' : params.get('feed') === 'alt' ? 'alt' : 'program';
+      // Only one screen plays the sound: the in-app monitors and the alternate output stay silent.
+      var SILENT = isMonitor || feed === 'alt';
       // Window label when opened as a projector by the app (Esc asks the app to close it).
       var winLabel = params.get('win') || '';
       var relaySocket = null;
@@ -310,7 +316,7 @@ video { outline: none; }
       var appliedPacket = {};
       var hideTimers = {};
       var lastRevision = 0;
-      var PAGE_REV = 8;
+      var PAGE_REV = 10;
       var lastScreenKey = '';
       var lastMediaKey = '';
 
@@ -357,13 +363,13 @@ video { outline: none; }
       // Start muted so WebKit can autoplay even when the Studio click happened in another window.
       // Restore the requested sound only after playback has actually started.
       function applyRequestedVideoMute(node) {
-        var muted = isMonitor || node.dataset.requestedMuted === '1';
+        var muted = SILENT || node.dataset.requestedMuted === '1';
         node.defaultMuted = muted;
         node.muted = muted;
       }
 
       function playVideo(node, mutedByChoice) {
-        var desiredMuted = isMonitor || mutedByChoice === true;
+        var desiredMuted = SILENT || mutedByChoice === true;
         node.dataset.requestedMuted = desiredMuted ? '1' : '0';
         node.dataset.autoplayMutePending = desiredMuted ? '0' : '1';
         node.defaultMuted = true;
@@ -448,8 +454,8 @@ video { outline: none; }
           node.defaultMuted = true;
           node.muted = true;
           node.setAttribute('muted', '');
-          node.dataset.requestedMuted = (isMonitor || media.muted === true) ? '1' : '0';
-          node.dataset.autoplayMutePending = (isMonitor || media.muted === true) ? '0' : '1';
+          node.dataset.requestedMuted = (SILENT || media.muted === true) ? '1' : '0';
+          node.dataset.autoplayMutePending = (SILENT || media.muted === true) ? '0' : '1';
           node.playsInline = true;
           // Load the whole file now: with no autoplay attribute a video that only loads its header never says "canplay".
           node.preload = 'auto';
@@ -482,8 +488,8 @@ video { outline: none; }
         }
         if (node.tagName === 'VIDEO') node.style.objectFit = ctrl.fit === 'cover' ? 'cover' : 'contain';
         node.loop = ctrl.loop !== false;
-        node.dataset.requestedMuted = (isMonitor || ctrl.muted === true) ? '1' : '0';
-        node.muted = node.dataset.autoplayMutePending === '1' || isMonitor || ctrl.muted === true;
+        node.dataset.requestedMuted = (SILENT || ctrl.muted === true) ? '1' : '0';
+        node.muted = node.dataset.autoplayMutePending === '1' || SILENT || ctrl.muted === true;
         if (node.tagName === 'VIDEO' && node.dataset.autoplayMutePending !== '1') applyRequestedVideoMute(node);
         var volume = Number(ctrl.volume);
         if (isFinite(volume)) node.volume = Math.max(0, Math.min(1, volume));
@@ -510,8 +516,8 @@ video { outline: none; }
       var lastAudioSeek = 0;
       function applyAudio(audio, ctrl) {
         var key = audio && audio.url ? audio.url : '';
-        // The in-app Preview monitor never plays sound.
-        if (isMonitor || feed === 'preview') key = '';
+        // The in-app monitors, Preview and the alternate output never play sound.
+        if (SILENT || feed === 'preview') key = '';
         if (key !== lastAudioKey) {
           lastAudioKey = key;
           lastAudioSeek = 0;
@@ -553,7 +559,7 @@ video { outline: none; }
       var frameWantedAt = 0;
       var everLinked = false; // the Studio has sent the camera to this window at least once
       var frameUrl = '';
-      var useFrames = !NOCAM && feed === 'program';
+      var useFrames = !NOCAM && feed !== 'preview';
       function hasFrame() { return useFrames && frameLastAt > 0 && Date.now() - frameLastAt < 3000; }
       function frameBase() {
         try { if (location.protocol === 'http:' || location.protocol === 'https:') return location.origin; } catch (e) { /* ignore */ }
@@ -916,7 +922,7 @@ video { outline: none; }
           el.className = 'mix-item';
           media = document.createElement('video');
           media.loop = layer.loop !== false;
-          media.muted = isMonitor || layer.muted === true;
+          media.muted = SILENT || layer.muted === true;
           media.playsInline = true;
           media.src = layer.url || '';
           media.style.objectFit = layer.fit === 'contain' ? 'contain' : 'cover';
@@ -1137,6 +1143,11 @@ video { outline: none; }
         if (feed === 'preview') {
           var pv = state.preview || { active: null, packets: {}, media: null, mediaControl: null };
           state = { active: pv.active, packets: pv.packets || {}, media: pv.media || null, mediaControl: pv.mediaControl || null, screen: 'live' };
+        } else if (feed === 'alt' && state.alt && state.alt.packets) {
+          state = Object.assign({}, state, {
+            active: state.alt.active === undefined ? state.active : state.alt.active,
+            packets: state.alt.packets,
+          });
         }
         var packets = state.packets || {};
         ['bible', 'worship', 'notes'].forEach(function (key) {
@@ -1160,7 +1171,7 @@ video { outline: none; }
         // A projector window (and the Studio's own Output monitor) shows the logo while nothing is on,
         // so an open screen is never just black. A browser source in OBS or a TV link stays as it was.
         if (state.active || state.media) idleSince = 0;
-        idleWanted = feed === 'program' && (!!winLabel || isMonitor) && lastScreen === 'live' && !state.active && !state.media;
+        idleWanted = feed !== 'preview' && (!!winLabel || isMonitor) && lastScreen === 'live' && !state.active && !state.media;
         refreshIdle();
       }
 

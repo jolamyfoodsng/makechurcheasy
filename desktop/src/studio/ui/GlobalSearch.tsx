@@ -12,7 +12,7 @@
  *   Esc            close
  */
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import { BookOpen, CalendarPlus, Command as CommandIcon, FileText, Image as ImageIcon, Layers, Music, Search, StickyNote, X } from "lucide-react";
+import { BookOpen, CalendarPlus, Command as CommandIcon, FileText, Image as ImageIcon, Layers, Music, Search, StickyNote, X } from "../../components/icons/NativeIcons";
 import { parseBibleSearch } from "../../dock/bibleSearchParser";
 import { detectActiveTranslationPrompt, getTranslationDirectiveSuggestions } from "../../dock/dockBibleCatalog";
 import { warmQuoteIndex } from "../../bible/quoteIndexStore";

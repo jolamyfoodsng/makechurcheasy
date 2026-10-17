@@ -13,7 +13,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
-import { Search, Plus, Share2, Eye, MoreVertical, ArrowLeft, X as CloseIcon, Film } from "lucide-react";
+import { Search, Plus, Share2, Eye, MoreVertical, ArrowLeft, X as CloseIcon, Film } from "../components/icons/NativeIcons";
 import i18n from "../i18n";
 import type { MediaItem } from "./libraryTypes";
 import { getAllMedia, saveMedia, deleteMedia, renameMedia } from "./libraryDb";

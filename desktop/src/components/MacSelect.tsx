@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronRight, Mic, RefreshCw } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Mic, RefreshCw } from "./icons/NativeIcons";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useRef, useState } from "react";
 

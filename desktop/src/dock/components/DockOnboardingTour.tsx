@@ -206,10 +206,10 @@ export const DockOnboardingTour: React.FC = () => {
         aria-label="MakeChurchEazy Dock Onboarding"
         style={{
           ...tooltipStyle,
-          backgroundColor: "#131724",
-          color: "#f8fafc",
+          backgroundColor: "var(--surface)",
+          color: "var(--text-primary)",
           borderRadius: 12,
-          border: "1px solid rgba(255, 255, 255, 0.1)",
+          border: "1px solid var(--border)",
           boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)",
           padding: 16,
           boxSizing: "border-box",
@@ -228,7 +228,7 @@ export const DockOnboardingTour: React.FC = () => {
                 fontWeight: 600,
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
-                backgroundColor: "#4f46e5",
+                backgroundColor: "var(--primary)",
                 color: "#fff",
                 padding: "2px 8px",
                 borderRadius: 9999,
@@ -245,7 +245,7 @@ export const DockOnboardingTour: React.FC = () => {
             style={{
               background: "none",
               border: "none",
-              color: "#a1a1aa",
+              color: "var(--text-muted)",
               cursor: "pointer",
               padding: 4,
               display: "flex",
@@ -270,7 +270,7 @@ export const DockOnboardingTour: React.FC = () => {
             style={{
               background: "none",
               border: "none",
-              color: "#a1a1aa",
+              color: "var(--text-muted)",
               fontSize: 12,
               cursor: "pointer",
               padding: "4px 8px",
@@ -284,9 +284,9 @@ export const DockOnboardingTour: React.FC = () => {
               <button
                 onClick={handlePrev}
                 style={{
-                  background: "#1e293b",
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
-                  color: "#f8fafc",
+                  background: "var(--surface-raised)",
+                  border: "1px solid var(--border)",
+                  color: "var(--text-primary)",
                   fontSize: 12,
                   fontWeight: 500,
                   cursor: "pointer",
@@ -300,7 +300,7 @@ export const DockOnboardingTour: React.FC = () => {
             <button
               onClick={handleNext}
               style={{
-                background: "#4f46e5",
+                background: "var(--primary)",
                 border: "none",
                 color: "#fff",
                 fontSize: 12,

@@ -4,7 +4,7 @@
  * While a key is being recorded, the next key press is taken as the new shortcut (Esc cancels).
  */
 import { useEffect, useMemo, useState } from "react";
-import { Plus, RotateCcw, Search, X } from "lucide-react";
+import { Plus, RotateCcw, Search, X } from "../../components/icons/NativeIcons";
 import {
   SHORTCUT_DEFS,
   SHORTCUT_GROUPS,

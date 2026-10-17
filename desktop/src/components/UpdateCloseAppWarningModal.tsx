@@ -2,7 +2,7 @@ import {
   useUpdateDownload,
   updateDownloadManager,
 } from "../services/updateDownloadManager";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle } from "./icons/NativeIcons";
 import ModalDialog, { ModalProgress } from "./ModalDialog";
 
 function formatBytes(bytes: number): string {

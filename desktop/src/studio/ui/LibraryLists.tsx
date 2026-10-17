@@ -2,7 +2,7 @@
  * LibraryLists.tsx — the left panel for Worship (songs), Notes and Media.
  */
 import { useMemo, useState } from "react";
-import { Film, Image as ImageIcon, Search } from "lucide-react";
+import { Film, Image as ImageIcon, Search } from "../../components/icons/NativeIcons";
 import type { Song } from "../../worship/types";
 import type { DockNote } from "../../dock/dockNotesStorage";
 import type { MediaItem } from "../../library/libraryTypes";

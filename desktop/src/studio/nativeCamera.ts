@@ -11,8 +11,10 @@
  */
 import { studioBaseUrl } from "./studioEngine";
 
+/** A camera on this computer (`index`) or an NDI® source on the network (`ndi`, its full name). */
 export interface NativeCameraDevice {
-  index: number;
+  index?: number;
+  ndi?: string;
   name: string;
 }
 
@@ -42,17 +44,23 @@ export async function nativeCameraAvailable(): Promise<boolean> {
   return Boolean(status?.available);
 }
 
-export async function listNativeCameras(): Promise<{ devices: NativeCameraDevice[]; error: string }> {
-  const data = await call<{ devices?: NativeCameraDevice[]; error?: string }>("/api/studio-cam/devices");
-  return { devices: data?.devices ?? [], error: data?.error ?? (data ? "" : "The native camera did not answer.") };
+/** The cameras and NDI sources the app can open. `ndiError` says why no NDI source can be listed ("" = NDI works). */
+export async function listNativeCameras(): Promise<{ devices: NativeCameraDevice[]; error: string; ndiError: string }> {
+  const data = await call<{ devices?: NativeCameraDevice[]; error?: string; ndiError?: string }>("/api/studio-cam/devices");
+  return {
+    devices: data?.devices ?? [],
+    error: data?.error ?? (data ? "" : "The native camera did not answer."),
+    ndiError: data?.ndiError ?? "",
+  };
 }
 
-export async function startNativeCamera(index: number): Promise<{ ok: boolean; error: string }> {
+/** Start a camera on this computer (its index) or an NDI source (`{ ndi: name }`). */
+export async function startNativeCamera(source: number | { ndi: string }): Promise<{ ok: boolean; error: string }> {
   return queueCameraAction(async () => {
     const data = await call<{ ok?: boolean; error?: string }>("/api/studio-cam/start", {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
-      body: JSON.stringify({ index }),
+      body: JSON.stringify(typeof source === "number" ? { index: source } : source),
     });
     return { ok: Boolean(data?.ok), error: data?.error ?? (data ? "" : "The native camera did not answer.") };
   });
@@ -86,9 +94,20 @@ export async function waitNativePictures(timeoutMs = 5000): Promise<{ ok: boolea
   return { ok: false, error: "The native camera opened but sent no pictures." };
 }
 
-/** Device ids in the Studio: "n:<index>" so they can never be mistaken for a browser camera id. */
+/**
+ * Device ids in the Studio: "n:<index>" for a camera and "ndi:<name>" for an NDI source, so they can
+ * never be mistaken for a browser camera id. Both are opened by the app itself.
+ */
 export const nativeId = (index: number): string => `n:${index}`;
-export const isNativeId = (id: string): boolean => id.startsWith("n:");
+export const ndiId = (name: string): string => `ndi:${name}`;
+export const isNdiId = (id: string): boolean => id.startsWith("ndi:");
+export const ndiName = (id: string): string => id.slice(4);
+export const isNativeId = (id: string): boolean => id.startsWith("n:") || isNdiId(id);
+/** A listed device as the Studio's camera picker shows it. */
+export const nativeOption = (d: NativeCameraDevice): { id: string; label: string } =>
+  d.ndi ? { id: ndiId(d.ndi), label: `${d.name} (NDI)` } : { id: nativeId(d.index ?? 0), label: d.name };
+/** What to ask the app to open for a Studio device id. */
+export const nativeTarget = (id: string): number | { ndi: string } => (isNdiId(id) ? { ndi: ndiName(id) } : nativeIndex(id));
 export const nativeIndex = (id: string): number => {
   const n = Number(id.slice(2));
   return Number.isFinite(n) ? n : 0;

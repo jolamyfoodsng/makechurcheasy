@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, FlaskConical, Layers, RotateCcw } from "lucide-react";
+import { Check, FlaskConical, Layers, RotateCcw } from "./icons/NativeIcons";
 
 import { useAuth } from "../contexts/AuthContext";
 import { getSession } from "../services/authService";

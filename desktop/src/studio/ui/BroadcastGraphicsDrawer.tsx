@@ -14,7 +14,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Bookmark, Eye, Loader2, MoreHorizontal, Pause, Pencil, Play, Repeat, RotateCcw, Search, Send, Square, Trash2, X } from "lucide-react";
+import { Bookmark, Eye, Loader2, MoreHorizontal, Pause, Pencil, Play, Repeat, RotateCcw, Search, Send, Square, Trash2, X } from "../../components/icons/NativeIcons";
 import type { LowerThirdTheme, LTVariable } from "../../lowerthirds/types";
 import { buildThemePreviewHtml, obsPreviewSandbox, type BroadcastTheme } from "../../lowerthirds/broadcastPreviewHtml";
 import { KINETIC_LOWER_THIRD_THEMES } from "../../lowerthirds/kineticThemes";

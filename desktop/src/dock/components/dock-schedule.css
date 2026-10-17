@@ -5,7 +5,7 @@
   display: flex;
   height: 100%;
   background: var(--dock-surface-panel, var(--dock-surface-0, var(--dock-bg, #0f172a)));
-  border-right: 1px solid var(--dock-border, var(--dock-border-subtle, rgba(255, 255, 255, 0.08)));
+  border-right: 1px solid var(--dock-border, var(--dock-border-subtle, var(--border)));
   user-select: none;
   flex-shrink: 0;
   overflow: hidden;
@@ -70,9 +70,9 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-alt, rgba(255, 255, 255, 0.06));
-  border: 1px solid var(--dock-border, var(--dock-border-subtle, rgba(255, 255, 255, 0.1)));
+  border: 1px solid var(--dock-border, var(--dock-border-subtle, var(--border)));
   color: var(--dock-text-primary, #f8fafc);
   cursor: pointer;
   transition: all 0.15s;
@@ -160,7 +160,7 @@
 /* ── Panel Header ── */
 .dock-schedule-panel__header {
   padding: 8px 10px;
-  border-bottom: 1px solid var(--dock-border, var(--dock-border-subtle, rgba(255, 255, 255, 0.08)));
+  border-bottom: 1px solid var(--dock-border, var(--dock-border-subtle, var(--border)));
   background: var(--dock-surface, rgba(0, 0, 0, 0.25));
   display: flex;
   flex-direction: column;
@@ -181,9 +181,9 @@
   align-items: center;
   gap: 3px;
   background: var(--dock-surface-alt, rgba(0, 0, 0, 0.4));
-  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.1));
+  border: 1px solid var(--dock-border, var(--border));
   padding: 2px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   flex: 1;
   min-width: 0;
 }
@@ -193,7 +193,7 @@
   flex-shrink: 0;
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-alt, rgba(255, 255, 255, 0.08));
   border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.2));
   color: var(--dock-text, #f8fafc);
@@ -228,7 +228,7 @@
 .dock-schedule-free-banner--schedule {
   background: rgba(59, 130, 246, 0.12);
   border-bottom-color: rgba(59, 130, 246, 0.22);
-  color: #93c5fd;
+  color: var(--accent-blue);
 }
 
 .dock-schedule-free-banner__label {
@@ -368,9 +368,9 @@
   padding: 0 8px;
   font-size: 11.5px;
   font-weight: 600;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-input-bg, var(--dock-surface-alt, rgba(255, 255, 255, 0.06)));
-  border: 1px solid var(--dock-input-border, var(--dock-border, var(--dock-border-subtle, rgba(255, 255, 255, 0.12))));
+  border: 1px solid var(--dock-input-border, var(--dock-border, var(--dock-border-subtle, var(--border))));
   color: var(--dock-text-primary, #f8fafc);
   outline: none;
   cursor: pointer;
@@ -401,9 +401,9 @@
   justify-content: center;
   width: 26px;
   height: 26px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface-alt, rgba(255, 255, 255, 0.06));
-  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--dock-border, var(--border));
   color: var(--dock-text-secondary, #94a3b8);
   cursor: pointer;
   padding: 0;
@@ -429,9 +429,9 @@
   justify-content: center;
   width: 26px;
   height: 26px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid var(--border);
   color: #ffffff;
   cursor: pointer;
   padding: 0;
@@ -457,9 +457,9 @@
   justify-content: center;
   width: 26px;
   height: 26px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--border);
   color: #ffffff;
   cursor: pointer;
   padding: 0;
@@ -480,11 +480,11 @@
   z-index: 9999;
   min-width: 175px;
   background: #182030;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
   padding: 4px;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(12px);
+  backdrop-filter: none;
   animation: dock-ctx-fade 0.12s ease-out;
 }
 
@@ -508,7 +508,7 @@
 
 .dock-schedule-header-dropdown__item:hover {
   background: rgba(59, 130, 246, 0.2);
-  color: #93c5fd;
+  color: var(--accent-blue);
 }
 
 .dock-schedule-header-dropdown__item--danger:hover {
@@ -529,7 +529,7 @@
   font-size: 11px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--dock-border-subtle, rgba(255, 255, 255, 0.15));
+  border: 1px solid var(--dock-border-subtle, var(--border));
   color: #fff;
   outline: none;
 }
@@ -549,7 +549,7 @@
   font-weight: 500;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--dock-border-subtle, rgba(255, 255, 255, 0.1));
+  border: 1px solid var(--dock-border-subtle, var(--border));
   color: var(--dock-text-primary, #f8fafc);
   cursor: pointer;
   transition: all 0.15s;
@@ -615,9 +615,9 @@
   padding: 5px 8px;
   min-height: 48px;
   height: auto;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-card, var(--dock-surface-alt, rgba(255, 255, 255, 0.04)));
-  border: 1px solid var(--dock-border, var(--dock-border-subtle, rgba(255, 255, 255, 0.08)));
+  border: 1px solid var(--dock-border, var(--dock-border-subtle, var(--border)));
   cursor: pointer;
   transition: all 0.16s ease;
   user-select: none;
@@ -628,7 +628,7 @@
 
 .dock-schedule-card:hover {
   background: var(--dock-card-hover, var(--dock-surface-hover, rgba(255, 255, 255, 0.08)));
-  border-color: var(--dock-border-hover, rgba(255, 255, 255, 0.18));
+  border-color: var(--dock-border-hover, var(--border));
 }
 
 .dock-schedule-card:active {
@@ -660,16 +660,16 @@
   min-height: unset !important;
   max-height: none !important;
   padding: 9px 11px;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-card, var(--dock-surface-alt, rgba(255, 255, 255, 0.04)));
-  border: 1px solid var(--dock-border, var(--dock-border-subtle, rgba(255, 255, 255, 0.08)));
+  border: 1px solid var(--dock-border, var(--dock-border-subtle, var(--border)));
   box-sizing: border-box;
   color: var(--dock-text, #ffffff);
 }
 
 .dock-schedule-card--text:hover {
   background: var(--dock-card-hover, var(--dock-surface-hover, rgba(255, 255, 255, 0.07)));
-  border-color: var(--dock-border-hover, rgba(255, 255, 255, 0.16));
+  border-color: var(--dock-border-hover, var(--border));
 }
 
 .dock-schedule-card__header-row,
@@ -879,7 +879,7 @@
 
 .dock-schedule-card__leading-icon--bible {
   background: rgba(59, 130, 246, 0.12);
-  color: #60a5fa;
+  color: var(--accent-blue);
   border-color: rgba(59, 130, 246, 0.25);
 }
 
@@ -1002,7 +1002,7 @@
   letter-spacing: 0.02em;
   background: rgba(59, 130, 246, 0.2);
   border: 1px solid rgba(59, 130, 246, 0.45);
-  color: #93c5fd;
+  color: var(--accent-blue);
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
@@ -1030,7 +1030,7 @@
   height: 20px;
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.12);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid var(--border);
   color: var(--dock-text-muted, #94a3b8);
   cursor: pointer;
   padding: 0;
@@ -1068,7 +1068,7 @@
 .dock-schedule-card__btn--project {
   background: rgba(59, 130, 246, 0.2);
   border-color: rgba(59, 130, 246, 0.45);
-  color: #93c5fd;
+  color: var(--accent-blue);
 }
 
 .dock-schedule-card__btn--project-live {
@@ -1150,12 +1150,12 @@
   width: max-content;
   max-width: 280px;
   background: var(--dock-surface-overlay, var(--dock-surface-alt, #182030));
-  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.14));
-  border-radius: 8px;
+  border: 1px solid var(--dock-border, var(--border));
+  border-radius: var(--radius, 4px);
   padding: 4px;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   animation: dock-ctx-fade 0.12s ease-out;
   color: var(--dock-text, #f8fafc);
 }
@@ -1202,7 +1202,7 @@
 
 .dock-schedule-context-menu__item:hover {
   background: rgba(59, 130, 246, 0.2);
-  color: #93c5fd;
+  color: var(--accent-blue);
 }
 
 .dock-schedule-context-menu__item--danger:hover {
@@ -1226,8 +1226,8 @@
   width: 100%;
   max-width: 320px;
   background: var(--dock-surface-overlay, var(--dock-surface-alt, #1e293b));
-  border: 1px solid var(--dock-border, rgba(255, 255, 255, 0.16));
-  border-radius: 10px;
+  border: 1px solid var(--dock-border, var(--border));
+  border-radius: var(--radius-lg, 6px);
   box-shadow: 0 20px 30px rgba(0, 0, 0, 0.7);
   display: flex;
   flex-direction: column;
@@ -1242,8 +1242,8 @@
   padding: 12px 14px;
   font-size: 13px;
   font-weight: 700;
-  color: #fff;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
 }
 
 .dock-schedule-modal__close-btn {
@@ -1276,9 +1276,9 @@
   height: 32px;
   padding: 0 10px;
   font-size: 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-lg, 6px);
   background: rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--border);
   color: #fff;
   outline: none;
 }
@@ -1295,7 +1295,7 @@
   gap: 8px;
   padding: 10px 14px;
   background: rgba(0, 0, 0, 0.2);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--border);
 }
 
 /* ── Compact scaling when dragged down to ~20% width (<= 270px) ── */
@@ -1362,7 +1362,7 @@
 .dock-schedule-panel--compact .dock-schedule-card__title {
   font-size: 13px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .dock-schedule-panel--compact .dock-schedule-panel__list {
@@ -1509,7 +1509,7 @@
 .dock-schedule-panel--ultra-compact .dock-schedule-card__title {
   font-size: 12px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .dock-schedule-panel--ultra-compact .dock-schedule-panel__list {
@@ -1645,7 +1645,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  border-top: 1px solid var(--dock-border-subtle, rgba(255, 255, 255, 0.08));
+  border-top: 1px solid var(--dock-border-subtle, var(--border));
   background: rgba(0, 0, 0, 0.2);
   flex-shrink: 0;
 }
@@ -1685,7 +1685,7 @@
   align-items: center;
   gap: 4px;
   background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--border);
   color: var(--dock-text-primary, #f8fafc);
   font-size: 11px;
   font-weight: 500;
@@ -1743,7 +1743,7 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
   color: #fff;
   padding: 6px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   font-size: 11px;
   display: flex;
   align-items: center;
@@ -1807,7 +1807,7 @@
 
 :root.light .dock-schedule-panel__select option {
   background: #ffffff;
-  color: #0f172a;
+  color: var(--text-primary);
 }
 
 :root.light .dock-schedule-card,
@@ -1888,22 +1888,22 @@
 /* ── Schedule Drawer Glass Surface ── */
 .dock-root--glass .dock-schedule-container {
   background: color-mix(in srgb, var(--dock-surface-0, #0f172a) 75%, transparent);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .dock-root--glass .dock-schedule-panel__header,
 .dock-root--glass .dock-schedule-panel__footer {
   background: color-mix(in srgb, var(--dock-surface, #151d2c) 70%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .dock-root--glass .dock-schedule-card,
 .dock-root--glass .dock-schedule-card--text {
   background: color-mix(in srgb, var(--dock-card, #1e293b) 60%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 /* Narrow docks: an opened (not pinned) Schedule slides over the content instead of taking 30% of

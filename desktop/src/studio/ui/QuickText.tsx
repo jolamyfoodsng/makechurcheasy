@@ -2,7 +2,7 @@
  * QuickText.tsx — quick text buttons for what is on the screen, like the Dock's quick actions:
  * smaller / bigger, bold, italic, and back to the theme's own look. They work on top of any theme.
  */
-import { Bold, Italic, Minus, Plus, RotateCcw } from "lucide-react";
+import { Bold, Italic, Minus, Plus, RotateCcw } from "../../components/icons/NativeIcons";
 
 export const TEXT_SCALE_MIN = 70;
 export const TEXT_SCALE_MAX = 160;

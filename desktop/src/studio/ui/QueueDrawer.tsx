@@ -13,7 +13,7 @@
  * taller; the chevron collapses it to one row with the two counts.
  */
 import { useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, CalendarPlus, ChevronDown, ChevronUp, Eye, GripVertical, ListPlus, Play, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarPlus, ChevronDown, ChevronUp, Eye, GripVertical, ListPlus, Play, Trash2, X } from "../../components/icons/NativeIcons";
 import type { VoiceBibleCandidate } from "../../services/voiceBibleTypes";
 import { candidateKey, suggestionReason } from "../studioQueue";
 import StudioMenu, { menuAt, type StudioMenuState } from "./StudioMenu";

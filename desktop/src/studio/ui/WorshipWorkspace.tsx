@@ -8,7 +8,7 @@
  * Songs are added and edited on the Worship page (New / Edit open it).
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { CalendarPlus, Eye, Music, Pencil, Play, Plus, Search, Star, X } from "lucide-react";
+import { CalendarPlus, Eye, Music, Pencil, Play, Plus, Search, Star, X } from "../../components/icons/NativeIcons";
 import type { Song } from "../../worship/types";
 import { toneStyle, type DeckSlide } from "../studioSlides";
 import { lineStats, songLineStats } from "../../worship/lyricTools";

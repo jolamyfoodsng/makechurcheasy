@@ -31,9 +31,10 @@ import {
   ShieldAlert,
   StopCircle,
   Wifi,
+  WifiOff,
   X,
   Zap
-} from "lucide-react";
+} from "../components/icons/NativeIcons";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -1075,7 +1076,7 @@ export default function SpeechToScripturePage() {
           <button
             type="button"
             className="sts3-header-icon-btn"
-            style={{ width: "auto", padding: "6px 12px", gap: "6px", display: "inline-flex", fontSize: "0.82rem", borderRadius: "8px" }}
+            style={{ width: "auto", padding: "6px 12px", gap: "6px", display: "inline-flex", fontSize: "0.82rem", borderRadius: "var(--radius)" }}
             onClick={() => navigate("/transcripts")}
             title="View all saved transcripts"
           >
@@ -1087,7 +1088,7 @@ export default function SpeechToScripturePage() {
             <button
               type="button"
               className="sts3-header-icon-btn"
-              style={{ width: "auto", padding: "6px 12px", gap: "6px", display: "inline-flex", fontSize: "0.82rem", borderRadius: "8px" }}
+              style={{ width: "auto", padding: "6px 12px", gap: "6px", display: "inline-flex", fontSize: "0.82rem", borderRadius: "var(--radius)" }}
               onClick={() => {
                 lmDockService.stopListening();
                 setElapsed(0);
@@ -1139,7 +1140,7 @@ export default function SpeechToScripturePage() {
       {/* ── Connection Lost Banner ── */}
       {connectionLostBanner && isOffline && isListening && (
         <div className="sts3-connection-lost-banner">
-          <span>📡</span>
+          <WifiOff size={18} />
           <div className="sts3-connection-lost-text">
             <strong>{t("verseAi.connectionLost")}</strong>
             <span>{t("verseAi.connectionLostDesc")}</span>

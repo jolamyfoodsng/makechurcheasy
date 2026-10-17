@@ -6,7 +6,7 @@
  * update immediately through the shared event bus.
  */
 
-import { Zap, CloudOff } from "lucide-react";
+import { Zap, CloudOff } from "./icons/NativeIcons";
 import { useEffect, useRef, useState } from "react";
 import {
   getCreditsBalance,

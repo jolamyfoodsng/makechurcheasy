@@ -1,15 +1,15 @@
 /* ModalDialog.css — the single modal look (see ModalDialog.tsx). Change the tokens here to restyle every dialog. */
 :root {
-  --mce-modal-bg: #131724;
-  --mce-modal-border: rgba(255, 255, 255, 0.1);
-  --mce-modal-radius: 16px;
+  --mce-modal-bg: var(--surface);
+  --mce-modal-border: var(--border-strong);
+  --mce-modal-radius: var(--radius-lg);
   --mce-modal-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.04);
   --mce-modal-backdrop: rgba(4, 9, 20, 0.75);
-  --mce-modal-title: #f8fafc;
-  --mce-modal-text: #cbd5e1;
-  --mce-modal-muted: #64748b;
-  --mce-modal-primary: #4f46e5;
-  --mce-modal-primary-hover: #4338ca;
+  --mce-modal-title: var(--text-primary);
+  --mce-modal-text: var(--text-secondary);
+  --mce-modal-muted: var(--text-muted);
+  --mce-modal-primary: var(--primary);
+  --mce-modal-primary-hover: var(--primary-hover);
   --mce-modal-danger: #ef4444;
   --mce-modal-danger-hover: #dc2626;
 }
@@ -23,8 +23,8 @@
   justify-content: center;
   padding: 20px;
   background: var(--mce-modal-backdrop);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   animation: mce-modal-fade 0.15s ease-out;
 }
 
@@ -33,7 +33,7 @@
   box-sizing: border-box;
   width: 100%;
   max-width: 440px;
-  padding: 28px 28px 24px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -53,7 +53,7 @@
 }
 
 @keyframes mce-modal-pop {
-  from { opacity: 0; transform: scale(0.94) translateY(8px); }
+  from { opacity: 0; transform: scale(0.98) translateY(4px); }
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
@@ -68,16 +68,16 @@
   justify-content: center;
   padding: 0;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-lg, 6px);
   background: transparent;
-  color: #94a3b8;
+  color: var(--text-secondary);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .mce-modal__close:hover {
   background: rgba(255, 255, 255, 0.08);
-  color: #f8fafc;
+  color: var(--text-primary);
 }
 
 .mce-modal__badge {
@@ -91,7 +91,7 @@
   border: 1px solid transparent;
 }
 
-.mce-modal__badge--brand { background: rgba(99, 102, 241, 0.12); border-color: rgba(99, 102, 241, 0.28); color: #818cf8; }
+.mce-modal__badge--brand { background: rgba(99, 102, 241, 0.12); border-color: rgba(99, 102, 241, 0.28); color: var(--accent-blue); }
 .mce-modal__badge--info { background: rgba(56, 189, 248, 0.12); border-color: rgba(56, 189, 248, 0.28); color: #38bdf8; }
 .mce-modal__badge--warning { background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.28); color: #fbbf24; }
 .mce-modal__badge--danger { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.28); color: #f87171; }
@@ -150,7 +150,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg, 6px);
   border: 1px solid transparent;
   font-family: inherit;
   font-size: 13px;
@@ -166,8 +166,8 @@
 
 .mce-modal__btn--ghost {
   background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
-  color: #cbd5e1;
+  border-color: var(--border);
+  color: var(--text-secondary);
 }
 
 .mce-modal__btn--ghost:hover:not(:disabled) {
@@ -218,7 +218,7 @@
   gap: 8px;
   padding: 12px 14px;
   background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
   border-radius: 10px;
 }
 
@@ -231,7 +231,7 @@
 }
 
 .mce-modal__progress-label {
-  color: #cbd5e1;
+  color: var(--text-secondary);
   font-weight: 500;
 }
 

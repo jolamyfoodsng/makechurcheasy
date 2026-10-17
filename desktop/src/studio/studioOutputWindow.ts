@@ -17,11 +17,19 @@ import { toLoopbackBase } from "./studioEngine";
 import { overlayBridge } from "../dock/dockOverlayBridge";
 
 const OUTPUT_MONITOR_KEY = "mce-studio-output-monitor";
+const ALT_MONITOR_KEY = "mce-studio-alt-output-monitor";
 const LABEL_PREFIX = "studio-projector-";
 /** Phase 1 window label, closed too so an old window never gets stuck. */
 const LEGACY_LABEL = "studio-output";
 
-export type ProjectorFeed = "program" | "preview";
+/** program = the Output, alt = the alternate output (same item, its own look), preview = what's next. */
+export type ProjectorFeed = "program" | "alt" | "preview";
+
+const PROJECTOR_TITLE: Record<ProjectorFeed, string> = {
+  program: "Program Projector",
+  alt: "Alternate Output",
+  preview: "Preview Projector",
+};
 /** A monitor key, or "window" for a normal window. */
 export type ProjectorTarget = string;
 
@@ -85,6 +93,22 @@ export function readSavedOutputMonitor(): string {
 export function saveOutputMonitor(key: string): void {
   try {
     localStorage.setItem(OUTPUT_MONITOR_KEY, key);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readSavedAltMonitor(): string {
+  try {
+    return localStorage.getItem(ALT_MONITOR_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
+export function saveAltMonitor(key: string): void {
+  try {
+    localStorage.setItem(ALT_MONITOR_KEY, key);
   } catch {
     /* ignore */
   }
@@ -222,7 +246,7 @@ export async function openProjector(feed: ProjectorFeed, target: ProjectorTarget
   const base = toLoopbackBase(await getOverlayBaseUrl());
   const label = `${LABEL_PREFIX}${feed}-${Date.now()}-${++counter}`;
   const url = `${base}/studio-output.html?feed=${feed}&win=${encodeURIComponent(label)}`;
-  const title = feed === "program" ? "Program Projector" : "Preview Projector";
+  const title = PROJECTOR_TITLE[feed];
 
   let entry: OpenProjector;
   let win: WebviewWindow;
@@ -284,6 +308,7 @@ export async function openProjector(feed: ProjectorFeed, target: ProjectorTarget
     await win.setFullscreen(true);
     if (isControl) await win.setFocus().catch(() => undefined);
     if (feed === "program") saveOutputMonitor(key);
+    if (feed === "alt") saveAltMonitor(key);
   }
 
   projectors.set(label, entry);

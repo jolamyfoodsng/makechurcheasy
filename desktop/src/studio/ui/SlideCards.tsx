@@ -2,7 +2,7 @@
  * SlideCards.tsx — one card per slide (song section, note slide or picture/video).
  * Click = Preview, double-click = Live.
  */
-import { Film } from "lucide-react";
+import { Film } from "../../components/icons/NativeIcons";
 import { toneStyle, type DeckSlide } from "../studioSlides";
 
 interface SlideCardsProps {

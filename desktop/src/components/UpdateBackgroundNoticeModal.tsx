@@ -2,7 +2,7 @@ import {
   useUpdateDownload,
   updateDownloadManager,
 } from "../services/updateDownloadManager";
-import { CloudDownload } from "lucide-react";
+import { CloudDownload } from "./icons/NativeIcons";
 import ModalDialog, { ModalProgress } from "./ModalDialog";
 
 function formatBytes(bytes: number): string {

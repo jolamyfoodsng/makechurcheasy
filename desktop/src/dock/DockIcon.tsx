@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { LucideProps } from "lucide-react";
+import type { LucideProps } from "../components/icons/NativeIcons";
 import {
   Accessibility,
   AlignHorizontalDistributeCenter,
@@ -192,7 +192,7 @@ import {
   X,
   Zap,
   ZoomIn,
-} from "lucide-react";
+} from "../components/icons/NativeIcons";
 
 interface Props {
   name: string;

@@ -2,7 +2,7 @@ import {
   useUpdateDownload,
   updateDownloadManager,
 } from "../services/updateDownloadManager";
-import { Loader2, ArrowUpRight, CheckCircle2, RotateCw } from "lucide-react";
+import { Loader2, ArrowUpRight, CheckCircle2, RotateCw } from "./icons/NativeIcons";
 import "./UpdateDownloadingBanner.css";
 
 function formatBytes(bytes: number): string {

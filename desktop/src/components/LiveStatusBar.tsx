@@ -1,3 +1,4 @@
+import Icon from "./Icon";
 /**
  * LiveStatusBar.tsx — Global application health center
  *
@@ -69,7 +70,7 @@ export default function LiveStatusBar() {
   if (obsStatus === "connected") {
     items.push({
       id: "obs",
-      icon: "🟢",
+      icon: "check_circle",
       label: "OBS Connected",
       ...COLORS.green,
       animate: "pulse",
@@ -78,7 +79,7 @@ export default function LiveStatusBar() {
   } else if (obsStatus === "connecting") {
     items.push({
       id: "obs",
-      icon: "🟡",
+      icon: "sync",
       label: "OBS Connecting",
       ...COLORS.orange,
       animate: "glow",
@@ -87,7 +88,7 @@ export default function LiveStatusBar() {
   } else if (obsStatus === "error") {
     items.push({
       id: "obs",
-      icon: "🔴",
+      icon: "error",
       label: "OBS Error",
       ...COLORS.red,
       navigateTo: "/settings",
@@ -101,7 +102,7 @@ export default function LiveStatusBar() {
     if (status === "listening") {
       items.push({
         id: "listening",
-        icon: "🎙",
+        icon: "mic",
         label: "Listening",
         ...COLORS.purple,
         animate: "pulse",
@@ -110,7 +111,7 @@ export default function LiveStatusBar() {
     } else if (status === "connecting") {
       items.push({
         id: "listening",
-        icon: "🎙",
+        icon: "mic",
         label: "Connecting…",
         ...COLORS.purple,
         animate: "glow",
@@ -119,7 +120,7 @@ export default function LiveStatusBar() {
     } else if (status === "requesting-mic") {
       items.push({
         id: "listening",
-        icon: "🎙",
+        icon: "mic",
         label: "Requesting Mic…",
         ...COLORS.orange,
         navigateTo: "/speech-to-scripture",
@@ -127,7 +128,7 @@ export default function LiveStatusBar() {
     } else if (status === "error") {
       items.push({
         id: "listening",
-        icon: "🎙",
+        icon: "mic",
         label: "Mic Error",
         ...COLORS.red,
         navigateTo: "/speech-to-scripture",
@@ -143,7 +144,7 @@ export default function LiveStatusBar() {
       if (latestCandidate?.label) {
         items.push({
           id: "scripture",
-          icon: "📖",
+          icon: "menu_book",
           label: latestCandidate.label,
           ...COLORS.orange,
           navigateTo: "/speech-to-scripture",
@@ -159,7 +160,7 @@ export default function LiveStatusBar() {
         if (interimText) {
           items.push({
             id: "transcript",
-            icon: "🎙",
+            icon: "mic",
             label: interimText.length > 40 ? `${interimText.slice(0, 38)}…` : interimText,
             ...COLORS.blue,
             navigateTo: "/speech-to-scripture",
@@ -197,7 +198,7 @@ export default function LiveStatusBar() {
             onClick={() => handlePillClick(item.navigateTo)}
             title={item.label}
           >
-            <span className="live-status-pill__icon">{item.icon}</span>
+            <Icon name={item.icon} size={14} className="live-status-pill__icon" />
             <span className="live-status-pill__label">{item.label}</span>
           </button>
         ))}

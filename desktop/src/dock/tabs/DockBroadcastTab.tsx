@@ -622,7 +622,7 @@ export default function DockBroadcastTab() {
         <div
           style={{
             padding: "8px 12px",
-            borderRadius: "8px",
+            borderRadius: "var(--radius)",
             fontSize: "12px",
             fontWeight: 500,
             display: "flex",
@@ -678,7 +678,7 @@ export default function DockBroadcastTab() {
                   fontSize: "11px",
                   fontWeight: 600,
                   padding: "2px 8px",
-                  borderRadius: "12px",
+                  borderRadius: "var(--radius)",
                   background: usageInfo.isExhausted
                     ? "rgba(239, 68, 68, 0.15)"
                     : isStreaming && enabledChannels.length > 1
@@ -717,9 +717,9 @@ export default function DockBroadcastTab() {
                   fontSize: "10.5px",
                   fontWeight: 600,
                   padding: "2px 7px",
-                  borderRadius: "10px",
+                  borderRadius: "var(--radius)",
                   background: "rgba(255, 255, 255, 0.08)",
-                  border: "1px solid rgba(255, 255, 255, 0.12)",
+                  border: "1px solid var(--border)",
                   color: "var(--dock-text-dim, #94a3b8)",
                   display: "inline-flex",
                   alignItems: "center",
@@ -891,7 +891,7 @@ export default function DockBroadcastTab() {
                 background: "var(--dock-surface-alt, #202026)",
                 color: isStreaming ? "var(--dock-text-dim, #64748b)" : "var(--dock-text, #ffffff)",
                 border: "1px solid var(--dock-border, rgba(255,255,255,0.1))",
-                borderRadius: "6px",
+                borderRadius: "var(--radius)",
                 cursor: isStreaming ? "not-allowed" : "pointer",
                 opacity: isStreaming ? 0.4 : 1,
               }}
@@ -908,7 +908,7 @@ export default function DockBroadcastTab() {
                 padding: "24px 16px",
                 background: "var(--dock-surface, #18181c)",
                 border: "1px dashed var(--dock-border, rgba(255,255,255,0.12))",
-                borderRadius: "10px",
+                borderRadius: "var(--radius)",
                 color: "var(--dock-text-dim, #94a3b8)",
                 fontSize: "12px",
                 display: "flex",
@@ -930,7 +930,7 @@ export default function DockBroadcastTab() {
                   background: isStreaming ? "rgba(99, 102, 241, 0.4)" : "var(--dock-accent, #6366F1)",
                   color: "#ffffff",
                   border: "none",
-                  borderRadius: "6px",
+                  borderRadius: "var(--radius)",
                   fontWeight: 600,
                   fontSize: "12px",
                   cursor: isStreaming ? "not-allowed" : "pointer",
@@ -954,7 +954,7 @@ export default function DockBroadcastTab() {
                       border: `1px solid ${
                         ch.enabled ? "var(--dock-border, rgba(255,255,255,0.12))" : "rgba(255,255,255,0.04)"
                       }`,
-                      borderRadius: "10px",
+                      borderRadius: "var(--radius)",
                       padding: "10px 12px",
                       display: "flex",
                       flexDirection: "column",
@@ -1012,7 +1012,7 @@ export default function DockBroadcastTab() {
                           style={{
                             width: "36px",
                             height: "20px",
-                            borderRadius: "10px",
+                            borderRadius: "var(--radius)",
                             background: ch.enabled ? "var(--dock-accent, #6366F1)" : "rgba(255, 255, 255, 0.15)",
                             border: "none",
                             padding: "2px",
@@ -1052,7 +1052,7 @@ export default function DockBroadcastTab() {
                               cursor: isStreaming ? "not-allowed" : "pointer",
                               opacity: isStreaming ? 0.35 : 1,
                               padding: "3px 2px",
-                              borderRadius: "6px",
+                              borderRadius: "var(--radius)",
                               display: "flex",
                               alignItems: "center",
                             }}
@@ -1071,7 +1071,7 @@ export default function DockBroadcastTab() {
                                 zIndex: 60,
                                 minWidth: "188px",
                                 padding: "5px",
-                                borderRadius: "10px",
+                                borderRadius: "var(--radius)",
                                 background: "var(--dock-surface, #1b1b22)",
                                 border: "1px solid var(--dock-border, rgba(255,255,255,0.14))",
                                 boxShadow: "0 12px 28px rgba(0,0,0,0.55)",
@@ -1253,7 +1253,7 @@ export default function DockBroadcastTab() {
           style={{
             background: "var(--dock-surface, #18181c)",
             border: "1px solid var(--dock-border, rgba(255,255,255,0.08))",
-            borderRadius: "12px",
+            borderRadius: "var(--radius)",
             padding: "12px",
             display: "flex",
             flexDirection: "column",
@@ -1432,7 +1432,7 @@ export default function DockBroadcastTab() {
               style={{
                 background: "var(--dock-surface-alt, #182234)",
                 border: "1px solid var(--dock-border, rgba(255,255,255,0.12))",
-                borderRadius: "14px",
+                borderRadius: "var(--radius)",
                 padding: "18px 16px 16px",
                 maxWidth: "360px",
                 width: "100%",
@@ -1492,7 +1492,7 @@ export default function DockBroadcastTab() {
             style={{
               background: "var(--dock-surface-alt, #182234)",
               border: "1px solid var(--dock-border, rgba(255,255,255,0.12))",
-              borderRadius: "14px",
+              borderRadius: "var(--radius)",
               padding: "16px",
               maxWidth: "360px",
               width: "100%",
@@ -1530,7 +1530,7 @@ export default function DockBroadcastTab() {
                   border: "1px solid var(--dock-border, #334155)",
                   color: "#fff",
                   padding: "8px 10px",
-                  borderRadius: "8px",
+                  borderRadius: "var(--radius)",
                   fontSize: "12px",
                   outline: "none",
                 }}
@@ -1551,7 +1551,7 @@ export default function DockBroadcastTab() {
                   border: "1px solid var(--dock-border, #334155)",
                   color: "#fff",
                   padding: "8px 10px",
-                  borderRadius: "8px",
+                  borderRadius: "var(--radius)",
                   fontSize: "12px",
                   outline: "none",
                 }}
@@ -1590,7 +1590,7 @@ export default function DockBroadcastTab() {
                 onClick={() => setShowPersonModal(false)}
                 style={{
                   padding: "6px 12px",
-                  borderRadius: "8px",
+                  borderRadius: "var(--radius)",
                   background: "transparent",
                   color: "var(--dock-text-dim, #94a3b8)",
                   border: "none",
@@ -1605,7 +1605,7 @@ export default function DockBroadcastTab() {
                 onClick={handleSavePerson}
                 style={{
                   padding: "6px 14px",
-                  borderRadius: "8px",
+                  borderRadius: "var(--radius)",
                   background: "var(--dock-accent, #6366F1)",
                   color: "#ffffff",
                   fontWeight: 600,
@@ -1641,7 +1641,7 @@ export default function DockBroadcastTab() {
             style={{
               background: "var(--dock-surface-alt, #182234)",
               border: "1px solid var(--dock-border, rgba(255,255,255,0.12))",
-              borderRadius: "14px",
+              borderRadius: "var(--radius)",
               padding: "16px",
               maxWidth: "380px",
               width: "100%",
@@ -1681,7 +1681,7 @@ export default function DockBroadcastTab() {
                   border: "1px solid var(--dock-border, #334155)",
                   color: "#fff",
                   padding: "8px 10px",
-                  borderRadius: "8px",
+                  borderRadius: "var(--radius)",
                   fontSize: "12px",
                   outline: "none",
                 }}
@@ -1710,7 +1710,7 @@ export default function DockBroadcastTab() {
                   border: "1px solid var(--dock-border, #334155)",
                   color: "#fff",
                   padding: "8px 10px",
-                  borderRadius: "8px",
+                  borderRadius: "var(--radius)",
                   fontSize: "12px",
                   outline: "none",
                 }}
@@ -1751,7 +1751,7 @@ export default function DockBroadcastTab() {
                   border: "1px solid var(--dock-border, #334155)",
                   color: "#fff",
                   padding: "8px 10px",
-                  borderRadius: "8px",
+                  borderRadius: "var(--radius)",
                   fontSize: "12px",
                   fontFamily: "var(--dock-font-mono, monospace)",
                   outline: "none",
@@ -1765,8 +1765,8 @@ export default function DockBroadcastTab() {
                     marginTop: "6px",
                     padding: "8px 10px",
                     background: "rgba(255, 255, 255, 0.03)",
-                    border: "1px solid rgba(255, 255, 255, 0.08)",
-                    borderRadius: "6px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius)",
                     display: "flex",
                     flexDirection: "column",
                     gap: "6px",
@@ -1820,7 +1820,7 @@ export default function DockBroadcastTab() {
                     border: "1px solid var(--dock-border, #334155)",
                     color: "#fff",
                     padding: "8px 10px",
-                    borderRadius: "8px",
+                    borderRadius: "var(--radius)",
                     fontSize: "12px",
                     outline: "none",
                   }}
@@ -1851,7 +1851,7 @@ export default function DockBroadcastTab() {
                     border: "1px solid var(--dock-border, #334155)",
                     color: "#fff",
                     padding: "8px 10px",
-                    borderRadius: "8px",
+                    borderRadius: "var(--radius)",
                     fontSize: "12px",
                     fontFamily: "var(--dock-font-mono, monospace)",
                     outline: "none",
@@ -1866,7 +1866,7 @@ export default function DockBroadcastTab() {
                 onClick={() => setShowChannelModal(false)}
                 style={{
                   padding: "6px 12px",
-                  borderRadius: "8px",
+                  borderRadius: "var(--radius)",
                   background: "transparent",
                   color: "var(--dock-text-dim, #94a3b8)",
                   border: "none",
@@ -1881,7 +1881,7 @@ export default function DockBroadcastTab() {
                 onClick={handleSaveChannel}
                 style={{
                   padding: "6px 14px",
-                  borderRadius: "8px",
+                  borderRadius: "var(--radius)",
                   background: "var(--dock-accent, #6366F1)",
                   color: "#ffffff",
                   fontWeight: 600,

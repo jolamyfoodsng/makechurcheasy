@@ -1686,7 +1686,7 @@ export function SpeakerModule({
                 marginLeft: "auto",
                 padding: "1px 5px",
                 background: "rgba(255,255,255,0.08)",
-                border: "1px solid rgba(255,255,255,0.12)",
+                border: "1px solid var(--border)",
                 borderRadius: 3,
                 fontSize: 9,
                 fontWeight: 700,

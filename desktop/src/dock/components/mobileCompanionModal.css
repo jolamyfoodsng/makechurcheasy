@@ -53,7 +53,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .mc-modal-title {
@@ -61,7 +61,7 @@
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
-  font-family: var(--font-heading, "Inter", "SF Pro Display", system-ui, sans-serif);
+  font-family: var(--font-body);
 }
 
 .mc-modal-close {
@@ -140,7 +140,7 @@
 
 .mc-qr-container {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   overflow: hidden;
   background: var(--bg-dark);
   display: flex;
@@ -183,7 +183,7 @@
 .mc-details {
   background: var(--bg-dark);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   padding: 12px;
   margin-bottom: 16px;
 }

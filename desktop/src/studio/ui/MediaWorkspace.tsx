@@ -34,7 +34,7 @@ import {
   Volume2,
   VolumeX,
   X,
-} from "lucide-react";
+} from "../../components/icons/NativeIcons";
 import type { MediaItem } from "../../library/libraryTypes";
 import { DOCK_MEDIA_ACCEPT } from "../../services/mediaValidation";
 import type { StudioMediaControl, StudioSlide } from "../studioEngine";

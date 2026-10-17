@@ -40,35 +40,35 @@ function FullscreenMessage({
         alignItems: "center",
         justifyContent: "center",
         padding: "24px",
-        background: "#0c0e17",
-        color: "#ffffff",
-        fontFamily: 'Inter, "Open Sans", system-ui, sans-serif',
+        background: "var(--bg)",
+        color: "var(--text-primary)",
+        fontFamily: "var(--font-body)",
       }}
     >
       <div
         style={{
           width: "min(420px, 100%)",
           padding: "28px",
-          border: "1px solid rgba(255, 255, 255, 0.1)",
-          borderRadius: "12px",
-          background: "#131724",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius)",
+          background: "var(--surface)",
           boxShadow: "0 28px 80px rgba(0, 0, 0, 0.5)",
         }}
       >
         <h1 style={{ margin: "0 0 12px", fontSize: "1.4rem", lineHeight: 1.2 }}>{title}</h1>
-        <p style={{ margin: "0 0 16px", color: "#94a3b8", lineHeight: 1.5 }}>{description}</p>
+        <p style={{ margin: "0 0 16px", color: "var(--text-secondary)", lineHeight: 1.5 }}>{description}</p>
         {actionLabel ? (
           <button
             type="button"
             onClick={() => window.location.reload()}
             style={{
               border: 0,
-              borderRadius: "10px",
+              borderRadius: "var(--radius)",
               padding: "11px 16px",
               font: "inherit",
               fontWeight: 600,
               color: "#ffffff",
-              background: "#4f46e5",
+              background: "var(--primary)",
               cursor: "pointer",
             }}
           >
@@ -76,7 +76,7 @@ function FullscreenMessage({
           </button>
         ) : null}
         {hint ? (
-          <p style={{ margin: "14px 0 0", color: "#94a3b8", fontSize: "0.92rem", lineHeight: 1.45 }}>
+          <p style={{ margin: "14px 0 0", color: "var(--text-secondary)", fontSize: "0.92rem", lineHeight: 1.45 }}>
             {hint}
           </p>
         ) : null}

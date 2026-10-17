@@ -1,0 +1,3 @@
+/* Fluent icons use filled paths, not strokes. Never inherit legacy SVG strokes. */
+svg.native-icon { display: inline-block; flex-shrink: 0; vertical-align: middle; stroke: none !important; }
+@media (forced-colors: active) { svg.native-icon { forced-color-adjust: auto; } }

@@ -423,10 +423,10 @@
   width: max-content;
   max-width: min(340px, calc(100vw - 16px));
   padding: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 12px;
-  background: #111827;
-  background-color: #111827;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 4px);
+  background: var(--surface);
+  background-color: var(--surface);
   box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.65), 0 4px 12px rgba(0, 0, 0, 0.4);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -438,9 +438,9 @@
 }
 
 :root:not(.light) .dock-btm-overflow__menu {
-  background: #111827 !important;
-  background-color: #111827 !important;
-  border-color: rgba(255, 255, 255, 0.14) !important;
+  background: var(--surface) !important;
+  background-color: var(--surface) !important;
+  border-color: var(--border) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
@@ -568,7 +568,7 @@
   width: 100%;
   height: 38px;
   padding: 8px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   border: 1px solid transparent;
   color: var(--dock-text, #F8FAFC);
@@ -671,7 +671,7 @@
   gap: 10px;
   padding: 8px 12px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--dock-text, #F8FAFC);
   font: inherit;
@@ -745,7 +745,7 @@
   width: 100%;
   min-height: 38px;
   height: auto;
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   border: 1px solid transparent;
   padding: 8px 12px;
@@ -841,7 +841,7 @@
   min-width: 180px;
   padding: 4px;
   border: 1px solid var(--dock-border, #334155);
-  border-radius: 8px;
+  border-radius: var(--radius, 4px);
   background: var(--dock-surface, #111827);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   display: flex;
@@ -877,7 +877,7 @@
   width: 100%;
   padding: 6px 10px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius, 4px);
   background: transparent;
   color: var(--dock-text, #F8FAFC);
   font-family: var(--dock-font-body, inherit);

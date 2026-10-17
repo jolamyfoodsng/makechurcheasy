@@ -5,7 +5,7 @@
  * stepping, theme switching — all self-contained with mock data.
  */
 
-import { ChevronRight } from "lucide-react";
+import { ChevronRight } from "../components/icons/NativeIcons";
 
 /* ── Component ── */
 
