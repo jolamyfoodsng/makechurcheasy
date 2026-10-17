@@ -407,6 +407,11 @@ export default function ProductionThemeSettingsPage() {
     setShowCreator(true);
   };
 
+  // Long lists start short: 25 themes at once made the page very tall.
+  const GRID_PREVIEW_COUNT = 8;
+  const [showAllBuiltin, setShowAllBuiltin] = useState(false);
+  const [showAllCustom, setShowAllCustom] = useState(false);
+
   const renderThemeCard = (theme: BibleTheme, fromLibrary = false) => {
     const look: ThemeLook = themeHasLook(theme, previewLook) ? previewLook : themeFormat(theme);
     const layout = themeLayoutFor(theme, look);
@@ -521,7 +526,10 @@ export default function ProductionThemeSettingsPage() {
           ) : (
           <div className="production-theme-card__actions production-theme-card__actions--wrap">
             <button
-              className="production-btn production-btn--ghost"
+              className="production-btn production-btn--ghost production-btn--icon"
+              aria-label={isThemeHiddenFromDock(dockOptOuts, theme.id)
+                ? t("themes.unhideFromDock", "Unhide")
+                : t("themes.hideFromDock", "Hide from Dock")}
               onClick={() => void setHiddenFromDock(theme.id, !isThemeHiddenFromDock(dockOptOuts, theme.id))}
               title={
                 isThemeHiddenFromDock(dockOptOuts, theme.id)
@@ -530,9 +538,6 @@ export default function ProductionThemeSettingsPage() {
               }
             >
               <Icon name={isThemeHiddenFromDock(dockOptOuts, theme.id) ? "visibility" : "visibility_off"} size={16} />
-              {isThemeHiddenFromDock(dockOptOuts, theme.id)
-                ? t("themes.unhideFromDock", "Unhide")
-                : t("themes.hideFromDock", "Hide from Dock")}
             </button>
             {theme.source === "custom" ? (
               <>
@@ -548,12 +553,12 @@ export default function ProductionThemeSettingsPage() {
                   {t("themes.edit", "Edit")}
                 </button>
                 <button
-                  className="production-btn production-btn--danger"
+                  className="production-btn production-btn--danger production-btn--icon"
+                  aria-label={t("themes.delete", "Delete")}
                   onClick={() => handleDeleteTheme(theme)}
                   title={t("themes.delete", "Delete")}
                 >
                   <Icon name="delete" size={16} />
-                  {t("themes.delete", "Delete")}
                 </button>
               </>
             ) : (
@@ -708,9 +713,23 @@ export default function ProductionThemeSettingsPage() {
               </div>
             </div>
           ) : (
+            <>
             <div className="production-theme-card-grid">
-              {visibleBuiltinThemes.map((theme) => renderThemeCard(theme))}
+              {(showAllBuiltin ? visibleBuiltinThemes : visibleBuiltinThemes.slice(0, GRID_PREVIEW_COUNT)).map((theme) => renderThemeCard(theme))}
             </div>
+              {visibleBuiltinThemes.length > GRID_PREVIEW_COUNT && (
+                <button
+                  type="button"
+                  className="production-btn production-btn--ghost production-theme-more"
+                  onClick={() => setShowAllBuiltin((open) => !open)}
+                >
+                  <Icon name={showAllBuiltin ? "expand_less" : "expand_more"} size={16} />
+                  {showAllBuiltin
+                    ? t("themes.showFewer", "Show fewer")
+                    : t("themes.showAllThemes", { count: visibleBuiltinThemes.length, defaultValue: `Show all ${visibleBuiltinThemes.length}` })}
+                </button>
+              )}
+            </>
           )}
         </section>
 
@@ -795,9 +814,23 @@ export default function ProductionThemeSettingsPage() {
               </div>
             </div>
           ) : (
+            <>
             <div className="production-theme-card-grid">
-              {visibleCustomThemes.map((theme) => renderThemeCard(theme))}
+              {(showAllCustom ? visibleCustomThemes : visibleCustomThemes.slice(0, GRID_PREVIEW_COUNT)).map((theme) => renderThemeCard(theme))}
             </div>
+              {visibleCustomThemes.length > GRID_PREVIEW_COUNT && (
+                <button
+                  type="button"
+                  className="production-btn production-btn--ghost production-theme-more"
+                  onClick={() => setShowAllCustom((open) => !open)}
+                >
+                  <Icon name={showAllCustom ? "expand_less" : "expand_more"} size={16} />
+                  {showAllCustom
+                    ? t("themes.showFewer", "Show fewer")
+                    : t("themes.showAllThemes", { count: visibleCustomThemes.length, defaultValue: `Show all ${visibleCustomThemes.length}` })}
+                </button>
+              )}
+            </>
           )}
         </section>
 

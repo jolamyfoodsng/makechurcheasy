@@ -65,9 +65,12 @@ import {
   type TemplateVideoAsset,
 } from "../services/templateVideos";
 import { saveLibraryMediaFile, MEDIA_FILE_ACCEPT } from "../library/MediaTab";
+import { getCopyImportedMediaPreference, importMediaPaths, isTauriRuntime, pickMediaPaths } from "../library/mediaReferences";
+import { COMMON_IMAGE_EXTENSIONS, COMMON_VIDEO_EXTENSIONS } from "../services/mediaValidation";
 import { resolveOverlayAssetUrl } from "../services/overlayUrl";
 import { getBibleThemePreviewHtml } from "../bible/bibleThemes";
 import { LAYOUT_PRESET_THEMES } from "../themes/layout/presetThemes";
+import { BLANK_FULLSCREEN, BLANK_LOWER_THIRD } from "../themes/layout/blankTheme";
 import { fullscreenFromLowerThird, lowerThirdFromFullscreen } from "../themes/layout/companions";
 import ThemeLayoutPreview from "../themes/layout/ThemeLayoutPreview";
 import LayerPanel from "../themes/layout/editor/LayerPanel";
@@ -336,40 +339,47 @@ function resolveMediaPreviewSrc(item: MediaItem): string {
   return "";
 }
 
-function defaultSettingsForVariant(): BibleThemeSettings {
-  return { ...DEFAULT_THEME_SETTINGS };
+/** A new theme starts as a black layer theme, like the ready-made ones: every piece is selectable. */
+function defaultSettingsForVariant(variant: VariantType): BibleThemeSettings {
+  return {
+    ...DEFAULT_THEME_SETTINGS,
+    layout: variant === "fullscreen" ? BLANK_FULLSCREEN : BLANK_LOWER_THIRD,
+  };
 }
 
 // ---------------------------------------------------------------------------
 // TemplateVideoPreview sub-component
 // ---------------------------------------------------------------------------
 
-function TemplateVideoPreview({ asset }: { asset: TemplateVideoAsset }) {
-  const [shouldLoad, setShouldLoad] = useState(false);
-  const handlePointerEnter = useCallback(() => { setShouldLoad(true); }, []);
-  const handlePointerLeave = useCallback(() => { /* keep loaded */ }, []);
+/**
+ * Cloud template videos are full-size files with no poster frame, so the grid
+ * never streams them by itself. A still (the saved thumbnail once downloaded)
+ * is shown, and only the one tile under the pointer plays.
+ */
+function TemplateVideoPreview({ asset, poster, playing }: { asset: TemplateVideoAsset; poster?: string; playing: boolean }) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { if (!playing) setFailed(false); }, [playing]);
 
-  if (!shouldLoad) {
+  if (playing && !failed) {
     return (
-      <div
-        className="tc-template-video-placeholder"
-        onPointerEnter={handlePointerEnter}
-        style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.04)", borderRadius: 4 }}
-      >
-        <Icon name="videocam" size={24} />
-      </div>
+      <video
+        src={asset.videoUrl}
+        poster={poster}
+        muted
+        loop
+        autoPlay
+        playsInline
+        preload="metadata"
+        onError={() => setFailed(true)}
+        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+      />
     );
   }
-
+  if (poster) return <img src={poster} alt={asset.fileName} loading="lazy" decoding="async" />;
   return (
-    <video
-      src={asset.videoUrl}
-      muted
-      loop
-      autoPlay
-      onPointerLeave={handlePointerLeave}
-      style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 4 }}
-    />
+    <div className="tc-template-video-placeholder" style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <Icon name={failed ? "videocam_off" : "videocam"} size={24} />
+    </div>
   );
 }
 
@@ -574,7 +584,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     if (editTheme?.templateType === "fullscreen" && editTheme?.settings) {
       return normalizeThemeSettings({ ...DEFAULT_THEME_SETTINGS, ...editTheme.settings });
     }
-    return defaultSettingsForVariant();
+    return defaultSettingsForVariant("fullscreen");
   }, []);
 
   const initLtSettings = useMemo(() => {
@@ -584,7 +594,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     if (editTheme?.templateType === "lower-third" && editTheme?.settings) {
       return normalizeThemeSettings({ ...DEFAULT_THEME_SETTINGS, ...editTheme.settings });
     }
-    return defaultSettingsForVariant();
+    return defaultSettingsForVariant("lower-third");
   }, []);
 
   const [fullscreenSettings, setFullscreenSettings] = useState<BibleThemeSettings>(initFsSettings);
@@ -610,7 +620,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
 
   // ── Core state ──
   const [saving, setSaving] = useState(false);
-  const [name, setName] = useState(editTheme?.name || "Untitled Theme");
+  const [name, setName] = useState(editTheme?.name || "");
   const [description] = useState(editTheme?.description || "");
   const [categories, setCategories] = useState<BibleThemeCategory[]>(
     () => normalizeCategories(editTheme?.categories || (initialCategory ? [initialCategory] : []))
@@ -714,6 +724,8 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   // ── Theme Library ──
   const [themeLibrary, setThemeLibrary] = useState<BibleTheme[]>([]);
   const [librarySearch, setLibrarySearch] = useState("");
+  // "My themes" are the ones made here; "Built-in" ships with the app.
+  const [libraryTab, setLibraryTab] = useState<"mine" | "builtin">(editTheme && editTheme.source !== "builtin" ? "mine" : "builtin");
 
   const loadThemeLibrary = useCallback(async () => {
     try {
@@ -730,7 +742,9 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
 
   const filteredThemes = useMemo(() => {
     // Layout themes are listed in both variants; picking one switches to its format.
-    let list = themeLibrary.filter((t) => t.templateType === activeVariant || Boolean(t.settings.layout));
+    let list = themeLibrary
+      .filter((t) => (libraryTab === "builtin") === (t.source === "builtin"))
+      .filter((t) => t.templateType === activeVariant || Boolean(t.settings.layout));
     if (librarySearch.trim()) {
       const q = librarySearch.toLowerCase();
       list = list.filter(
@@ -740,7 +754,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
       );
     }
     return list;
-  }, [themeLibrary, librarySearch, activeVariant]);
+  }, [themeLibrary, librarySearch, activeVariant, libraryTab]);
 
   const handleLoadTheme = useCallback((theme: BibleTheme) => {
     const fsVariant = theme.variants?.fullscreen;
@@ -779,11 +793,11 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   }, [activeVariant]);
 
   const handleNewTheme = useCallback(() => {
-    setFullscreenSettings(defaultSettingsForVariant());
-    setLowerThirdSettings(defaultSettingsForVariant());
+    setFullscreenSettings(defaultSettingsForVariant("fullscreen"));
+    setLowerThirdSettings(defaultSettingsForVariant("lower-third"));
     setFullscreenRawTemplate(null);
     setLowerThirdRawTemplate(null);
-    setName("Untitled Theme");
+    setName("");
     setCategories(normalizeCategories([]));
     setActiveVariant("fullscreen");
     undoStackRef.current = [];
@@ -802,7 +816,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   const handleExportTheme = useCallback(() => {
     const theme: BibleTheme = {
       id: uid(),
-      name: name.trim() || "Untitled Theme",
+      name: name.trim() || "My Theme",
       description: description.trim(),
       source: "custom",
       templateType: activeVariant,
@@ -919,6 +933,9 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
   const [backgroundMediaLibrary, setBackgroundMediaLibrary] = useState<MediaItem[]>([]);
   const [templateVideoAssets, setTemplateVideoAssets] = useState<TemplateVideoAsset[]>([]);
   const bgImportInputRef = useRef<HTMLInputElement>(null);
+  const [bgImporting, setBgImporting] = useState(false);
+  const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
+  const previewTimerRef = useRef<number | undefined>(undefined);
 
   const animKeyRef = useRef(0);
   const prevAnimRef = useRef<string>(settings.animation);
@@ -1103,6 +1120,48 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
     setShowBackgroundModal(true);
   }, [backgroundColorValue, backgroundImageValue, backgroundVideoValue, backgroundMediaLibrary, refreshBackgroundMediaLibrary]);
 
+  // Hover plays one cloud video at a time, after a short pause so sweeping the
+  // mouse across the grid doesn't start a download for every tile it crosses.
+  const startAssetPreview = useCallback((id: string) => {
+    window.clearTimeout(previewTimerRef.current);
+    previewTimerRef.current = window.setTimeout(() => setPreviewAssetId(id), 250);
+  }, []);
+  const stopAssetPreview = useCallback((id: string) => {
+    window.clearTimeout(previewTimerRef.current);
+    setPreviewAssetId((current) => (current === id ? null : current));
+  }, []);
+  useEffect(() => {
+    window.clearTimeout(previewTimerRef.current);
+    setPreviewAssetId(null);
+  }, [bgTab, showBackgroundModal]);
+  useEffect(() => () => window.clearTimeout(previewTimerRef.current), []);
+
+  /** Desktop: pick by path and keep a reference to the original file (no copy, no memory load). */
+  const handleBgImportClick = useCallback(async (kind: "image" | "video") => {
+    if (!isTauriRuntime()) {
+      bgImportInputRef.current?.click();
+      return;
+    }
+    try {
+      const paths = await pickMediaPaths({
+        multiple: true,
+        extensions: [...(kind === "video" ? COMMON_VIDEO_EXTENSIONS : COMMON_IMAGE_EXTENSIONS)],
+      });
+      if (paths.length === 0) return;
+      setBgImporting(true);
+      const result = await importMediaPaths(paths, {
+        copyIntoLibrary: getCopyImportedMediaPreference(),
+        onItemUpdated: () => { void refreshBackgroundMediaLibrary(); },
+      });
+      for (const failure of result.failed) console.warn("[ThemeCreator] Import failed:", failure);
+      await refreshBackgroundMediaLibrary();
+    } catch (err) {
+      console.error("[ThemeCreator] Import failed:", err);
+    } finally {
+      setBgImporting(false);
+    }
+  }, [refreshBackgroundMediaLibrary]);
+
   const handleBgImportFile = useCallback(async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1128,7 +1187,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
 
       const themeToSave: BibleTheme = {
         id: isEditing && !duplicate ? editTheme!.id : uid(),
-        name: name.trim() || "Untitled Theme",
+        name: name.trim() || "My Theme",
         description: description.trim(),
         source: "custom",
         templateType: primaryType,
@@ -1292,6 +1351,20 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
             </span>
           </div>
 
+          <div className="tc-library-tabs" role="tablist">
+            {([["mine", "My themes"], ["builtin", "Built-in"]] as const).map(([value, label]) => (
+              <button
+                key={value}
+                role="tab"
+                aria-selected={libraryTab === value}
+                className={`tc-library-tab${libraryTab === value ? " active" : ""}`}
+                onClick={() => setLibraryTab(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           <div className="tc-library-search">
             <Search size={14} className="tc-library-search-icon" />
             <input
@@ -1306,7 +1379,7 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
             {filteredThemes.length === 0 && (
               <div className="tc-library-empty">
                 <Monitor size={32} />
-                <span>No themes yet</span>
+                <span>{libraryTab === "mine" ? "No themes of your own yet. Click New to make one." : "No themes found"}</span>
               </div>
             )}
             {filteredThemes.map((theme) => (
@@ -1943,9 +2016,9 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
               )}
               {bgTab === "my-images" && (
                 <div className="tc-media-grid">
-                  <button className="tc-media-thumb tc-media-thumb--import" onClick={() => bgImportInputRef.current?.click()} title="Import">
+                  <button className="tc-media-thumb tc-media-thumb--import" onClick={() => void handleBgImportClick("image")} disabled={bgImporting} title="Import images">
                     <Plus size={20} />
-                    <span>Import</span>
+                    <span>{bgImporting ? "Importing…" : "Upload image"}</span>
                   </button>
                   {backgroundMediaLibrary.filter((item) => item.type === "image").map((item) => (
                     <button key={item.id} className="tc-media-thumb" onClick={() => handleBgSelectImage(item.url)}>
@@ -1956,35 +2029,32 @@ export default function ThemeCreatorModal({ onClose, onSaved, editTheme, initial
               )}
               {bgTab === "my-videos" && (
                 <div className="tc-media-grid">
-                  {activeVariant === "fullscreen" && templateVideoAssets.map((asset) => {
-                      const downloaded = findTemplateVideoDownload(asset);
-                      return (
-                        <div key={asset.id} className="tc-media-thumb tc-media-thumb--video">
-                          <TemplateVideoPreview asset={asset} />
-                          {!downloaded ? (
-                            <button className="tc-media-download" onClick={() => handleTemplateVideoDownload(asset)} title="Download">
-                              <Icon name="download" size={16} />
-                            </button>
-                          ) : (
-                            <button className="tc-media-download tc-media-download--done" onClick={() => handleBgSelectVideo(downloaded.url)} title="Confirm">
-                              <Icon name="check" size={16} />
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  <button className="tc-media-thumb tc-media-thumb--import" onClick={() => bgImportInputRef.current?.click()} title="Import">
+                  <button className="tc-media-thumb tc-media-thumb--import" onClick={() => void handleBgImportClick("video")} disabled={bgImporting} title="Upload a video from this computer (linked, not copied)">
                     <Plus size={20} />
-                    <span>Import</span>
+                    <span>{bgImporting ? "Importing…" : "Upload video"}</span>
                   </button>
                   {backgroundMediaLibrary.filter((item) => item.type === "video").map((item) => (
                     <button key={item.id} className="tc-media-thumb tc-media-thumb--video" onClick={() => handleBgSelectVideo(item.url)} title={item.name}>
                       {item.thumbnailUrl ? (
-                        <img src={item.thumbnailUrl} alt={item.name} />
+                        <img src={item.thumbnailUrl} alt={item.name} loading="lazy" decoding="async" />
                       ) : (
                         <Icon name="videocam" size={24} />
                       )}
                     </button>
+                  ))}
+                  {activeVariant === "fullscreen" && templateVideoAssets.filter((asset) => !findTemplateVideoDownload(asset)).map((asset) => (
+                    <div
+                      key={asset.id}
+                      className="tc-media-thumb tc-media-thumb--video"
+                      title={asset.fileName}
+                      onPointerEnter={() => startAssetPreview(asset.id)}
+                      onPointerLeave={() => stopAssetPreview(asset.id)}
+                    >
+                      <TemplateVideoPreview asset={asset} playing={previewAssetId === asset.id} />
+                      <button className="tc-media-download" onClick={() => handleTemplateVideoDownload(asset)} title="Download">
+                        <Icon name="download" size={16} />
+                      </button>
+                    </div>
                   ))}
                 </div>
               )}
