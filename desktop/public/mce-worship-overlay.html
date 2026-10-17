@@ -156,8 +156,9 @@
       background: transparent !important;
     }
 
+    /* Layer themes (#mtl-theme-host) own their fonts: each layer picks its own in the Theme Creator. */
     body,
-    body *:not(.material-icons):not(.material-icons-outlined):not(.material-icons-round):not(.material-icons-sharp):not(.material-symbols-outlined):not(.fa):not([class^="fa-"]):not([class*=" fa-"]) {
+    body *:not(.material-icons):not(.material-icons-outlined):not(.material-icons-round):not(.material-icons-sharp):not(.material-symbols-outlined):not(.fa):not([class^="fa-"]):not([class*=" fa-"]):not(#mtl-theme-host):not(#mtl-theme-host *) {
       font-family: var(--mce-output-font-family, var(--font-family)) !important;
     }
 

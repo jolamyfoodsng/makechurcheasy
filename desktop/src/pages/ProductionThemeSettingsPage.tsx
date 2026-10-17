@@ -671,6 +671,66 @@ export default function ProductionThemeSettingsPage() {
         <section className="production-panel">
           <div className="production-card-head">
             <div>
+              <h2>{t("themes.myThemesTitle", "My Themes")}</h2>
+              <p>
+                {t(
+                  "themes.myThemesDescription",
+                  "Themes you created or customised. Edit them any time.",
+                )}
+              </p>
+            </div>
+            <span className="production-count-pill">
+              {t("themes.customCount", {
+                count: customThemes.length,
+                defaultValue: `${customThemes.length} Themes`,
+              })}
+            </span>
+          </div>
+
+          {customThemes.length > 0 && visibleCustomThemes.length === 0 ? (
+            <div className="production-empty">
+              <Icon name="search_off" size={18} />
+              <div>
+                <strong>{t("themes.noSearchMatches", "No themes match your search")}</strong>
+              </div>
+            </div>
+          ) : customThemes.length === 0 ? (
+            <div className="production-empty">
+              <Icon name="palette" size={18} />
+              <div>
+                <strong>{t("themes.startFromReadyMade", "Start from one of the ready-made themes")}</strong>
+                <p>
+                  {t(
+                    "themes.startFromReadyMadeHint",
+                    "Click Customise on any ready-made theme below to make your own copy, or + Create Theme to start from scratch.",
+                  )}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <>
+            <div className="production-theme-card-grid">
+              {(showAllCustom ? visibleCustomThemes : visibleCustomThemes.slice(0, GRID_PREVIEW_COUNT)).map((theme) => renderThemeCard(theme))}
+            </div>
+              {visibleCustomThemes.length > GRID_PREVIEW_COUNT && (
+                <button
+                  type="button"
+                  className="production-btn production-btn--ghost production-theme-more"
+                  onClick={() => setShowAllCustom((open) => !open)}
+                >
+                  <Icon name={showAllCustom ? "expand_less" : "expand_more"} size={16} />
+                  {showAllCustom
+                    ? t("themes.showFewer", "Show fewer")
+                    : t("themes.showAllThemes", { count: visibleCustomThemes.length, defaultValue: `Show all ${visibleCustomThemes.length}` })}
+                </button>
+              )}
+            </>
+          )}
+        </section>
+
+        <section className="production-panel">
+          <div className="production-card-head">
+            <div>
               <h2>{t("themes.readyMadeTitle", "Ready-made themes")}</h2>
               <p>
                 {t(
@@ -773,66 +833,6 @@ export default function ProductionThemeSettingsPage() {
               ))}
           </section>
         )}
-
-        <section className="production-panel">
-          <div className="production-card-head">
-            <div>
-              <h2>{t("themes.myThemesTitle", "My Themes")}</h2>
-              <p>
-                {t(
-                  "themes.myThemesDescription",
-                  "Themes you created or customised. Edit them any time.",
-                )}
-              </p>
-            </div>
-            <span className="production-count-pill">
-              {t("themes.customCount", {
-                count: customThemes.length,
-                defaultValue: `${customThemes.length} Themes`,
-              })}
-            </span>
-          </div>
-
-          {customThemes.length > 0 && visibleCustomThemes.length === 0 ? (
-            <div className="production-empty">
-              <Icon name="search_off" size={18} />
-              <div>
-                <strong>{t("themes.noSearchMatches", "No themes match your search")}</strong>
-              </div>
-            </div>
-          ) : customThemes.length === 0 ? (
-            <div className="production-empty">
-              <Icon name="palette" size={18} />
-              <div>
-                <strong>{t("themes.startFromReadyMade", "Start from one of the ready-made themes")}</strong>
-                <p>
-                  {t(
-                    "themes.startFromReadyMadeHint",
-                    "Click Customise on any theme above to make your own copy, or + Create Theme to start from scratch.",
-                  )}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <>
-            <div className="production-theme-card-grid">
-              {(showAllCustom ? visibleCustomThemes : visibleCustomThemes.slice(0, GRID_PREVIEW_COUNT)).map((theme) => renderThemeCard(theme))}
-            </div>
-              {visibleCustomThemes.length > GRID_PREVIEW_COUNT && (
-                <button
-                  type="button"
-                  className="production-btn production-btn--ghost production-theme-more"
-                  onClick={() => setShowAllCustom((open) => !open)}
-                >
-                  <Icon name={showAllCustom ? "expand_less" : "expand_more"} size={16} />
-                  {showAllCustom
-                    ? t("themes.showFewer", "Show fewer")
-                    : t("themes.showAllThemes", { count: visibleCustomThemes.length, defaultValue: `Show all ${visibleCustomThemes.length}` })}
-                </button>
-              )}
-            </>
-          )}
-        </section>
 
         {/* ── Modals ── */}
         {themeGate.modal}
