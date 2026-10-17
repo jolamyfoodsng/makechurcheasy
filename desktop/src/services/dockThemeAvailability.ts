@@ -125,6 +125,25 @@ export function filterThemesForDockArea(themes: BibleTheme[], options: DockTheme
   return themes.filter((theme) => isThemeAvailableInDockArea(theme, options));
 }
 
+/**
+ * A plan's `themes` allowance is how many custom themes a person may have (Free 2).
+ * Someone who made more (older plan, or a downgrade) gets only the FIRST ones they
+ * created in the Dock; the rest stay in the app. -1 means no limit.
+ */
+export function limitCustomThemesToPlan(themes: BibleTheme[], limit: number): BibleTheme[] {
+  if (limit < 0 || !Number.isFinite(limit)) return themes;
+  const custom = themes.filter((theme) => theme.source === "custom");
+  if (custom.length <= limit) return themes;
+  const created = (theme: BibleTheme) => Date.parse(theme.createdAt) || 0;
+  const keep = new Set(
+    [...custom]
+      .sort((a, b) => created(a) - created(b))
+      .slice(0, Math.max(0, limit))
+      .map((theme) => theme.id),
+  );
+  return themes.filter((theme) => theme.source !== "custom" || keep.has(theme.id));
+}
+
 // ---------------------------------------------------------------------------
 // Storage
 // ---------------------------------------------------------------------------

@@ -3,7 +3,8 @@ import type { SavedBroadcastGraphic } from "../services/broadcastGraphicsStorage
 import type { LowerThirdTheme } from "../lowerthirds/types";
 import type { TickerTheme } from "../data/tickerThemes";
 import { getBibleFavorites, getWorshipLTFavorites, getObsFavorites, getTickerFavorites, hydrateFavoriteThemes, refreshFavoriteThemesFromStore } from "../services/favoriteThemes";
-import { filterThemesForDockArea, loadDockThemeOptOuts, type DockThemeArea } from "../services/dockThemeAvailability";
+import { filterThemesForDockArea, limitCustomThemesToPlan, loadDockThemeOptOuts, type DockThemeArea } from "../services/dockThemeAvailability";
+import { getDockEntitlementLimit } from "./dockEntitlement";
 import { BUILTIN_THEMES } from "../bible/themes/builtinThemes";
 import { loadThemeLibrary, themeIdsOutsideLibrary } from "../services/themeLibrary";
 import { BIBLE_BUILTIN_THEMES } from "../bible/bibleThemes";
@@ -175,7 +176,12 @@ export async function loadDockThemesForArea(
   const alwaysShownIds = new Set(BUILTIN_THEMES.map((theme) => theme.id));
   // A new account only has its three starting themes until more are added from the Theme Library.
   const excludedIds = themeIdsOutsideLibrary(library, alwaysShownIds);
-  return filterThemesForDockArea(themes, { area, allowedCategories, optOuts, alwaysShownIds, excludedIds });
+  let offered = filterThemesForDockArea(themes, { area, allowedCategories, optOuts, alwaysShownIds, excludedIds });
+  // The Bible picker is the user's own themes plus the ready-made ones on the Themes page.
+  // Old library templates someone favourited once (Traditional Scripture, Transparent Scripture...) are not offered.
+  if (area === "bible") offered = offered.filter((theme) => theme.source === "custom" || alwaysShownIds.has(theme.id));
+  // Own themes are capped by the plan (Free 2): only the first ones created are offered.
+  return limitCustomThemesToPlan(offered, getDockEntitlementLimit("themes"));
 }
 
 /**

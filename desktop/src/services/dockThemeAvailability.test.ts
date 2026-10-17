@@ -6,6 +6,7 @@ import {
   isThemeAvailableInDockArea,
   isThemeHiddenFromDock,
   isThemeOptedOut,
+  limitCustomThemesToPlan,
   parseDockThemeOptOuts,
   withThemeAreaVisible,
   withThemeHidden,
@@ -126,5 +127,23 @@ describe("Dock theme availability", () => {
     expect(dockAreaFromScope("notes")).toBe("notes");
     expect(dockAreaFromScope("global")).toBeNull();
     expect(dockAreaFromScope(undefined)).toBeNull();
+  });
+});
+
+describe("limitCustomThemesToPlan", () => {
+  const made = (id: string, createdAt: string) => ({ ...theme(id, "custom"), createdAt }) as BibleTheme;
+  const list = [made("c", "2026-03-01"), made("a", "2026-01-01"), theme("starter", "builtin"), made("b", "2026-02-01")];
+
+  it("keeps only the first themes created, in the list's own order, and every ready-made theme", () => {
+    expect(limitCustomThemesToPlan(list, 2).map((t) => t.id)).toEqual(["a", "starter", "b"]);
+  });
+
+  it("changes nothing with room to spare or no limit", () => {
+    expect(limitCustomThemesToPlan(list, 3)).toBe(list);
+    expect(limitCustomThemesToPlan(list, -1)).toBe(list);
+  });
+
+  it("offers none of their own themes when the plan has none", () => {
+    expect(limitCustomThemesToPlan(list, 0).map((t) => t.id)).toEqual(["starter"]);
   });
 });
