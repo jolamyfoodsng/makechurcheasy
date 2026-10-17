@@ -1,0 +1,87 @@
+name: Copy release assets once
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to populate
+        required: true
+        type: string
+      asset_list:
+        description: Signed source asset URL and checksum list
+        required: true
+        type: string
+      manifest:
+        description: Public updater manifest for this repository
+        required: true
+        type: string
+permissions:
+  contents: write
+jobs:
+  copy-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release assets and verify source digests
+        env:
+          TAG: ${{ inputs.tag }}
+          ASSET_LIST: ${{ inputs.asset_list }}
+          LATEST_JSON: ${{ inputs.manifest }}
+          REPO: ${{ github.repository }}
+        run: |
+          mkdir -p release-assets
+          python3 - <<'PY'
+          import concurrent.futures, hashlib, json, os, pathlib, urllib.request
+
+          assets = json.loads(os.environ["ASSET_LIST"])
+          directory = pathlib.Path("release-assets")
+
+          def download(asset):
+              request = urllib.request.Request(asset["url"], headers={"User-Agent": "MakeChurchEasy-release-mirror"})
+              with urllib.request.urlopen(request, timeout=1800) as response, (directory / asset["name"]).open("wb") as target:
+                  while chunk := response.read(1024 * 1024):
+                      target.write(chunk)
+              path = directory / asset["name"]
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              if path.stat().st_size != asset["size"]:
+                  raise SystemExit(f"Size mismatch for {asset['name']}")
+              if asset.get("digest") and asset["digest"] != f"sha256:{digest}":
+                  raise SystemExit(f"SHA-256 mismatch for {asset['name']}")
+              return asset["name"]
+
+          with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
+              for name in pool.map(download, assets):
+                  print(f"Downloaded and verified {name}", flush=True)
+          manifest = os.environ["LATEST_JSON"]
+          (directory / "latest.json").write_text(manifest + "\n", encoding="utf-8")
+          parsed = json.loads(manifest)
+          prefix = f"https://github.com/{os.environ['REPO']}/releases/download/{os.environ['TAG']}/"
+          if parsed.get("version") != os.environ["TAG"].removeprefix("v"):
+              raise SystemExit("Manifest version does not match the release tag")
+          if not all(entry.get("url", "").startswith(prefix) for entry in parsed.get("platforms", {}).values()):
+              raise SystemExit("Manifest URLs do not point to this public release")
+          PY
+      - name: Upload assets to this public release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          REPO: ${{ github.repository }}
+        run: gh release upload "$TAG" release-assets/* --repo "$REPO" --clobber
+      - name: Verify published names and sizes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          REPO: ${{ github.repository }}
+          ASSET_LIST: ${{ inputs.asset_list }}
+          LATEST_JSON: ${{ inputs.manifest }}
+        run: |
+          gh api "repos/$REPO/releases/tags/$TAG" > "$RUNNER_TEMP/release.json"
+          python3 - <<'PY'
+          import json, os, pathlib
+
+          expected = {asset["name"]: asset["size"] for asset in json.loads(os.environ["ASSET_LIST"])}
+          expected["latest.json"] = len((os.environ["LATEST_JSON"] + "\n").encode())
+          release = json.loads(pathlib.Path(os.environ["RUNNER_TEMP"] + "/release.json").read_text())
+          actual = {asset["name"]: asset["size"] for asset in release["assets"]}
+          if actual != expected:
+              raise SystemExit(f"Release asset mismatch: expected {len(expected)}, found {len(actual)}")
+          print(f"Verified all {len(expected)} release assets.")
+          PY
