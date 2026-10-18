@@ -30853,6 +30853,8 @@ body.dock-modal-open {
   position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
+  /* Narrow docks (Windows OBS) made these tiles tiny. */
+  min-height: 50px;
   display: flex;
   align-items: center;
   justify-content: center;
