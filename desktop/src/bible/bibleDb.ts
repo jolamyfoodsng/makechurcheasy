@@ -244,6 +244,43 @@ async function loadDockDataJson<T>(name: string): Promise<T | null> {
   }
 }
 
+/**
+ * The OBS Dock is a different browser origin from the app, so it cannot see the app's
+ * IndexedDB or call Tauri. The app mirrors installed Bibles into the uploads folder
+ * (dock-bible-translations + one file per translation); the Dock reads and writes
+ * those same files over the local server.
+ */
+async function fetchDockDataOverHttp<T>(name: string): Promise<T | null> {
+  try {
+    const response = await fetch(`/uploads/${name}.json?cacheBust=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) return null;
+    const text = (await response.text()).trim();
+    if (!text.startsWith("[") && !text.startsWith("{")) return null;
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
+}
+
+/** Dock data for a translation: through Tauri in the app, over HTTP in the OBS Dock. */
+async function loadTranslationDockData<T>(name: string): Promise<T | null> {
+  if (canLoadDockData()) return loadDockDataJson<T>(name);
+  return fetchDockDataOverHttp<T>(name);
+}
+
+async function postDockData(name: string, payload: unknown): Promise<boolean> {
+  try {
+    const response = await fetch("/api/save-dock-data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, data: JSON.stringify(payload) }),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 async function readCustomThemesFromDockData(): Promise<BibleTheme[]> {
   const raw = await loadDockDataJson<unknown>("dock-bible-themes");
   if (!Array.isArray(raw)) return [];
@@ -253,7 +290,7 @@ async function readCustomThemesFromDockData(): Promise<BibleTheme[]> {
 }
 
 async function readInstalledTranslationMetadataFromDockData(): Promise<InstalledBibleMetadata[]> {
-  const metadata = await loadDockDataJson<InstalledBibleMetadata[]>("dock-bible-translations");
+  const metadata = await loadTranslationDockData<InstalledBibleMetadata[]>("dock-bible-translations");
   if (!Array.isArray(metadata)) return [];
   return metadata
     .filter((entry): entry is InstalledBibleMetadata =>
@@ -270,7 +307,7 @@ async function readInstalledTranslationFromDockData(
   const key = getTranslationKey(typeof abbrOrEntry === "string" ? abbrOrEntry : abbrOrEntry.abbr);
   const entry = entries.find((candidate) => getTranslationKey(candidate.abbr) === key);
 
-  const data = await loadDockDataJson<RawBibleData>(`dock-bible-translation-${key.toLowerCase()}`);
+  const data = await loadTranslationDockData<RawBibleData>(`dock-bible-translation-${key.toLowerCase()}`);
   if (!data || !isCompleteBibleData(data)) return undefined;
 
   return {
@@ -947,7 +984,50 @@ async function getInstalledTranslationsWithData(): Promise<InstalledBible[]> {
   }
 }
 
+/**
+ * The OBS Dock's list: its own copies plus everything the app has installed (the shared
+ * manifest). It never downloads a Bible's text just to list names. Anything only the Dock
+ * has (downloaded here before the Dock shared them) is published so the app sees it too.
+ */
+async function getInstalledTranslationsForDock(): Promise<InstalledBibleMetadata[]> {
+  let legacy: InstalledBible[] = [];
+  try {
+    const db = await getDb();
+    legacy = await db.getAll("translations") as InstalledBible[];
+  } catch {
+    // IndexedDB can be unavailable in the OBS browser dock.
+  }
+  const central = await readInstalledTranslationsFromCentralDb();
+  const ownCopies = mergeInstalledBibles(legacy, central).filter((bible) => isCompleteBibleData(bible.data));
+  const shared = await readInstalledTranslationMetadataFromDockData();
+  const sharedKeys = new Set(shared.map((entry) => entry.abbr));
+  for (const bible of ownCopies) {
+    if (!sharedKeys.has(bible.abbr)) void publishInstalledTranslationFromDock(bible);
+  }
+  return mergeInstalledBibleMetadata(ownCopies.map(toInstalledBibleMetadata), shared);
+}
+
+/** OBS Dock: share a Bible downloaded here with the app (data file first, then the manifest). */
+export async function publishInstalledTranslationFromDock(bible: InstalledBible): Promise<void> {
+  if (canLoadDockData() || !bible?.abbr) return;
+  const key = getTranslationKey(bible.abbr);
+  if (!(await postDockData(`dock-bible-translation-${key.toLowerCase()}`, bible.data))) return;
+  const existing = (await fetchDockDataOverHttp<InstalledBibleMetadata[]>("dock-bible-translations")) ?? [];
+  const next = mergeInstalledBibleMetadata(existing, [toInstalledBibleMetadata({ ...bible, abbr: key })]);
+  await postDockData("dock-bible-translations", next);
+}
+
+/** OBS Dock: take a removed Bible out of the shared manifest. */
+async function unpublishInstalledTranslationFromDock(abbr: string): Promise<void> {
+  if (canLoadDockData()) return;
+  const key = getTranslationKey(abbr);
+  const existing = await fetchDockDataOverHttp<InstalledBibleMetadata[]>("dock-bible-translations");
+  if (!existing) return;
+  await postDockData("dock-bible-translations", existing.filter((entry) => getTranslationKey(entry.abbr) !== key));
+}
+
 export async function getInstalledTranslations(): Promise<InstalledBibleMetadata[]> {
+  if (!canLoadDockData()) return getInstalledTranslationsForDock();
   const installed = await getInstalledTranslationsWithData();
   return installed.map(toInstalledBibleMetadata);
 }
@@ -980,8 +1060,11 @@ export async function getInstalledTranslation(
 
   const dock = await readInstalledTranslationFromDockData(key);
   if (dock) {
-    db?.put("translations", { ...dock, abbr: key }).catch(() => { });
-    writeInstalledTranslationToCentralDb(dock).catch(() => { });
+    // In the OBS Dock the shared file stays the single copy, so a Bible removed in the app does not linger here.
+    if (canLoadDockData()) {
+      db?.put("translations", { ...dock, abbr: key }).catch(() => { });
+      writeInstalledTranslationToCentralDb(dock).catch(() => { });
+    }
     return { ...dock, abbr: key };
   }
 
@@ -1024,6 +1107,8 @@ export async function saveInstalledTranslation(
   syncInstalledTranslationsToDock().catch((err) => {
     console.warn("[bibleDb] Failed to sync installed translations after save:", err);
   });
+  // In the OBS Dock there is no Tauri: share it over the local server instead.
+  await publishInstalledTranslationFromDock(normalized);
 }
 
 /**
@@ -1046,6 +1131,7 @@ export async function deleteInstalledTranslation(
   syncInstalledTranslationsToDock().catch((err) => {
     console.warn("[bibleDb] Failed to sync installed translations after delete:", err);
   });
+  await unpublishInstalledTranslationFromDock(key);
 }
 
 /**
