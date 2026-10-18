@@ -52,6 +52,7 @@ import { looksLikeLongTextField } from "../../lowerthirds/graphicPackages";
 import type { ChurchThemeLike } from "../../lowerthirds/churchDefaults";
 import { applyChurchDefaults, churchAwareDefaults, sameValues } from "../../lowerthirds/churchDefaults";
 import { getSafeFileName, saveToDisk } from "../dockUploadService";
+import GivingBankFields, { hasGivingBankFields, isGivingBankFieldKey } from "../components/GivingBankFields";
 import Icon from "../DockIcon";
 import DockMotionControls from "./DockMotionControls";
 import { PER_KEY, isCycleTheme } from "../../lowerthirds/cycleSet";
@@ -307,10 +308,13 @@ export default function DockLowerThirdEditor({
 
   // ── Image variable (for interactive picker) ──
   // Matches type:"image" variables, OR type:"text" variables whose key/label contains "logo"
+  // The giving board has a logo per bank (handled by its bank rows); the picture picker is for the church logo.
+  const isGivingBoard = useMemo(() => hasGivingBankFields(theme.variables.map((v) => v.key)), [theme]);
   const imageVariable = useMemo(
-    () => theme.variables.find((v) => v.type === "image"
-      || ((v.key.toLowerCase().includes("logo") || (v.label ?? "").toLowerCase().includes("logo")) && v.type === "text")) ?? null,
-    [theme],
+    () => (isGivingBoard ? theme.variables.find((v) => v.key === "logo") : undefined)
+      ?? theme.variables.find((v) => !(isGivingBoard && isGivingBankFieldKey(v.key)) && (v.type === "image"
+      || ((v.key.toLowerCase().includes("logo") || (v.label ?? "").toLowerCase().includes("logo")) && v.type === "text"))) ?? null,
+    [theme, isGivingBoard],
   );
   const imageFileInputRef = useRef<HTMLInputElement>(null);
   const imagePreviewUrlRef = useRef<string | null>(null);
@@ -1048,10 +1052,19 @@ export default function DockLowerThirdEditor({
                 </>
               )}
               <div className="dock-lt-textfields" style={graphicsTheme ? { width: "100%", minWidth: 0 } : undefined}>
+                {isGivingBoard && (
+                  <GivingBankFields
+                    values={variableValues}
+                    defaults={themeDefaultValues}
+                    onChange={(patch) => setVariableValues((prev) => ({ ...prev, ...patch }))}
+                  />
+                )}
                 {/* Dynamic fields from theme variables (text/list types, excluding image/logo variables) */}
                 {theme.variables
                   .filter((v) => {
                     if (v.type !== "text" && v.type !== "list") return false;
+                    // The giving board's bank, number and logo fields are the bank rows above.
+                    if (isGivingBoard && isGivingBankFieldKey(v.key)) return false;
                     // Skip variables managed by the image picker
                     const key = v.key.toLowerCase();
                     const label = (v.label ?? "").toLowerCase();
