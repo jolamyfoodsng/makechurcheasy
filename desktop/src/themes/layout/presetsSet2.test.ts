@@ -23,8 +23,8 @@ function check(name: string, l: ThemeLayout, format: ThemeLayout["format"]) {
 }
 
 describe("second reference set", () => {
-  it("has 6 lower thirds, each with a hand-made full screen", () => {
-    expect(SET2_PRESETS.length).toBe(6);
+  it("has 5 lower thirds, each with a hand-made full screen", () => {
+    expect(SET2_PRESETS.length).toBe(5);
     for (const p of SET2_PRESETS) {
       check(p.name, p.layout, "lower-third");
       check(`${p.name} FS`, p.companion, "fullscreen");
@@ -55,6 +55,6 @@ describe("theme list", () => {
   it("has unique ids", () => {
     const ids = LAYOUT_PRESET_THEMES.map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids.length).toBe(6 + 1 + 6 + 15);
+    expect(ids.length).toBe(6 + 1 + 5 + 15);
   });
 });

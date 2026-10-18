@@ -33,52 +33,6 @@ const verseText = (style: LayerStyle): LayerStyle => ({ align: "left", verticalA
 const VERSE_IN = anim("line-rise", 520, 380, { stagger: 60 });
 const VERSE_OUT = anim("fade", 220);
 
-// ─────────────────────────── 1 · Painted Brush ───────────────────────────
-// Painted multicolour stroke with torn ends, maroon reference tab on top (John 3:16).
-// The torn edge is a clip-path, so the stroke grows in (a wipe would replace the clip while it runs).
-
-const BRUSH_CLIP =
-  "polygon(1.4% 7%, 3.2% 0%, 30% 3%, 62% 0%, 96.6% 2%, 98.7% 0%, 99.5% 13%, 98.2% 27%, 100% 41%, 98.8% 55%, 99.7% 69%, 98.3% 83%, 99.2% 100%, 70% 97%, 35% 100%, 2.6% 98%, 0.5% 100%, 1.5% 86%, 0% 72%, 1.2% 58%, 0.1% 44%, 1.4% 30%, 0% 17%)";
-const BRUSH_PAINT = linear(100, ["#8a1f4f", 0], ["#3b1a6e", 20], ["#1b2a7a", 36], ["#2b8a9a", 48], ["#4a1d6a", 60], ["#8b2a6e", 76], ["#c25a12", 100]);
-const BRUSH_SWIRL = radial(["rgba(130,210,235,0.38)", 0], ["rgba(70,40,130,0)", 42]);
-const BRUSH_SHADE = linear(180, ["rgba(10,4,24,0.12)", 0], ["rgba(10,4,24,0.38)", 100]);
-
-function brushPanel(id: string, x: number, y: number, w: number, h: number, anchor: ThemeLayer["anchor"]): ThemeLayer[] {
-  return [
-    layer({ id, name: "Brush stroke", type: "box", anchor, x, y, w, h, style: { gradient: BRUSH_PAINT, clipPath: BRUSH_CLIP }, in: anim("grow-x", 650), out: anim("fade", 380, 150) }),
-    layer({ id: `${id}-swirl`, name: "Paint swirl", type: "box", parentId: id, x: 0, y: 0, w, h, style: { gradient: BRUSH_SWIRL }, in: none, out: none, loop: { preset: "drift", duration: 14000 } }),
-    layer({ id: `${id}-shade`, name: "Shade", type: "box", parentId: id, x: 0, y: 0, w, h, style: { gradient: BRUSH_SHADE }, in: none, out: none }),
-  ];
-}
-
-const brushTab = (x: number, y: number, size: number): ThemeLayer =>
-  layer({
-    id: "reference", name: "Reference tab", type: "text", heading: true, content: "{reference}", anchor: "bottom-center", x, y, w: 1200, h: "auto",
-    style: { hug: true, fill: "#7a1f4f", padding: [8, 24, 6, 24], fontFamily: "Work Sans", fontSize: size, minFontSize: 16, fontWeight: 600, letterSpacing: 0.5, textTransform: "uppercase", color: "#ffffff", align: "center", maxLines: 1 },
-    in: anim("slide-up", 420, 360, { distance: 18 }), out: anim("fade", 200),
-  });
-
-export const PAINTED_BRUSH = lt([
-  ...brushPanel("band", 960, 1030, 1780, 172, "bottom-center"),
-  brushTab(960, 860, 26),
-  layer({
-    id: "verse", name: "Verse", type: "text", parentId: "band", content: "{text}", x: 100, y: 22, w: 1580, h: 128,
-    style: verseText({ fontFamily: "Montserrat", fontSize: 34, minFontSize: 20, fontWeight: 800, letterSpacing: 0.4, textTransform: "uppercase", align: "center", lineHeight: 1.2, textShadow: "0 2px 6px rgba(0,0,0,0.5)", verseNumberColor: "rgba(255,255,255,0.75)" }),
-    in: VERSE_IN, out: VERSE_OUT,
-  }),
-]);
-
-export const PAINTED_BRUSH_FS = fs([
-  fullBg({ gradient: radial(["#2a1446", 0], ["#0b0716", 75]) }),
-  ...brushPanel("panel", 960, 580, 1700, 620, "center"),
-  brushTab(960, 272, 38),
-  layer({
-    id: "verse", name: "Verse", type: "text", parentId: "panel", content: "{text}", x: 130, y: 70, w: 1440, h: 480,
-    style: verseText({ fontFamily: "Montserrat", fontSize: 64, minFontSize: 32, fontWeight: 800, letterSpacing: 0.5, textTransform: "uppercase", align: "center", lineHeight: 1.2, textShadow: "0 3px 10px rgba(0,0,0,0.5)", verseNumberColor: "rgba(255,255,255,0.75)" }),
-    in: anim("line-rise", 560, 420, { stagger: 80 }), out: VERSE_OUT,
-  }),
-]);
-
 // ─────────────────────────── 2 · Violet Split ───────────────────────────
 // Condensed label block on the left, glowing violet text panel on the right.
 
@@ -318,7 +272,6 @@ export const NAVY_SCRIPTURE_FS = fs([
 
 /** Preset list entries: the lower third plus its hand-made full screen. */
 export const SET2_PRESETS: Array<{ id: string; name: string; layout: ThemeLayout; companion: ThemeLayout }> = [
-  { id: "preset-painted-brush", name: "Painted Brush", layout: PAINTED_BRUSH, companion: PAINTED_BRUSH_FS },
   { id: "preset-frosted-light-bar", name: "Frosted Light Bar", layout: FROSTED_LIGHT_BAR, companion: FROSTED_LIGHT_BAR_FS },
   { id: "preset-paper-card", name: "Paper Card", layout: PAPER_CARD, companion: PAPER_CARD_FS },
   { id: "preset-white-pill", name: "White Pill Card", layout: WHITE_PILL, companion: WHITE_PILL_FS },

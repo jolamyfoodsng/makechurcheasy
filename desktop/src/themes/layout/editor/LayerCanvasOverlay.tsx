@@ -10,6 +10,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Pointer
 import type { ThemeLayer, ThemeLayout } from "../types";
 import { isBackdropLayer, nudgeLayer } from "./layoutOps";
 import { snapRect, type SnapGap } from "./snapGuides";
+import { PATTERN_GLOW_LAYER_ID, PATTERN_LAYER_ID } from "../backgroundPatterns";
 
 interface Rect { x: number; y: number; w: number; h: number }
 
@@ -135,6 +136,8 @@ export default function LayerCanvasOverlay({ canvasRef, layout, scale, selectedI
       {layout.layers.map((layer) => {
         const r = rects[layer.id];
         if (!r || layer.hidden) return null;
+        // The moving pattern and glow sit on top of the background; they are not parts to pick, so a click on them reaches the background.
+        if (layer.id === PATTERN_LAYER_ID || layer.id === PATTERN_GLOW_LAYER_ID) return null;
         const selected = layer.id === selectedId;
         const backdrop = isBackdropLayer(layer);
         return (
