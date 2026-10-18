@@ -9,6 +9,7 @@
  * create scenes or browser sources in OBS Studio.
  */
 
+import GivingBankFields, { hasGivingBankFields, isGivingBankFieldKey } from "../dock/components/GivingBankFields";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { looksLikeLongTextField } from "../lowerthirds/graphicPackages";
 import { createPortal } from "react-dom";
@@ -2108,10 +2109,25 @@ export default function BroadcastGraphicsPage() {
                     </span>
                   </div>
 
+                  {hasGivingBankFields((editorState.template.variables ?? []).map((v) => String((v as Record<string, unknown>).key))) && (
+                    <GivingBankFields
+                      variant="app"
+                      values={editorState.variables}
+                      defaults={Object.fromEntries(
+                        (editorState.template.variables ?? []).map((v) => [String((v as Record<string, unknown>).key), String((v as Record<string, unknown>).defaultValue ?? "")]),
+                      )}
+                      onChange={(patch) =>
+                        setEditorState((prev) => (prev ? { ...prev, variables: { ...prev.variables, ...patch } } : prev))
+                      }
+                    />
+                  )}
+
                   {editorState.template.variables &&
                     editorState.template.variables.map((v) => {
                       const varDef = v as Record<string, unknown>;
                       const key = String(varDef.key);
+                      // The giving board's bank, number and logo fields are the bank rows above.
+                      if (isGivingBankFieldKey(key) && hasGivingBankFields((editorState.template.variables ?? []).map((x) => String((x as Record<string, unknown>).key)))) return null;
                       const label = String(varDef.label || key);
                       const type = String(varDef.type || "text");
                       const currentVal = editorState.variables[key] ?? "";

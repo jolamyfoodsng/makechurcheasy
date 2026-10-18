@@ -25,7 +25,9 @@ describe("giving board bank rows", () => {
         onChange={() => undefined}
       />,
     );
-    expect(html).toContain("How many banks");
+    expect(html).toContain("How many bank accounts?");
+    expect(html).toContain("<select");
+    expect(html).toContain("6 bank accounts");
     expect(html).toContain('aria-label="Bank 1 name"');
     expect(html).toContain('aria-label="Bank 2 name"');
     expect(html).not.toContain('aria-label="Bank 3 name"');

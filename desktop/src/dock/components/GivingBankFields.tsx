@@ -31,6 +31,8 @@ export function countShownBanks(values: Record<string, string | undefined>): num
 }
 
 interface Props {
+  /** "dock" uses the Dock's field styles; "app" the Broadcast Graphics page's. */
+  variant?: "dock" | "app";
   values: Record<string, string>;
   /** The graphic's own defaults, used when a hidden bank is switched back on. */
   defaults: Record<string, string>;
@@ -39,7 +41,7 @@ interface Props {
 
 const row: React.CSSProperties = { display: "flex", gap: 6, alignItems: "flex-start" };
 const input: React.CSSProperties = { width: "100%", boxSizing: "border-box" };
-const small: React.CSSProperties = { fontSize: 10, color: "var(--dock-text-dim)" };
+const small: React.CSSProperties = { fontSize: 10, color: "var(--dock-text-dim, var(--text-secondary))" };
 
 function readAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -62,7 +64,9 @@ async function persistLogo(file: File): Promise<string> {
   return readAsDataUrl(file);
 }
 
-export default function GivingBankFields({ values, defaults, onChange }: Props) {
+export default function GivingBankFields({ variant = "dock", values, defaults, onChange }: Props) {
+  const inputClass = variant === "app" ? "bg-form-group__input" : "dock-lt-field-input";
+  const selectClass = variant === "app" ? "bg-form-group__select" : "dock-lt-field-input";
   const count = countShownBanks(values);
   const hiddenRef = useRef<Record<number, { bank: string; num: string }>>({});
   const [openSlot, setOpenSlot] = useState<number | null>(null);
@@ -118,44 +122,38 @@ export default function GivingBankFields({ values, defaults, onChange }: Props) 
   const shown = useMemo(() => SLOTS.filter((i) => i <= count), [count]);
 
   return (
-    <div className="dock-lt-field-row" style={{ display: "block" }}>
-      <div style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.3, color: "var(--dock-text)", marginBottom: 4 }}>How many banks</div>
-      <div role="group" aria-label="How many banks" style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+    <div className={variant === "app" ? "bg-form-group" : "dock-lt-field-row"} style={variant === "app" ? undefined : { display: "block" }}>
+      <label
+        htmlFor="giving-bank-count"
+        className={variant === "app" ? "bg-form-group__label" : undefined}
+        style={variant === "app" ? undefined : { display: "block", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: 0.3, color: "var(--dock-text, var(--text-primary))", marginBottom: 4 }}
+      >
+        How many bank accounts?
+      </label>
+      <select
+        id="giving-bank-count"
+        className={selectClass}
+        style={{ width: "100%", boxSizing: "border-box", marginBottom: 8 }}
+        value={count}
+        onChange={(e) => setCount(Number(e.target.value))}
+      >
         {SLOTS.map((n) => (
-          <button
-            key={n}
-            type="button"
-            aria-pressed={count === n}
-            onClick={() => setCount(n)}
-            style={{
-              flex: 1,
-              padding: "4px 0",
-              borderRadius: 3,
-              border: `1px solid ${count === n ? "var(--dock-accent)" : "var(--dock-border)"}`,
-              background: count === n ? "var(--dock-accent-dim)" : "var(--dock-input-bg)",
-              color: count === n ? "var(--dock-text)" : "var(--dock-text-dim)",
-              fontSize: 12,
-              fontWeight: 700,
-              cursor: "pointer",
-            }}
-          >
-            {n}
-          </button>
+          <option key={n} value={n}>{n === 1 ? "1 bank account" : `${n} bank accounts`}</option>
         ))}
-      </div>
+      </select>
 
       {shown.map((slot) => {
         const logo = values[`logo${slot}`] ?? "";
         const suggestions = suggestionsFor(slot);
         return (
-          <div key={slot} style={{ border: "1px solid var(--dock-border)", borderRadius: 4, padding: 6, marginBottom: 6, background: "var(--dock-surface)" }}>
+          <div key={slot} style={{ border: "1px solid var(--dock-border, rgba(148,163,184,0.35))", borderRadius: 4, padding: 6, marginBottom: 6, background: "var(--dock-surface, rgba(255,255,255,0.03))" }}>
             <div style={row}>
               <button
                 type="button"
                 title={logo ? "Change logo" : "Upload a logo"}
                 aria-label={`Bank ${slot} logo: upload`}
                 onClick={() => fileRefs.current[slot]?.click()}
-                style={{ flex: "none", width: 44, height: 44, padding: 2, borderRadius: 3, border: "1px dashed var(--dock-border)", background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: busy[slot] ? 0.5 : 1 }}
+                style={{ flex: "none", width: 44, height: 44, padding: 2, borderRadius: 3, border: "1px dashed var(--dock-border, rgba(148,163,184,0.35))", background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: busy[slot] ? 0.5 : 1 }}
               >
                 {logo ? <img src={logo} alt="" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} /> : <span style={{ ...small, color: "#666", textAlign: "center", lineHeight: 1.1 }}>Logo</span>}
               </button>
@@ -172,7 +170,7 @@ export default function GivingBankFields({ values, defaults, onChange }: Props) 
               />
               <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
                 <input
-                  className="dock-lt-field-input"
+                  className={inputClass}
                   type="text"
                   style={input}
                   value={values[`bank${slot}`] ?? ""}
@@ -188,14 +186,14 @@ export default function GivingBankFields({ values, defaults, onChange }: Props) 
                   }}
                 />
                 {suggestions.length > 0 && (
-                  <ul role="listbox" style={{ position: "absolute", zIndex: 20, left: 0, right: 0, top: "100%", margin: "2px 0 0", padding: 2, listStyle: "none", background: "var(--dock-surface-overlay, var(--dock-surface))", border: "1px solid var(--dock-border)", borderRadius: 4, maxHeight: 190, overflowY: "auto" }}>
+                  <ul role="listbox" style={{ position: "absolute", zIndex: 20, left: 0, right: 0, top: "100%", margin: "2px 0 0", padding: 2, listStyle: "none", background: "var(--dock-surface-overlay, var(--dock-surface, var(--surface-raised, #1f2430)))", border: "1px solid var(--dock-border, rgba(148,163,184,0.35))", borderRadius: 4, maxHeight: 190, overflowY: "auto" }}>
                     {suggestions.map((s) => (
                       <li key={s.id} role="option" aria-selected={false}>
                         <button
                           type="button"
                           onMouseDown={(e) => e.preventDefault()}
                           onClick={() => void pick(slot, s)}
-                          style={{ display: "flex", width: "100%", alignItems: "center", gap: 6, padding: "4px 6px", border: 0, borderRadius: 3, background: "transparent", color: "var(--dock-text)", cursor: "pointer", textAlign: "left", fontSize: 12 }}
+                          style={{ display: "flex", width: "100%", alignItems: "center", gap: 6, padding: "4px 6px", border: 0, borderRadius: 3, background: "transparent", color: "var(--dock-text, var(--text-primary))", cursor: "pointer", textAlign: "left", fontSize: 12 }}
                         >
                           <img src={s.logoUrl} alt="" loading="lazy" style={{ width: 20, height: 20, objectFit: "contain", background: "#fff", borderRadius: 2, flex: "none" }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }} />
                           <span style={{ minWidth: 0, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}{s.fullName !== s.label ? <span style={small}> · {s.fullName}</span> : null}</span>
@@ -205,7 +203,7 @@ export default function GivingBankFields({ values, defaults, onChange }: Props) 
                   </ul>
                 )}
                 <input
-                  className="dock-lt-field-input"
+                  className={inputClass}
                   type="text"
                   style={{ ...input, marginTop: 4 }}
                   value={values[`num${slot}`] ?? ""}
@@ -216,11 +214,11 @@ export default function GivingBankFields({ values, defaults, onChange }: Props) 
               </div>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginTop: 4, minHeight: 14 }}>
-              <span style={{ ...small, color: notice[slot] ? "var(--dock-warning, #f59e0b)" : "var(--dock-text-dim)" }}>
+              <span style={{ ...small, color: notice[slot] ? "var(--dock-warning, #f59e0b)" : "var(--dock-text-dim, var(--text-secondary))" }}>
                 {busy[slot] ? "Getting the logo…" : notice[slot] || (logo ? "" : "No logo yet: pick a bank from the list, or click the box to upload.")}
               </span>
               {logo ? (
-                <button type="button" onClick={() => onChange({ [`logo${slot}`]: "" })} style={{ border: 0, background: "transparent", color: "var(--dock-text-dim)", cursor: "pointer", fontSize: 10, textDecoration: "underline", padding: 0 }}>
+                <button type="button" onClick={() => onChange({ [`logo${slot}`]: "" })} style={{ border: 0, background: "transparent", color: "var(--dock-text-dim, var(--text-secondary))", cursor: "pointer", fontSize: 10, textDecoration: "underline", padding: 0 }}>
                   Remove logo
                 </button>
               ) : null}
