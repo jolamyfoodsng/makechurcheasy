@@ -233,6 +233,9 @@ export default function DockTranslationControls({
         translationOrder,
         sourceSignature,
       });
+      // Done: close the panel, like the other Dock pickers.
+      setOpen(false);
+      onClose?.();
     } catch (cause) {
       if (requestId !== requestIdRef.current) return;
       setError(cause instanceof Error ? cause.message : t("dock.translation.failed", { defaultValue: "Translation failed" }));
@@ -240,7 +243,7 @@ export default function DockTranslationControls({
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [onChange, sections, showBoth, t, translationOrder]);
+  }, [onChange, onClose, sections, setOpen, showBoth, t, translationOrder, sourceSignature]);
 
   const handleLanguageSelect = (language: GoogleTranslateLanguage) => {
     setLanguageQuery(language.label);

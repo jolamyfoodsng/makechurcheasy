@@ -136,3 +136,26 @@ export function compareContent(
     extra: { text2: `${b.text || ""}${label(b)}` },
   };
 }
+
+/** The part of a Worship / Notes slide that carries a translation next to the original. */
+export interface TranslatedSlide {
+  text?: string;
+  translationText?: string;
+  translationOrder?: string;
+}
+
+/** The slide's translation, or "" when it is not showing both languages. */
+export function translationOf(slide: TranslatedSlide | null | undefined): string {
+  return typeof slide?.translationText === "string" ? slide.translationText.trim() : "";
+}
+
+/**
+ * Worship and Notes show a translation under (or above) the original. A layer theme has one verse
+ * block, so both languages go in it, one line each, in the order the operator chose.
+ */
+export function bilingualText(slide: TranslatedSlide): string {
+  const original = (slide.text || "").trim();
+  const translated = translationOf(slide);
+  if (!translated) return slide.text || "";
+  return slide.translationOrder === "translation-first" ? `${translated}\n${original}` : `${original}\n${translated}`;
+}

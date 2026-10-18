@@ -12,10 +12,10 @@ import { ThemeRenderer } from "./renderer";
 import { isThemeLayout, type ThemeLayout } from "./types";
 import { applyLayoutAdjust } from "./adjust";
 import { buildCountdownContent } from "../../countdowns/countdownTime";
-import { applyCompareToLayout, compareColumnsOf, compareContent, compareLayoutOf, type CompareSlide } from "./compare";
+import { applyCompareToLayout, bilingualText, compareColumnsOf, compareContent, compareLayoutOf, translationOf, type CompareSlide, type TranslatedSlide } from "./compare";
 
 interface OverlayPacket {
-  slide?: ({ text?: string; reference?: string; lineCount?: number } & CompareSlide) | null;
+  slide?: ({ text?: string; reference?: string; lineCount?: number } & CompareSlide & TranslatedSlide) | null;
   theme?: { layout?: unknown } | null;
   blanked?: boolean;
   live?: boolean;
@@ -129,11 +129,14 @@ function handle(packet: OverlayPacket, hooks: OverlayHooks = {}): boolean {
   const compare = compareColumnsOf(packet.slide);
   const compareMode = compareLayoutOf(packet.slide);
   if (layout && compare) layout = applyCompareToLayout(layout, compareMode);
-  const contentOf = (slide: NonNullable<OverlayPacket["slide"]>) => (
-    compare
-      ? compareContent(compare, slide.lineCount, compareMode, packet.slide?.compareMode === "passages" ? "passages" : "translations")
-      : { text: slide.text || "", reference: slide.reference || "", lineCount: slide.lineCount }
-  );
+  // Worship / Notes showing a translation next to the original: both languages in the verse block, a bit smaller.
+  const bilingual = !compare && translationOf(packet.slide) !== "";
+  if (layout && bilingual) layout = applyCompareToLayout(layout, "line-by-line");
+  const contentOf = (slide: NonNullable<OverlayPacket["slide"]>) => {
+    if (compare) return compareContent(compare, slide.lineCount, compareMode, packet.slide?.compareMode === "passages" ? "passages" : "translations");
+    if (translationOf(slide)) return { text: bilingualText(slide), reference: slide.reference || "", lineCount: slide.lineCount, stackLines: true };
+    return { text: slide.text || "", reference: slide.reference || "", lineCount: slide.lineCount };
+  };
 
   // A theme without a layout means a legacy theme was picked: step aside.
   if (hasTheme && !layout) {

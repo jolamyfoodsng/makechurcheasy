@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyCompareToLayout, compareColumnsOf, compareContent, compareLayoutOf } from "./compare";
+import { applyCompareToLayout, bilingualText, compareColumnsOf, compareContent, compareLayoutOf, translationOf } from "./compare";
 import { THEME_LAYOUT_VERSION, type ThemeLayer, type ThemeLayout } from "./types";
 
 const anim = { in: { preset: "none", duration: 0, delay: 0, easing: "linear" }, out: { preset: "none", duration: 0, delay: 0, easing: "linear" } } as const;
@@ -81,5 +81,23 @@ describe("side-by-side compare for layer themes", () => {
     expect(c.text).toBe("For God so loved\n— John 3:16 (KJV)");
     expect(c.extra?.text2).toBe("The Lord is my shepherd\n— Psalm 23:1 (NIV)");
     expect(c.reference).toBe("John 3:16 · Psalm 23:1");
+  });
+});
+
+describe("Worship / Notes translation in layer themes", () => {
+  const slide = { text: "Amazing grace\nHow sweet the sound", translationText: "Gracia admirable\nQué dulce el sonido" };
+
+  it("puts the original first, then the translation", () => {
+    expect(translationOf(slide)).toBe("Gracia admirable\nQué dulce el sonido");
+    expect(bilingualText(slide)).toBe("Amazing grace\nHow sweet the sound\nGracia admirable\nQué dulce el sonido");
+  });
+
+  it("can put the translation first", () => {
+    expect(bilingualText({ ...slide, translationOrder: "translation-first" })).toBe("Gracia admirable\nQué dulce el sonido\nAmazing grace\nHow sweet the sound");
+  });
+
+  it("leaves a single-language slide alone", () => {
+    expect(translationOf({ text: "Hello", translationText: "  " })).toBe("");
+    expect(bilingualText({ text: "Hello" })).toBe("Hello");
   });
 });
