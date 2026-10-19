@@ -1,0 +1,177 @@
+/* ── vMix connection card (Dock, output software = vMix) ── */
+.dock-vmix-card {
+  flex-shrink: 0;
+  margin: 4px 8px 0;
+  border: 1px solid color-mix(in srgb, var(--dock-accent) 35%, var(--dock-border));
+  border-radius: var(--radius, 4px);
+  background: color-mix(in srgb, var(--dock-accent-soft) 40%, var(--dock-surface));
+  color: var(--dock-text);
+  font-size: 12px;
+}
+
+.dock-vmix-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  min-height: 34px;
+}
+
+.dock-vmix-bar__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dock-vmix-bar__status {
+  color: var(--dock-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dock-vmix-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.dock-vmix-bar__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid var(--dock-border);
+  background: var(--dock-surface-alt);
+  color: var(--dock-text-dim);
+  cursor: pointer;
+}
+
+.dock-vmix-bar__icon-btn:hover {
+  color: var(--dock-text);
+  border-color: var(--dock-accent);
+}
+
+.dock-vmix-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dock-vmix-dot--ok { background: var(--dock-green); box-shadow: 0 0 0 3px var(--dock-green-soft); }
+.dock-vmix-dot--wait { background: var(--dock-yellow); }
+.dock-vmix-dot--bad { background: var(--dock-red); box-shadow: 0 0 0 3px var(--dock-red-soft); }
+
+.dock-vmix-note {
+  margin: 0;
+  padding: 6px 10px;
+  border-top: 1px solid var(--dock-border);
+  line-height: 1.4;
+}
+.dock-vmix-note--error {
+  color: var(--dock-red-text);
+  background: var(--dock-red-soft);
+}
+
+.dock-vmix-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--dock-border);
+}
+.dock-vmix-settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--dock-text-dim);
+}
+.dock-vmix-settings input,
+.dock-vmix-settings select {
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--dock-input-border);
+  border-radius: 4px;
+  background: var(--dock-input-bg);
+  color: var(--dock-text);
+  font-size: 12px;
+}
+
+.dock-vmix-steps {
+  list-style: none;
+  margin: 0;
+  padding: 6px 10px 8px;
+  border-top: 1px solid var(--dock-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dock-vmix-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.dock-vmix-step__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 50%;
+  border: 1px solid var(--dock-border);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--dock-text-dim);
+  flex-shrink: 0;
+}
+.dock-vmix-step.is-done .dock-vmix-step__mark {
+  background: var(--dock-green);
+  border-color: var(--dock-green);
+  color: #fff;
+}
+
+.dock-vmix-step__body { min-width: 0; flex: 1 1 auto; }
+.dock-vmix-step__title { font-weight: 600; }
+.dock-vmix-step__hint { color: var(--dock-text-dim); line-height: 1.4; margin-top: 2px; }
+
+.dock-vmix-link {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dock-accent);
+  cursor: pointer;
+  text-decoration: underline;
+  font-size: inherit;
+}
+
+.dock-vmix-linkrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+}
+.dock-vmix-linkrow code {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 7px;
+  border: 1px solid var(--dock-border);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.25);
+  font-family: var(--dock-font-mono);
+  font-size: 11px;
+  user-select: all;
+}

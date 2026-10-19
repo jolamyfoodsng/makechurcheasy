@@ -1,7 +1,16 @@
-export type DockPresentationOutputTarget = "obs" | "link";
+export type DockPresentationOutputTarget = "obs" | "link" | "vmix";
 
+/**
+ * "link" and "vmix" both publish through the presentation link (a Browser
+ * source / vMix Web Browser input pointing at presentation.html). Neither
+ * touches OBS scenes or sources.
+ */
 export function isPresentationLinkTarget(target?: DockPresentationOutputTarget): boolean {
-  return target === "link";
+  return target === "link" || target === "vmix";
+}
+
+export function isVmixTarget(target?: DockPresentationOutputTarget): boolean {
+  return target === "vmix";
 }
 
 /**

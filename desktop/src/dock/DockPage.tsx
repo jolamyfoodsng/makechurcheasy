@@ -18,9 +18,15 @@ import {
 } from "./dockTypes";
 import {
   isPresentationLinkTarget,
+  isVmixTarget,
   resolveDockPresentationOutputTarget,
   type DockPresentationOutputTarget,
 } from "./dockPresentationTarget";
+import {
+  readDockOutputSoftware,
+  writeDockOutputSoftware,
+  type DockOutputSoftware,
+} from "./dockOutputSoftware";
 import { useAppTheme } from "../hooks/useAppTheme";
 import {
   APP_APPEARANCE_PALETTES,
@@ -58,6 +64,7 @@ import { DockUpgradeModal } from "./components/DockUpgradeModal";
 import LoadingScreen from "../components/LoadingScreen";
 import DockBrowserZoomWarning from "./components/DockBrowserZoomWarning";
 import DockPresentationLinkCard from "./components/DockPresentationLinkCard";
+import DockVmixCard from "./components/DockVmixCard";
 import DockPresentationLinkModal from "./components/DockPresentationLinkModal";
 import DockScheduleIntroModal from "./components/DockScheduleIntroModal";
 import { getDockPlan, isDockFreePlan, registerUpgradeModal, showUpgradeModal, startPlanRefresh } from "./dockEntitlement";
@@ -316,8 +323,11 @@ function DockPageContent({
 }: DockPageProps = {}) {
   const { t } = useTranslation();
   const [dockPlan, setDockPlan] = useState(() => getDockPlan());
+  // Output software (OBS / vMix). A parent view that asks for a specific
+  // target (e.g. the Studio) always wins over this Dock-level choice.
+  const [outputSoftware, setOutputSoftware] = useState<DockOutputSoftware>(() => readDockOutputSoftware());
   const presentationOutputTarget = resolveDockPresentationOutputTarget(
-    requestedPresentationOutputTarget,
+    requestedPresentationOutputTarget ?? (outputSoftware === "vmix" ? "vmix" : undefined),
     dockPlan,
   );
   const isFreePlan = isDockFreePlan();
@@ -1453,6 +1463,34 @@ function DockPageContent({
                   </div>
                 </div>
 
+                {/* Output software (OBS / vMix) */}
+                {/* Hidden from users: the switch only appears once vMix was opened with ?output=vmix. */}
+                {!requestedPresentationOutputTarget && outputSoftware === "vmix" && String(dockPlan || "").toLowerCase() !== "free" && (
+                  <div className="dock-sidebar__subpanel" data-testid="dock-output-software">
+                    <div className="dock-sidebar__section-label">{t('page.outputSoftware', 'Output software')}</div>
+                    <div className="dock-appearance-mode" role="group" aria-label={t('page.outputSoftware', 'Output software')}>
+                      {([
+                        ["obs", "OBS"],
+                        ["vmix", "vMix"],
+                      ] as const).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          className={`dock-appearance-mode__button${outputSoftware === value ? " dock-appearance-mode__button--active" : ""}`}
+                          onClick={() => {
+                            writeDockOutputSoftware(value);
+                            setOutputSoftware(value);
+                          }}
+                          aria-pressed={outputSoftware === value}
+                          data-testid={`dock-output-software-${value}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Appearance */}
                 <button
                   type="button"
@@ -2005,6 +2043,7 @@ function DockPageContent({
           {isFreePlan && presentationLinkMode && !hidePresentationLinkCard && (
             <DockPresentationLinkCard onOpenHelp={() => setShowPresentationLinkModal(true)} />
           )}
+          {isVmixTarget(presentationOutputTarget) && !hidePresentationLinkCard && <DockVmixCard />}
           <div className="dock-content-layout" style={{ display: "flex", flex: 1, minHeight: 0, width: "100%", overflow: "hidden" }}>
             <DockScheduleDrawer
               initialSnapshot={servicePlanner}

@@ -58,6 +58,7 @@ import { DOCK_OPEN_SCHEDULE_GUIDE_EVENT } from "./DockScheduleIntroModal";
 import "./dock-schedule.css";
 import type { DockStagedItem } from "../dockTypes";
 import { useDockOutputTarget } from "../dockOutputTargetContext";
+import { isPresentationLinkTarget } from "../dockPresentationTarget";
 import { getSong } from "../../worship/worshipDb";
 import { generateSlides } from "../../worship/slideEngine";
 import { publishMediaToPresentation } from "../../services/presentationPublish";
@@ -303,7 +304,7 @@ export default function DockScheduleDrawer({ initialSnapshot, onStage }: Props) 
   const handlePresentItem = useCallback(async (item: ServicePlanItem) => {
     if (isSwipingCardRef.current) return;
     setActiveCueId(item.id);
-    const toObs = outputTarget !== "link";
+    const toObs = !isPresentationLinkTarget(outputTarget);
 
     const markSent = () => {
       if (activePlan && activePlan.items.some((i) => i.id === item.id)) {
