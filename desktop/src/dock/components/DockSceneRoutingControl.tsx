@@ -14,6 +14,7 @@ import Icon from "../DockIcon";
 import "./DockSceneRoutingControl.css";
 import "./DockSceneRouteSendControl.css";
 import { useDockOutputTarget } from "../dockOutputTargetContext";
+import { isPresentationLinkTarget } from "../dockPresentationTarget";
 
 interface Props {
   module: DockSceneRouteModule;
@@ -31,7 +32,7 @@ interface Props {
 /** OBS scene routing ("Output → Send to another scene"). Hidden when the Dock drives the Presentation link / Studio. */
 export default function DockSceneRoutingControl(props: Props) {
   const target = useDockOutputTarget();
-  if (target === "link") return null;
+  if (isPresentationLinkTarget(target)) return null;
   return <DockSceneRoutingControlInner {...props} />;
 }
 

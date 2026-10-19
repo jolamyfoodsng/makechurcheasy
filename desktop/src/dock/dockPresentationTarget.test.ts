@@ -17,3 +17,18 @@ describe("Dock presentation output target", () => {
     expect(resolveDockPresentationOutputTarget(undefined, "basic")).toBe("obs");
   });
 });
+
+describe("vMix output target", () => {
+  it("publishes through the presentation link, never OBS scenes", async () => {
+    const { isPresentationLinkTarget, isVmixTarget } = await import("./dockPresentationTarget");
+    expect(isPresentationLinkTarget("vmix")).toBe(true);
+    expect(isVmixTarget("vmix")).toBe(true);
+    expect(isVmixTarget("link")).toBe(false);
+    expect(isVmixTarget("obs")).toBe(false);
+  });
+
+  it("keeps free plans on the plain link even when vMix is requested", () => {
+    expect(resolveDockPresentationOutputTarget("vmix", "free")).toBe("link");
+    expect(resolveDockPresentationOutputTarget("vmix", "growth")).toBe("vmix");
+  });
+});
