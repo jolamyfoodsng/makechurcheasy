@@ -661,15 +661,7 @@ export default function DockBroadcastTab() {
       <section style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <span
-              style={{
-                fontSize: "13px",
-                fontWeight: 700,
-                color: "#ffffff",
-              }}
-            >
-              Speaker Profiles
-            </span>
+            <span className="dock-media-header__label">Speaker Profiles</span>
 
             {/* Sleek Multistream Badge */}
             {allocation.allowed ? (
@@ -764,10 +756,10 @@ export default function DockBroadcastTab() {
                   display: "flex",
                   alignItems: "center",
                   gap: "6px",
-                  padding: "6px 14px",
-                  borderRadius: "18px",
-                  fontSize: "13px",
-                  fontWeight: isActive ? 700 : 500,
+                  padding: "5px 10px",
+                  borderRadius: "var(--radius-sm, 3px)",
+                  fontSize: "12px",
+                  fontWeight: isActive ? 650 : 500,
                   background: isActive ? "var(--dock-accent-soft, rgba(99, 102, 241, 0.18))" : "var(--dock-surface-alt, #202026)",
                   border: `1px solid ${
                     isActive ? "var(--dock-accent, #6366F1)" : "var(--dock-border, rgba(255,255,255,0.08))"
@@ -861,17 +853,7 @@ export default function DockBroadcastTab() {
         <section style={{ display: "flex", flexDirection: "column", gap: "8px", flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "2px" }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
-              <span
-                style={{
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  letterSpacing: "0.06em",
-                  color: "var(--dock-text-dim, #94a3b8)",
-                  textTransform: "uppercase",
-                }}
-              >
-                Channels
-              </span>
+              <span className="dock-media-header__label">Channels</span>
               <span style={{ fontSize: "10px", color: "var(--dock-text-dim, #64748b)" }}>
                 ({enabledChannels.length} active)
               </span>

@@ -42,8 +42,8 @@ const inputStyle: React.CSSProperties = {
   boxSizing: "border-box",
   background: "#0f1320",
   border: "1px solid var(--border)",
-  borderRadius: 7,
-  padding: "7px 9px",
+  borderRadius: 3,
+  padding: "6px 8px",
   color: "#fff",
   fontSize: 13,
   outline: "none",
@@ -63,9 +63,9 @@ const iconBtn: React.CSSProperties = {
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  width: 28,
-  height: 28,
-  borderRadius: 6,
+  width: 26,
+  height: 26,
+  borderRadius: 3,
   border: "1px solid var(--border)",
   background: "transparent",
   color: "#cbd5e1",
@@ -188,6 +188,25 @@ function RundownPreview({
 
 // ── Timer row ──────────────────────────────────────────────────────────────
 
+/** Shared column layout for the timer table header and rows. */
+const TIMER_COLUMNS = "22px minmax(110px, 1.6fr) 104px 72px 64px 64px minmax(100px, 1.2fr) 82px";
+
+function TimerHeader() {
+  const head: React.CSSProperties = { ...labelStyle, marginBottom: 0 };
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: TIMER_COLUMNS, gap: 6, padding: "0 8px 4px" }}>
+      <span style={head}>#</span>
+      <span style={head}>Name</span>
+      <span style={head}>Type</span>
+      <span style={head}>Length</span>
+      <span style={head}>Yellow</span>
+      <span style={head}>Red</span>
+      <span style={head}>Design</span>
+      <span />
+    </div>
+  );
+}
+
 function TimerCard({
   timer,
   index,
@@ -217,58 +236,46 @@ function TimerCard({
       style={{
         border: `1px solid ${selected ? "var(--primary)" : "var(--border)"}`,
         background: selected ? "rgba(99,102,241,0.07)" : "var(--surface)",
-        borderRadius: 10,
-        padding: 12,
+        borderRadius: 3,
+        padding: 6,
         display: "flex",
         flexDirection: "column",
-        gap: 10,
+        gap: 6,
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ width: 22, height: 22, borderRadius: 11, background: "var(--surface-hover)", color: "var(--text-muted)", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{index + 1}</span>
-        <input aria-label="Timer name" value={timer.name} onChange={(e) => onChange({ name: e.target.value })} placeholder="Timer name" style={{ ...inputStyle, fontWeight: 600, flex: 2 }} />
-        <input aria-label="Speaker" value={timer.speaker} onChange={(e) => onChange({ speaker: e.target.value })} placeholder="Speaker (optional)" style={{ ...inputStyle, flex: 1.4 }} />
-        <button type="button" title="Move up" aria-label="Move timer up" disabled={index === 0} onClick={(e) => { e.stopPropagation(); onMove(-1); }} style={{ ...iconBtn, opacity: index === 0 ? 0.35 : 1 }}><ChevronUp size={15} /></button>
-        <button type="button" title="Move down" aria-label="Move timer down" disabled={index === count - 1} onClick={(e) => { e.stopPropagation(); onMove(1); }} style={{ ...iconBtn, opacity: index === count - 1 ? 0.35 : 1 }}><ChevronDown size={15} /></button>
-        <button type="button" title="Delete timer" aria-label="Delete timer" onClick={(e) => { e.stopPropagation(); onDelete(); }} style={{ ...iconBtn, color: "#f87171" }}><Trash2 size={14} /></button>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10 }}>
-        <div>
-          <label style={labelStyle}>Type</label>
-          <select value={timer.kind} onChange={(e) => onChange({ kind: e.target.value as RundownTimerKind })} style={inputStyle}>
-            <option value="countdown">Countdown</option>
-            <option value="countup">Count up</option>
-            <option value="timeofday">Time of day</option>
-          </select>
-        </div>
-        <div>
-          <label style={labelStyle}>{timer.kind === "countup" ? "Limit (optional)" : "Duration"}</label>
-          <DurationInput ariaLabel="Duration" value={timer.durationSeconds} disabled={isClock} onCommit={(s) => onChange({ durationSeconds: s })} />
-        </div>
-        <div>
-          <label style={labelStyle}>Yellow at</label>
-          <DurationInput ariaLabel="Yellow warning" value={timer.warnYellowSeconds} disabled={isClock} onCommit={(s) => onChange({ warnYellowSeconds: s })} />
-        </div>
-        <div>
-          <label style={labelStyle}>Red at</label>
-          <DurationInput ariaLabel="Red warning" value={timer.warnRedSeconds} disabled={isClock} onCommit={(s) => onChange({ warnRedSeconds: s })} />
-        </div>
-        <div>
-          <label style={labelStyle}>Design</label>
-          <select value={hasDesign ? timer.designId ?? "" : ""} onChange={(e) => onChange({ designId: e.target.value || null })} style={inputStyle}>
-            <option value="">Default look</option>
-            {designs.map((d) => (
-              <option key={d.id} value={d.id}>{d.title || "Untitled design"}</option>
-            ))}
-          </select>
+      <div style={{ display: "grid", gridTemplateColumns: TIMER_COLUMNS, gap: 6, alignItems: "center" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", textAlign: "center" }}>{index + 1}</span>
+        <input aria-label="Timer name" value={timer.name} onChange={(e) => onChange({ name: e.target.value })} placeholder="Timer name" style={{ ...inputStyle, fontWeight: 600 }} />
+        <select aria-label="Type" value={timer.kind} onChange={(e) => onChange({ kind: e.target.value as RundownTimerKind })} style={inputStyle}>
+          <option value="countdown">Countdown</option>
+          <option value="countup">Count up</option>
+          <option value="timeofday">Time of day</option>
+        </select>
+        <DurationInput ariaLabel={timer.kind === "countup" ? "Limit (optional)" : "Duration"} value={timer.durationSeconds} disabled={isClock} onCommit={(sec) => onChange({ durationSeconds: sec })} />
+        <DurationInput ariaLabel="Yellow warning" value={timer.warnYellowSeconds} disabled={isClock} onCommit={(sec) => onChange({ warnYellowSeconds: sec })} />
+        <DurationInput ariaLabel="Red warning" value={timer.warnRedSeconds} disabled={isClock} onCommit={(sec) => onChange({ warnRedSeconds: sec })} />
+        <select aria-label="Design" value={hasDesign ? timer.designId ?? "" : ""} onChange={(e) => onChange({ designId: e.target.value || null })} style={inputStyle}>
+          <option value="">Default look</option>
+          {designs.map((d) => (
+            <option key={d.id} value={d.id}>{d.title || "Untitled design"}</option>
+          ))}
+        </select>
+        <div style={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
+          <button type="button" title="Move up" aria-label="Move timer up" disabled={index === 0} onClick={(e) => { e.stopPropagation(); onMove(-1); }} style={{ ...iconBtn, border: "none", opacity: index === 0 ? 0.3 : 1 }}><ChevronUp size={14} /></button>
+          <button type="button" title="Move down" aria-label="Move timer down" disabled={index === count - 1} onClick={(e) => { e.stopPropagation(); onMove(1); }} style={{ ...iconBtn, border: "none", opacity: index === count - 1 ? 0.3 : 1 }}><ChevronDown size={14} /></button>
+          <button type="button" title="Delete timer" aria-label="Delete timer" onClick={(e) => { e.stopPropagation(); onDelete(); }} style={{ ...iconBtn, border: "none", color: "#f87171" }}><Trash2 size={13} /></button>
         </div>
       </div>
 
-      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: timer.kind === "countdown" ? "var(--text-primary)" : "var(--text-muted)" }}>
-        <input type="checkbox" checked={timer.autoNext} disabled={timer.kind !== "countdown"} onChange={(e) => onChange({ autoNext: e.target.checked })} />
-        Start the next timer automatically when this one reaches zero
-      </label>
+      {selected && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, paddingLeft: 28 }}>
+          <input aria-label="Speaker" value={timer.speaker} onChange={(e) => onChange({ speaker: e.target.value })} placeholder="Speaker (optional)" style={{ ...inputStyle, maxWidth: 240 }} />
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: timer.kind === "countdown" ? "var(--text-primary)" : "var(--text-muted)", whiteSpace: "nowrap" }}>
+            <input type="checkbox" checked={timer.autoNext} disabled={timer.kind !== "countdown"} onChange={(e) => onChange({ autoNext: e.target.checked })} />
+            Start the next timer at zero
+          </label>
+        </div>
+      )}
     </div>
   );
 }
@@ -494,7 +501,8 @@ export default function RundownsView() {
                   <h4 style={{ margin: 0, fontSize: 14, fontWeight: 750, color: "#fff" }}>Timers</h4>
                   <button type="button" onClick={() => { const t = createTimer({ name: `Timer ${active.timers.length + 1}` }); patchActive({ timers: [...active.timers, t] }); setSelectedTimerId(t.id); }} style={{ ...iconBtn, width: "auto", padding: "0 12px", gap: 6, fontSize: 12.5, color: "#fff" }}><Plus size={14} /> Add timer</button>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {active.timers.length > 0 && <TimerHeader />}
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   {active.timers.length === 0 && <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>No timers yet. Add your first one.</div>}
                   {active.timers.map((t, i) => (
                     <TimerCard

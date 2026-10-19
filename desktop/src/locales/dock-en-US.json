@@ -593,9 +593,11 @@
     "defaultFeature": "This feature",
     "requiresGrowthPlan": "requires Growth plan or higher."
   },
+  "growth.defaultFeature": "This feature",
   "growth.nextTier": "Next Tier",
   "growth.points": "{{count}} points",
   "growth.progress": "Progress",
+  "growth.requiresGrowthPlan": "requires the Growth plan.",
   "growth.tier": "Tier",
   "liveTools.browserSource": "browser source",
   "liveTools.chooseMic": "Choose mic source in app",

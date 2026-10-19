@@ -13,20 +13,14 @@ import {
   RotateCcw,
   Send,
   Save,
-  Trash2,
-  Copy,
-  Download,
   Upload,
   Plus,
   Clock,
   Timer,
-  MoreVertical,
 } from "../components/icons/NativeIcons";
 import {
   getCountdowns,
   saveCountdown,
-  deleteCountdown,
-  duplicateCountdown,
 } from "../countdowns/countdownStore";
 import {
   createDefaultCountdown,
@@ -59,12 +53,6 @@ import { validateMediaFile, backgroundFileAccept } from "../countdowns/mediaVali
 import { saveCountdownAsset, deleteCountdownAsset } from "../countdowns/countdownStore";
 import type { MediaItem } from "../library/libraryTypes";
 import RundownsView from "./RundownsView";
-
-function formatDesignLength(totalSeconds: number): string {
-  const m = Math.floor(totalSeconds / 60);
-  const s = Math.floor(totalSeconds % 60);
-  return `${m}:${String(s).padStart(2, "0")} countdown`;
-}
 
 // ── Timer hook ─────────────────────────────────────────────────────────────
 
@@ -201,14 +189,18 @@ function CountdownPreview({ cd, timer }: { cd: CountdownConfig; timer: ReturnTyp
         )}
       </div>
       <div style={{ position: "relative", zIndex: 1, width: "100%", height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", ...textStyle }}>
-        {tid === "circular" && (
+        {tid === "circular" && (() => {
+          // The ring grows with the time text (00:09:58 needs more room than 09:58).
+          const ringSize = Math.max(220, Math.round(timer.formatted.length * 44 * 0.62 + 64));
+          const ringR = ringSize / 2 - 10;
+          return (
           <>
-            <div style={{ position: "relative", width: 220, height: 220, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <svg width={220} height={220} style={{ position: "absolute", top: 0, left: 0 }}>
-                <circle cx={110} cy={110} r={100} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={5} />
-                <circle cx={110} cy={110} r={100} fill="none" stroke="#3b82f6" strokeWidth={5} strokeLinecap="round"
-                  strokeDasharray={2 * Math.PI * 100}
-                  strokeDashoffset={2 * Math.PI * 100 * (1 - timer.progress / 100)}
+            <div style={{ position: "relative", width: ringSize, height: ringSize, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width={ringSize} height={ringSize} style={{ position: "absolute", top: 0, left: 0 }}>
+                <circle cx={ringSize / 2} cy={ringSize / 2} r={ringR} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={5} />
+                <circle cx={ringSize / 2} cy={ringSize / 2} r={ringR} fill="none" stroke="#3b82f6" strokeWidth={5} strokeLinecap="round"
+                  strokeDasharray={2 * Math.PI * ringR}
+                  strokeDashoffset={2 * Math.PI * ringR * (1 - timer.progress / 100)}
                   style={{ transform: "rotate(-90deg)", transformOrigin: "center", transition: "stroke-dashoffset 0.5s ease" }} />
               </svg>
               <span style={{ fontSize: 44, fontFamily: timerFont, fontWeight: timerWeight, color: timerColor, textShadow: timerShadow, position: "relative", zIndex: 1 }}>{timer.formatted}</span>
@@ -216,7 +208,8 @@ function CountdownPreview({ cd, timer }: { cd: CountdownConfig; timer: ReturnTyp
             {cd.text.title && <div style={{ marginTop: 16, fontSize: 18, fontFamily: titleFont, fontWeight: titleWeight, color: titleColor, textShadow: titleShadow }}>{cd.text.title}</div>}
             {cd.text.subtitle && <div style={{ marginTop: 4, fontSize: 13, fontFamily: subtitleFont, color: subtitleColor }}>{cd.text.subtitle}</div>}
           </>
-        )}
+          );
+        })()}
 
         {tid === "minimal" && (
           <>
@@ -928,14 +921,11 @@ function OBSSettings({ cd, onUpdate }: { cd: CountdownConfig; onUpdate: (u: Part
 
 // ── Main Page ──────────────────────────────────────────────────────────────
 
-function CountdownDesignsView() {
+function CountdownDesignsView({ showPicker, setShowPicker }: { showPicker: boolean; setShowPicker: (open: boolean) => void }) {
   const [countdowns, setCountdowns] = useState<CountdownConfig[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("timer");
-  const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [showPicker, setShowPicker] = useState(false);
-  const importRef = useRef<HTMLInputElement>(null);
 
   const active = countdowns.find((c) => c.id === activeId) ?? null;
   const timer = useCountdownTimer(active ?? createDefaultCountdown("circular", "placeholder"));
@@ -980,53 +970,6 @@ function CountdownDesignsView() {
     });
   }, [activeId]);
 
-  const handleDelete = useCallback((id: string) => {
-    deleteCountdown(id);
-    setCountdowns((prev) => {
-      const next = prev.filter((cd) => cd.id !== id);
-      if (activeId === id) setActiveId(next[0]?.id ?? null);
-      return next;
-    });
-    setMenuOpen(null);
-  }, [activeId]);
-
-  const handleDuplicate = useCallback(async (cd: CountdownConfig) => {
-    const copy = await duplicateCountdown(cd);
-    setCountdowns((prev) => [copy, ...prev]);
-    setActiveId(copy.id);
-    setMenuOpen(null);
-  }, []);
-
-  const handleExport = useCallback((cd: CountdownConfig) => {
-    const json = JSON.stringify(cd, null, 2);
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `countdown-${cd.id}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setMenuOpen(null);
-  }, []);
-
-  const handleImport = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      try {
-        const data = JSON.parse(ev.target?.result as string) as CountdownConfig;
-        const id = nanoid();
-        const cd = { ...data, id, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-        await saveCountdown(cd);
-        setCountdowns((prev) => [cd, ...prev]);
-        setActiveId(id);
-      } catch { /* ignore */ }
-    };
-    reader.readAsText(file);
-    e.target.value = "";
-  }, []);
-
   const handleSendToOBS = useCallback(() => {
     if (!active) return;
     // Generate overlay HTML and copy to clipboard
@@ -1053,68 +996,6 @@ function CountdownDesignsView() {
 
   return (
     <div style={{ display: "flex", height: "100%", overflow: "hidden" }}>
-      {/* ── Left Sidebar ── */}
-      <div style={{ width: 280, flexShrink: 0, borderRight: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column" }}>
-        <div style={{ padding: 18, borderBottom: "1px solid var(--border)" }}>
-          <h3 style={{ fontSize: 16, fontWeight: 750, color: "#ffffff", marginBottom: 12 }}>My Countdowns</h3>
-          <button onClick={() => setShowPicker(true)}
-            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 0", background: "var(--primary)", color: "#fff", borderRadius: 8, fontSize: 14, fontWeight: 600, border: "none", cursor: "pointer" }}>
-            <Plus size={16} /> Create Countdown
-          </button>
-        </div>
-
-        <div style={{ flex: 1, overflowY: "auto", padding: 8 }}>
-          {countdowns.length === 0 ? (
-            <div style={{ padding: 32, textAlign: "center" }}>
-              <Clock size={36} style={{ color: "var(--text-disabled)", margin: "0 auto 10px" }} />
-              <p style={{ fontSize: 14, color: "var(--text-muted)" }}>No countdowns yet</p>
-            </div>
-          ) : (
-            countdowns.map((cd) => (
-              <div key={cd.id} onClick={() => { setActiveId(cd.id); setMenuOpen(null); }}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, cursor: "pointer", marginBottom: 4, border: `1px solid ${activeId === cd.id ? "var(--primary)" : "transparent"}`, background: activeId === cd.id ? "var(--primary-soft)" : "transparent", transition: "all 0.12s" }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "#ffffff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cd.title || "Untitled"}</div>
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{formatDesignLength(cd.timer.durationSeconds)}{cd.layout ? " · layer design" : ""}</div>
-                </div>
-                <div style={{ position: "relative" }}>
-                  <button onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === cd.id ? null : cd.id); }}
-                    style={{ padding: 6, borderRadius: 6, background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", opacity: 0.6, transition: "opacity 0.15s" }}
-                    onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.6"; }}>
-                    <MoreVertical size={15} />
-                  </button>
-                  {menuOpen === cd.id && (
-                    <>
-                      <div style={{ position: "fixed", inset: 0, zIndex: 10 }} onClick={() => setMenuOpen(null)} />
-                      <div style={{ position: "absolute", right: 0, top: "100%", marginTop: 4, width: 160, background: "var(--surface-raised)", borderRadius: 8, border: "1px solid var(--border)", boxShadow: "0 8px 24px rgba(0,0,0,0.5)", padding: 6, zIndex: 20 }}>
-                        <button onClick={(e) => { e.stopPropagation(); handleDuplicate(cd); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", fontSize: 13, background: "transparent", border: "none", color: "#ffffff", cursor: "pointer", borderRadius: 6 }}>
-                          <Copy size={14} /> Duplicate
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); handleExport(cd); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", fontSize: 13, background: "transparent", border: "none", color: "#ffffff", cursor: "pointer", borderRadius: 6 }}>
-                          <Download size={14} /> Export
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDelete(cd.id); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", fontSize: 13, background: "transparent", border: "none", color: "#f87171", cursor: "pointer", borderRadius: 6 }}>
-                          <Trash2 size={14} /> Delete
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        <div style={{ padding: 12, borderTop: "1px solid var(--border)" }}>
-          <button onClick={() => importRef.current?.click()}
-            style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "10px 0", border: "1px dashed rgba(255, 255, 255, 0.2)", borderRadius: 8, fontSize: 13, fontWeight: 500, color: "#d4d4d8", background: "transparent", cursor: "pointer" }}>
-            <Upload size={15} /> Import
-          </button>
-          <input ref={importRef} type="file" accept=".json" onChange={handleImport} style={{ display: "none" }} />
-        </div>
-      </div>
-
       {isLayoutDesign(active) && <CountdownLayerEditor design={active} onChange={handleUpdate} />}
 
       {/* ── Center: Preview ── */}
@@ -1278,11 +1159,12 @@ ${hasOverlay ? `.ov{position:absolute;inset:0;background-color:rgba(0,0,0,${over
 const D=${JSON.stringify(cd)};const ct=document.getElementById('ct');
 function fmt(r){const ts=Math.floor(r),h=Math.floor(ts/3600),m=Math.floor((ts%3600)/60),s=ts%60;
 return D.timer.showHours?String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'):String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')}
-function ring(p){const sz=D.text.fontSize*3.5,r=(sz-8)/2,c=2*Math.PI*r,o=c-(p/100)*c;
+function ringSz(t){const f=D.text.fontSize;return Math.max(f*3.5,Math.round(t.length*f*0.9*0.62+f*1.5))}
+function ring(p,t){const sz=ringSz(t),r=(sz-8)/2,c=2*Math.PI*r,o=c-(p/100)*c;
 return '<svg width="'+sz+'" height="'+sz+'" style="position:absolute;top:0;left:0"><circle cx="'+sz/2+'" cy="'+sz/2+'" r="'+r+'" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="5"/><circle cx="'+sz/2+'" cy="'+sz/2+'" r="'+r+'" fill="none" stroke="#3b82f6" stroke-width="5" stroke-linecap="round" stroke-dasharray="'+c+'" stroke-dashoffset="'+o+'" style="transform:rotate(-90deg);transform-origin:center;transition:stroke-dashoffset .5s ease"/></svg>'}
 let rem=D.timer.durationSeconds,tot=rem,prog=0;
 function render(){const t=fmt(rem);
-if(D.templateId==='circular')ct.innerHTML='<div class="r">'+ring(prog)+'<div class="rt">'+t+'</div></div>'+(D.text.title?'<div class="tt">'+D.text.title+'</div>':'')+(D.text.subtitle?'<div class="ts">'+D.text.subtitle+'</div>':'');
+if(D.templateId==='circular')ct.innerHTML='<div class="r" style="width:'+ringSz(t)+'px;height:'+ringSz(t)+'px">'+ring(prog,t)+'<div class="rt">'+t+'</div></div>'+(D.text.title?'<div class="tt">'+D.text.title+'</div>':'')+(D.text.subtitle?'<div class="ts">'+D.text.subtitle+'</div>':'');
 else if(D.templateId==='lower-third')ct.innerHTML='<div style="position:fixed;bottom:30px;left:30px;background:rgba(0,0,0,.7);padding:12px 24px;border-radius:10px;border-left:3px solid #3b82f6"><div style="font-family:monospace;font-weight:700;color:#fff;font-size:22px">'+t+'</div>'+(D.text.title?'<div style="color:rgba(255,255,255,.6);font-size:12px;margin-top:3px">'+D.text.title+'</div>':'')+'</div>';
 else ct.innerHTML='<div class="t">'+t+'</div>'+(D.text.title?'<div class="tt">'+D.text.title+'</div>':'')+(D.text.subtitle?'<div class="ts">'+D.text.subtitle+'</div>':'')}
 function tick(){if(rem>0){rem--;prog=((tot-rem)/tot)*100}render();if(rem>0)requestAnimationFrame(tick)}
@@ -1305,6 +1187,7 @@ function readStoredMode(): CountdownsMode {
 
 export default function CountdownsPage() {
   const [mode, setMode] = useState<CountdownsMode>(readStoredMode);
+  const [showPicker, setShowPicker] = useState(false);
 
   const choose = (next: CountdownsMode) => {
     setMode(next);
@@ -1330,9 +1213,15 @@ export default function CountdownsPage() {
         <span style={{ marginLeft: 10, fontSize: 12, color: "var(--text-secondary)" }}>
           {mode === "designs" ? "Design how your countdown looks." : "Build timers and messages for a service, then run them from the OBS Dock."}
         </span>
+        {mode === "designs" && (
+          <button type="button" onClick={() => setShowPicker(true)}
+            style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "var(--primary)", color: "#fff", borderRadius: 3, fontSize: 13, fontWeight: 650, border: "none", cursor: "pointer" }}>
+            <Plus size={15} /> Create Countdown
+          </button>
+        )}
       </div>
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
-        {mode === "designs" ? <CountdownDesignsView /> : <RundownsView />}
+        {mode === "designs" ? <CountdownDesignsView showPicker={showPicker} setShowPicker={setShowPicker} /> : <RundownsView />}
       </div>
     </div>
   );

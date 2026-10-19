@@ -46,6 +46,19 @@ const sample = (over: Partial<CountdownPresetSample> = {}): CountdownPresetSampl
   ...over,
 });
 
+// ── 0 · Minimal black (the default) ────────────────────────────────────────
+function minimalBlack(): ThemeLayout {
+  return countdownLayout([
+    box("bg", CX, CY, W, H, { fill: "#000000" }, { in: anim("none", 0), out: anim("none", 0) }),
+    text("time", "{sign}{time}", CX, CY, 1500, 460, {
+      fontFamily: "Bebas Neue", fontWeight: 400, fontSize: 420, letterSpacing: 10, color: "#ececec", roughen: 2,
+    }, { name: "Timer", in: anim("fade", 600) }),
+    text("subtitle", "{subtitle}", CX, CY + 300, 1400, 70, {
+      fontFamily: "Bebas Neue", fontWeight: 400, fontSize: 56, letterSpacing: 10, color: "rgba(236,236,236,0.6)", textTransform: "uppercase",
+    }, { name: "Subtitle", in: anim("fade", 500, 300) }),
+  ]);
+}
+
 // ── 1 · Flip clock ─────────────────────────────────────────────────────────
 function flipClock(): ThemeLayout {
   const units: Array<[string, string, string]> = [
@@ -251,27 +264,13 @@ function stageTimer(): ThemeLayout {
   ]);
 }
 
-// ── 9–11 · Welcome card (three backgrounds) ────────────────────────────────
-function welcomeCard(bg: { stops: Array<{ color: string; at: number }>; angle?: number; type?: "linear" | "radial" }, accent: string, extra: boolean): ThemeLayout {
+// ── 9 · Welcome card ────────────────────────────────
+function welcomeCard(bg: { stops: Array<{ color: string; at: number }>; angle?: number; type?: "linear" | "radial" }, accent: string): ThemeLayout {
   const layers = [
     box("bg", CX, CY, W, H, { gradient: { type: bg.type ?? "linear", angle: bg.angle ?? 160, stops: bg.stops } }, {
       in: anim("none", 0), out: anim("none", 0),
     }),
   ];
-  if (extra) {
-    // Soft blurred lights — stand-in for a night-photo backdrop; replace with any picture in the editor.
-    const lights: Array<[number, number, number, string]> = [
-      [320, 260, 360, "rgba(255,190,90,0.35)"],
-      [1560, 220, 300, "rgba(120,170,255,0.32)"],
-      [1300, 860, 420, "rgba(255,120,160,0.28)"],
-      [420, 820, 280, "rgba(120,230,200,0.22)"],
-    ];
-    lights.forEach(([x, y, d, c], i) => {
-      layers.push(box(`light-${i + 1}`, x, y, d, d, {
-        radius: 9999, gradient: { type: "radial", stops: [{ color: c, at: 0 }, { color: "rgba(0,0,0,0)", at: 70 }] },
-      }, { in: anim("fade", 900, i * 120), loop: { preset: "drift", duration: 9000 + i * 1500 } }));
-    });
-  }
   layers.push(
     box("card", CX, CY, 1180, 640, {
       fill: "rgba(10,10,20,0.55)", radius: 36, borderWidth: 2, borderColor: "rgba(255,255,255,0.18)",
@@ -335,7 +334,56 @@ function stamp(): ThemeLayout {
   ]);
 }
 
+// ── 14 · Split panel (black grid + angled colour panel) ────────────────────
+// Headline words typed between asterisks take the accent colour: "*Starting* soon".
+function splitPanel(): ThemeLayout {
+  const accent = "#4cff4c";
+  const panelClip = "polygon(44% 0, 100% 0, 100% 100%, 62% 100%)";
+  const gridLine = "rgba(76,255,76,0.22)";
+  const sparks: Array<[number, number, number, number]> = [
+    [150, 830, 9, 2600], [470, 930, 7, 3400], [890, 700, 8, 3000], [700, 180, 6, 3800], [300, 330, 6, 3200], [1010, 960, 7, 2800],
+  ];
+  const layers = [
+    box("bg", CX, CY, W, H, { fill: "#0b0b0b" }, { in: anim("none", 0), out: anim("none", 0) }),
+    box("grid", 0, 0, W, H, {
+      fill: `linear-gradient(${gridLine} 2px, transparent 2px) 0 0 / 144px 144px, linear-gradient(90deg, ${gridLine} 2px, transparent 2px) 0 0 / 144px 144px`,
+    }, { name: "Grid", anchor: "top-left", in: anim("fade", 700), loop: { preset: "drift", duration: 60000 } }),
+  ];
+  sparks.forEach(([x, y, d, ms], i) => {
+    layers.push(box(`spark-${i + 1}`, x, y, d, d, { fill: accent, radius: 9999, shadow: `0 0 14px ${accent}` }, {
+      name: `Spark ${i + 1}`, opacity: 0.8, in: anim("fade", 600, 300 + i * 80), loop: { preset: "pulse", duration: ms },
+    }));
+  });
+  layers.push(
+    box("panel", 0, 0, W, H, { fill: accent, clipPath: panelClip }, { name: "Colour panel", anchor: "top-left", in: anim("wipe-left", 700, 100) }),
+    // Big faint seconds behind the timer, cut to the panel's shape.
+    text("ghost", "{ss}", 0, 0, W, H, {
+      fontFamily: "Montserrat", fontWeight: 900, fontSize: 900, color: "rgba(255,255,255,0.14)", clipPath: panelClip, padding: [0, 0, 0, 1080],
+    }, { name: "Ghost seconds", anchor: "top-left", in: anim("fade", 600, 400) }),
+    text("time", "{sign}{tm}", 1500, CY, 760, 260, {
+      fontFamily: "Montserrat", fontWeight: 800, fontSize: 200, letterSpacing: 6, color: "#161616",
+    }, { name: "Timer", in: anim("scale", 600, 350) }),
+    text("subtitle", "{subtitle}", 186, 420, 760, 70, {
+      fontFamily: "Montserrat", fontWeight: 500, fontSize: 46, letterSpacing: 6, color: "#ffffff", textTransform: "uppercase", align: "left",
+    }, { name: "Kicker", anchor: "middle-left", in: anim("slide-right", 500, 300) }),
+    text("title", "{title}", 186, 460, 780, 300, {
+      fontFamily: "Montserrat", fontWeight: 900, fontSize: 140, lineHeight: 1.02, color: "#ffffff", textTransform: "uppercase",
+      align: "left", verticalAlign: "top", nowrap: false, maxLines: 2, emphasisColor: accent, emphasisWeight: 900,
+      textShadow: "0 6px 24px rgba(0,0,0,0.45)",
+    }, { name: "Headline", anchor: "top-left", in: anim("slide-right", 600, 400) }),
+  );
+  return countdownLayout(layers);
+}
+
 export const COUNTDOWN_PRESETS: CountdownPreset[] = [
+  {
+    id: "minimal-black",
+    name: "Minimal Black",
+    description: "Large worn white digits on plain black.",
+    accent: "#000000",
+    layout: minimalBlack(),
+    sample: sample({ value: 300, durationSeconds: 300, title: "", subtitle: "" }),
+  },
   {
     id: "flip-clock",
     name: "Flip Clock",
@@ -405,23 +453,7 @@ export const COUNTDOWN_PRESETS: CountdownPreset[] = [
     name: "Welcome · Crimson",
     description: "Welcome card on a deep crimson background.",
     accent: "#ffd27a",
-    layout: welcomeCard({ stops: [{ color: "#8a1228", at: 0 }, { color: "#2a0610", at: 100 }] }, "#ffd27a", false),
-    sample: sample(),
-  },
-  {
-    id: "welcome-night",
-    name: "Welcome · Night Lights",
-    description: "Welcome card over soft night lights — swap in your own photo.",
-    accent: "#ffffff",
-    layout: welcomeCard({ stops: [{ color: "#16203a", at: 0 }, { color: "#070a14", at: 100 }] }, "#ffffff", true),
-    sample: sample(),
-  },
-  {
-    id: "welcome-violet",
-    name: "Welcome · Violet",
-    description: "Welcome card on a rich violet background.",
-    accent: "#f0abfc",
-    layout: welcomeCard({ stops: [{ color: "#6d28d9", at: 0 }, { color: "#1e1b4b", at: 100 }] }, "#f0abfc", false),
+    layout: welcomeCard({ stops: [{ color: "#8a1228", at: 0 }, { color: "#2a0610", at: 100 }] }, "#ffd27a"),
     sample: sample(),
   },
   {
@@ -440,10 +472,18 @@ export const COUNTDOWN_PRESETS: CountdownPreset[] = [
     layout: stamp(),
     sample: sample({ value: 300, durationSeconds: 300, title: "Time left", subtitle: "Minutes" }),
   },
+  {
+    id: "split-panel",
+    name: "Split Panel",
+    description: "Headline on a black grid, timer on an angled colour panel.",
+    accent: "#4cff4c",
+    layout: splitPanel(),
+    sample: sample({ value: 54, durationSeconds: 60, warnYellowSeconds: 0, warnRedSeconds: 0, title: "*Starting* soon", subtitle: "Live stream" }),
+  },
 ];
 
 export function countdownPresetById(id: string | undefined | null): CountdownPreset | undefined {
   return COUNTDOWN_PRESETS.find((p) => p.id === id);
 }
 
-export const DEFAULT_COUNTDOWN_PRESET_ID = "welcome-crimson";
+export const DEFAULT_COUNTDOWN_PRESET_ID = "minimal-black";

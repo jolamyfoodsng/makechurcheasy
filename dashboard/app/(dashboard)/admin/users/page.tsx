@@ -37,12 +37,8 @@ import {
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { getPlanConfig, type PlanConfig } from "@/lib/planConfigService";
-import {
-  calculateUserActivityScore,
-  calculateUserActivityMultiPeriod,
-  type ActivityScoreBreakdown,
-  type MultiPeriodActivityScore,
-} from "@/lib/userActivityScore";
+import type { ActivityScoreBreakdown } from "@/lib/userActivityScore";
+import { countRetention, formatDaysSinceUse, RETENTION_ORDER, RETENTION_STYLE, type RetentionInfo, type RetentionStatus } from "@/lib/userRetention";
 import {
   formatPlanCredits,
   getAdminManagedPlanAmount,
@@ -78,6 +74,9 @@ function userVersionList(u: { appVersion?: string; appVersions?: string[] }): st
   const raw = (u.appVersions && u.appVersions.length > 0) ? u.appVersions : (u.appVersion ? [u.appVersion] : []);
   return Array.from(new Set(raw.map((v) => String(v).trim().replace(/^v/i, "")).filter(Boolean)));
 }
+
+/** First app version that contains the MacBook fix; older versions get the update campaign. */
+const UPDATE_CAMPAIGN_FIX_VERSION = "4.2.1";
 
 function compareVersionsDesc(a: string, b: string): number {
   const pa = a.split(/[.-]/).map((n) => parseInt(n, 10) || 0);
@@ -162,6 +161,8 @@ interface AdminUser {
     transcriptCount?: number;
     aiHoursUsed?: number;
   } | null;
+  /** Is the user still with us: worked out from the last real use of the product (not just opening it). */
+  retention?: RetentionInfo | null;
   activityScore?: {
     score: number;
     grade: ActivityScoreBreakdown["grade"];
@@ -457,6 +458,7 @@ export default function AdminUsersPage() {
   const [billingCycleFilter, setBillingCycleFilter] = useState<"all" | "monthly" | "yearly" | "lifetime">("all");
   const [osFilter, setOsFilter] = useState<"all" | OsKey | "none">("all");
   const [versionFilter, setVersionFilter] = useState<string>("all");
+  const [retentionFilter, setRetentionFilter] = useState<RetentionStatus | "attention" | "all">("all");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [exportingCsv, setExportingCsv] = useState(false);
   const [sortField, setSortField] = useState<SortField>("createdAt");
@@ -672,6 +674,8 @@ export default function AdminUsersPage() {
     return counts;
   }, [users]);
 
+  const retentionCounts = useMemo(() => countRetention(users), [users]);
+
   // Counts for the OS and app-version dropdowns.
   const osCounts = useMemo(() => {
     const counts: Record<OsKey | "none", number> = { windows: 0, macos: 0, linux: 0, unknown: 0, none: 0 };
@@ -757,12 +761,25 @@ export default function AdminUsersPage() {
       result = result.filter((u) => {
         const list = userVersionList(u);
         if (versionFilter === "__none") return list.length === 0;
+        if (versionFilter === "__before_fix") {
+          // Highest version on any of the user's computers is below the MacBook fix (4.2.1).
+          if (list.length === 0) return false;
+          const best = [...list].sort(compareVersionsDesc)[0];
+          return compareVersionsDesc(best, UPDATE_CAMPAIGN_FIX_VERSION) > 0;
+        }
         if (versionFilter === "__outdated") {
           const latest = versionOptions.versions[0]?.version;
           return Boolean(latest) && list.length > 0 && !list.includes(latest!);
         }
         return list.includes(versionFilter);
       });
+    }
+
+    // "Still with us" filter: by the last time they really used the product.
+    if (retentionFilter !== "all") {
+      result = result.filter((u) => (retentionFilter === "attention"
+        ? Boolean(u.retention?.needsAttention)
+        : u.retention?.status === retentionFilter));
     }
 
     // Billing cycle filter (e.g. monthly, yearly, lifetime)
@@ -845,15 +862,15 @@ export default function AdminUsersPage() {
         bv = b.lastActive || b.lastLogin || "";
       }
       else if (sortField === "activityScore") {
-        av = typeof a.activityScore?.score === "number" ? a.activityScore.score : calculateUserActivityScore(a).score;
-        bv = typeof b.activityScore?.score === "number" ? b.activityScore.score : calculateUserActivityScore(b).score;
+        av = typeof a.activityScore?.score === "number" ? a.activityScore.score : -1;
+        bv = typeof b.activityScore?.score === "number" ? b.activityScore.score : -1;
       }
       if (typeof av === "string") return sortDir === "asc" ? av.localeCompare(bv as string) : (bv as string).localeCompare(av);
       return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
     });
 
     return result;
-  }, [users, search, filter, selectedCountries, contactFilter, billingCycleFilter, osFilter, versionFilter, versionOptions, activityFilter, sortField, sortDir]);
+  }, [users, search, filter, selectedCountries, contactFilter, billingCycleFilter, osFilter, versionFilter, versionOptions, activityFilter, retentionFilter, sortField, sortDir]);
 
   function handleExportCsv() {
     if (filtered.length === 0) {
@@ -985,7 +1002,7 @@ export default function AdminUsersPage() {
     ? users.find((u) => u.id === showRevokeAmbassador) ?? null
     : null;
 
-  useEffect(() => { setPage(1); }, [search, filter, activityFilter, selectedCountries, osFilter, versionFilter, contactFilter, billingCycleFilter, perPage]);
+  useEffect(() => { setPage(1); }, [search, filter, activityFilter, selectedCountries, osFilter, versionFilter, retentionFilter, contactFilter, billingCycleFilter, perPage]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -1707,6 +1724,7 @@ export default function AdminUsersPage() {
           }`}
         >
           <option value="all">🏷️ All App Versions</option>
+          <option value="__before_fix">Below v{UPDATE_CAMPAIGN_FIX_VERSION} (MacBook fix)</option>
           {versionOptions.versions.length > 0 && (
             <option value="__outdated">⚠️ Not on latest (v{versionOptions.versions[0].version})</option>
           )}
@@ -1715,6 +1733,46 @@ export default function AdminUsersPage() {
           ))}
           <option value="__none">No app version ({versionOptions.none})</option>
         </select>
+      </div>
+
+      {/* Are the users still with us? Counted from the last time each one really used the product. */}
+      <div className="mb-4 rounded-xl border border-slate-800 bg-gray-900/60 p-3" aria-label="Are users still with us">
+        <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+          <span className="text-[11px] uppercase tracking-wide font-semibold text-slate-400">Still with us?</span>
+          <span className="text-[11px] text-slate-500">
+            Counted from the last real use (presenting, searching, songs, uploads), not from opening the app.
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {RETENTION_ORDER.map((status) => {
+            const style = RETENTION_STYLE[status];
+            const on = retentionFilter === status;
+            return (
+              <button
+                key={status}
+                type="button"
+                onClick={() => setRetentionFilter(on ? "all" : status)}
+                aria-pressed={on}
+                title={`${style.hint}. Click to ${on ? "show everyone" : "show only these"}.`}
+                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${style.badge} ${on ? "ring-2 ring-indigo-400/60" : "opacity-90 hover:opacity-100"}`}
+              >
+                <span className={`h-2 w-2 rounded-full ${style.dot}`} />
+                {style.label}
+                <span className="font-mono">{retentionCounts[status]}</span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setRetentionFilter(retentionFilter === "attention" ? "all" : "attention")}
+            aria-pressed={retentionFilter === "attention"}
+            title="Slipping and at risk: people who used it before and have gone quiet. A good moment to reach out."
+            className={`inline-flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:bg-gray-800 ${retentionFilter === "attention" ? "ring-2 ring-indigo-400/60" : ""}`}
+          >
+            Needs a nudge
+            <span className="font-mono">{retentionCounts.slipping + retentionCounts["at-risk"]}</span>
+          </button>
+        </div>
       </div>
 
       {/* Active Country Filter Chips */}
@@ -1900,13 +1958,22 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="px-4 py-3">
                     {(() => {
+                      // Only the real-usage scores from the server. The old lifetime-milestone formula is no longer
+                      // used as a stand-in: it scored someone who presented once, months ago, as active today.
                       const multi = user.activityScore?.daily && user.activityScore?.weekly && user.activityScore?.monthly
                         ? {
                             daily: user.activityScore.daily,
                             weekly: user.activityScore.weekly,
                             monthly: user.activityScore.monthly,
                           }
-                        : calculateUserActivityMultiPeriod(user);
+                        : null;
+                      if (!multi) {
+                        return (
+                          <span className="text-[11px] text-slate-500" title="Usage data could not be loaded for this user">
+                            No usage data
+                          </span>
+                        );
+                      }
                       return (
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-1 flex-wrap">
@@ -1932,6 +1999,15 @@ export default function AdminUsersPage() {
                           <span className={`text-[10px] font-medium ${multi.monthly.color}`}>
                             {multi.monthly.grade}
                           </span>
+                          {user.retention && (
+                            <span
+                              className={`inline-flex w-fit items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold ${RETENTION_STYLE[user.retention.status].badge}`}
+                              title={`${RETENTION_STYLE[user.retention.status].hint}. ${formatDaysSinceUse(user.retention)}.`}
+                            >
+                              <span className={`h-1.5 w-1.5 rounded-full ${RETENTION_STYLE[user.retention.status].dot}`} />
+                              {RETENTION_STYLE[user.retention.status].label}
+                            </span>
+                          )}
                         </div>
                       );
                     })()}
@@ -1960,6 +2036,11 @@ export default function AdminUsersPage() {
                           >
                             {activeInfo.text}
                           </span>
+                          {user.retention && (
+                            <span className="ml-1 text-[10px] text-slate-500" title="The last time they really used the product (not just opened it)">
+                              · {user.retention.daysSinceUse === null ? "never used it" : user.retention.daysSinceUse === 0 ? "used it today" : `used it ${user.retention.daysSinceUse}d ago`}
+                            </span>
+                          )}
                         </div>
                       );
                     })()}

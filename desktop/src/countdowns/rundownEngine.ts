@@ -50,9 +50,7 @@ export function createRundown(name = "Sunday Service"): Rundown {
     id: newId("rd"),
     name,
     timers: [
-      createTimer({ name: "Welcome", durationSeconds: 120, warnYellowSeconds: 30, warnRedSeconds: 10 }),
-      createTimer({ name: "Worship", durationSeconds: 1200 }),
-      createTimer({ name: "Sermon", durationSeconds: 2400, warnYellowSeconds: 300, warnRedSeconds: 60 }),
+      createTimer({ name: "Timer 1", durationSeconds: 600 }),
     ],
     messages: [
       createMessage({ text: "Wrap up", color: "yellow", bold: true }),

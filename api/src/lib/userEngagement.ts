@@ -57,6 +57,11 @@ const USE_METRICS = new Set<EngagementMetric>([
   "graphicsShown", "graphicsAdded", "liveCaptions", "voiceSessions", "transcripts", "translations",
 ]);
 
+/** Event names that count as real use of the product (not just opening the app or connecting OBS). */
+export const USE_EVENT_NAMES: string[] = Array.from(EVENT_TO_METRIC.entries())
+  .filter(([, metric]) => USE_METRICS.has(metric))
+  .map(([event]) => event);
+
 export type EngagementCounts = Record<EngagementMetric, number> & {
   voiceSeconds: number;
   multistreamSessions: number;

@@ -173,8 +173,8 @@
 
 .broadcast-profile-card--selected {
   background: var(--surface-raised);
-  border: 1.5px solid #4f46e5;
-  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.25);
+  border: 1.5px solid var(--primary, #4f46e5);
+  box-shadow: 0 0 0 1px rgba(var(--primary-rgb, 79, 70, 229), 0.25);
 }
 
 .broadcast-profile-avatar {
@@ -650,8 +650,8 @@
 }
 
 .broadcast-btn-reorder--active {
-  background: rgba(99, 102, 241, 0.2);
-  border-color: #6366f1;
+  background: rgba(var(--primary-rgb, 99, 102, 241), 0.2);
+  border-color: var(--primary, #6366f1);
   color: var(--accent-blue);
 }
 
@@ -1048,7 +1048,7 @@
 }
 
 .broadcast-toggle--checked {
-  background: #6366f1;
+  background: var(--primary, #6366f1);
 }
 
 .broadcast-toggle-thumb {
@@ -1453,7 +1453,7 @@
 
 .broadcast-form-input:focus,
 .broadcast-form-select:focus {
-  border-color: #6366f1;
+  border-color: var(--primary, #6366f1);
 }
 
 .broadcast-form-hint {
@@ -1500,8 +1500,8 @@
 .broadcast-key-guide {
   margin-top: 6px;
   padding: 10px 12px;
-  background: rgba(99, 102, 241, 0.08);
-  border: 1px solid rgba(99, 102, 241, 0.2);
+  background: rgba(var(--primary-rgb, 99, 102, 241), 0.08);
+  border: 1px solid rgba(var(--primary-rgb, 99, 102, 241), 0.2);
   border-radius: var(--radius, 4px);
   font-size: 12.5px;
   display: flex;
@@ -1729,13 +1729,13 @@
   padding: 6px 12px;
   border: 0;
   border-radius: var(--radius, 4px);
-  background: #7b68ee;
+  background: var(--primary, #7b68ee);
   color: #fff;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
-.broadcast-free-notice__cta:hover { background: #6a57e0; }
+.broadcast-free-notice__cta:hover { background: var(--primary-hover, #6a57e0); }
 
 /* Multistream workspace: profiles beside a single destination editor. */
 .broadcast-page {
@@ -1754,7 +1754,7 @@
 .broadcast-panel-title { font-size: 24px; letter-spacing: -.025em; }
 .broadcast-profiles-description { margin: -4px 4px 8px; color: var(--broadcast-muted); font-size: 14px; line-height: 1.6; }
 .broadcast-profile-card { padding: 0 8px 0 0; gap: 0; min-height: 82px; border-radius: var(--radius, 4px); background: #131b29; border-color: var(--broadcast-border); }
-.broadcast-profile-card--selected { background: #3228ae; border-color: #7764ff; box-shadow: inset 0 0 0 1px #7764ff33; }
+.broadcast-profile-card--selected { background: color-mix(in srgb, var(--primary, #4f36ef) 55%, #0b0f1a); border-color: var(--accent-blue, #7764ff); box-shadow: inset 0 0 0 1px rgba(var(--primary-rgb, 119, 100, 255), 0.2); }
 .broadcast-profile-select { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; padding: 14px; border: 0; background: transparent; color: inherit; text-align: left; font: inherit; cursor: pointer; border-radius: var(--radius, 4px); }
 .broadcast-profile-avatar { width: 48px; height: 48px; font-size: 19px; box-shadow: none; }
 .broadcast-profile-info { flex: 1; min-width: 0; }
@@ -1778,8 +1778,8 @@
 .broadcast-destinations-heading h2 { margin: 0 0 4px; font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
 .broadcast-destinations-heading p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--broadcast-muted); }
 .broadcast-destinations-headline { padding-left: 58px; font-size: 12px; }
-.broadcast-send-obs { display: inline-flex; justify-content: center; align-items: center; gap: 10px; flex-shrink: 0; min-height: 48px; padding: 0 18px; background: #4f36ef; border: 1px solid #6953ff; border-radius: var(--radius, 4px); font: inherit; font-size: 14px; font-weight: 650; color: white; cursor: pointer; }
-.broadcast-send-obs:hover:not(:disabled) { background: #6046ff; }
+.broadcast-send-obs { display: inline-flex; justify-content: center; align-items: center; gap: 10px; flex-shrink: 0; min-height: 48px; padding: 0 18px; background: var(--primary, #4f36ef); border: 1px solid var(--primary-hover, #6953ff); border-radius: var(--radius, 4px); font: inherit; font-size: 14px; font-weight: 650; color: white; cursor: pointer; }
+.broadcast-send-obs:hover:not(:disabled) { background: var(--primary-hover, #6046ff); }
 .broadcast-destination-list { display: flex; flex-direction: column; gap: 10px; }
 .broadcast-destination-row { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(150px, 220px) auto; align-items: center; gap: 18px; padding: 12px 14px; min-height: 82px; background: #101722; border: 1px solid var(--broadcast-border); border-radius: var(--radius, 4px); }
 .broadcast-destination-identity { display: flex; align-items: center; gap: 14px; min-width: 0; }
@@ -1801,7 +1801,7 @@
 .broadcast-destination-actions { display: flex; align-items: center; gap: 18px; }
 .broadcast-channel-toggle { width: 52px; height: 44px; border: 0; padding: 8px 4px; background: transparent; position: relative; cursor: pointer; flex-shrink: 0; }
 .broadcast-channel-toggle::before { content: ""; position: absolute; inset: 8px 0; border-radius: 20px; background: #334155; }
-.broadcast-channel-toggle--checked::before { background: #5b42fa; }
+.broadcast-channel-toggle--checked::before { background: var(--primary, #5b42fa); }
 .broadcast-channel-toggle-thumb { position: relative; z-index: 1; display: block; width: 22px; height: 22px; border-radius: 50%; background: #dbe4f2; transition: transform 150ms ease; }
 .broadcast-channel-toggle--checked .broadcast-channel-toggle-thumb { transform: translateX(22px); background: #fff; }
 .broadcast-destination-menu { width: 40px; min-height: 44px; display: flex; align-items: center; justify-content: center; background: transparent; color: var(--text-primary); border: 1px solid var(--broadcast-border); border-radius: var(--radius, 4px); cursor: pointer; }
@@ -1814,7 +1814,7 @@
 .broadcast-cloud-info-box { padding: 20px 24px; border-radius: var(--radius, 4px); gap: 20px; }
 .broadcast-cloud-info-box__icon svg { width: 28px; height: 28px; }
 .broadcast-cloud-info-box__desc { color: var(--broadcast-muted); line-height: 1.6; }
-.broadcast-page button:focus-visible { outline: 2px solid #a99aff; outline-offset: 3px; }
+.broadcast-page button:focus-visible { outline: 2px solid var(--accent-blue, #a99aff); outline-offset: 3px; }
 .broadcast-page button:disabled { cursor: not-allowed; opacity: .45; }
 @container (max-width: 1150px) {
   .broadcast-profiles-panel { width: 240px; padding: 16px 12px; }

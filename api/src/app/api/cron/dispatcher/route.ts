@@ -178,6 +178,23 @@ async function handleDispatch(req: NextRequest) {
       }
     }
 
+    // 9. Update campaign list cleanup (0 14 * * *, 15:00 Lagos, before the 17:00
+    // sends). A manual full run only reports counts; only the real cron removes.
+    if (runAll || cronParam.includes("0 14 *")) {
+      try {
+        const { GET: runUpdateCampaignPrune } = await import("@/app/api/cron/update-campaign-prune/route");
+        const apply = cronParam.includes("0 14 *");
+        const pruneReq = new NextRequest(new URL(`/api/cron/update-campaign-prune?apply=${apply}`, req.url), {
+          headers: { authorization: `Bearer ${CRON_SECRET}` },
+        });
+        const pruneRes = await runUpdateCampaignPrune(pruneReq);
+        results.updateCampaignPrune = await pruneRes.json().catch(() => ({ status: pruneRes.status }));
+      } catch (err) {
+        console.error("[Cron Dispatcher] Update campaign prune failed:", err);
+        results.updateCampaignPrune = { error: err instanceof Error ? err.message : "Failed" };
+      }
+    }
+
     return NextResponse.json({ success: true, ...results });
   } catch (error) {
     console.error("[Cron Dispatcher] Fatal error during dispatch:", error);

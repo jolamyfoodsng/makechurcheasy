@@ -466,6 +466,22 @@ export default defineConfig(async ({ mode }) => ({
       : {}),
   },
 
+  // Dev: find every dependency at start-up. Without this, opening a lazily loaded
+  // screen (e.g. a Dock tab) could make Vite re-bundle dependencies mid-session;
+  // pages that are not fully reloaded (the OBS Dock) then end up with two copies
+  // of a library such as react-i18next and show raw translation keys.
+  optimizeDeps: {
+    entries: [
+      "index.html",
+      "dock.html",
+      "lm-dock.html",
+      "makechatgpt.html",
+      "src/**/*.{ts,tsx}",
+      "!src/**/*.test.{ts,tsx}",
+      "!src/**/*.d.ts",
+    ],
+  },
+
   // Multi-page build: main app + standalone dock + LM dock + floating assistant
   build: {
     // Never ship source maps: they hand out the original TypeScript.

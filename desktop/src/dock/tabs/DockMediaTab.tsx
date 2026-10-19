@@ -972,6 +972,8 @@ function DockMediaTab({
   const [savedTemplateImagesError, setSavedTemplateImagesError] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const templatePicturesLoadAttemptedRef = useRef(false);
+  // Set once the video catalog has been asked for, so a failed load (offline, signed out) is not retried forever.
+  const templateVideosLoadAttemptedRef = useRef(false);
   const savedTemplateImagesRequestRef = useRef(0);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const mediaPollBusyRef = useRef(false);
@@ -1297,6 +1299,7 @@ function DockMediaTab({
 
   const loadTemplateVideos = useCallback(async () => {
     if (animationsLocked) return;
+    templateVideosLoadAttemptedRef.current = true;
     setTemplateVideosLoading(true);
     setTemplateVideosError(null);
     try {
@@ -1531,7 +1534,7 @@ function DockMediaTab({
   }, [localLibrary]);
 
   useEffect(() => {
-    if (animationsLocked || templateVideos.length > 0 || templateVideosLoading) {
+    if (animationsLocked || templateVideosLoadAttemptedRef.current || templateVideos.length > 0 || templateVideosLoading) {
       return;
     }
     void loadTemplateVideos();

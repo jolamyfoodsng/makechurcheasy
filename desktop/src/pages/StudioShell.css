@@ -15,10 +15,10 @@
   --st-text: #f4f4f5;
   --st-text-2: #d1d1d6;
   --st-text-3: #a1a1aa;
-  /* Studio uses a restrained system-style blue for actions and selection. */
-  --st-blue: #0067c0;
-  --st-blue-2: #0078d4;
-  --st-blue-soft: rgba(0, 120, 212, 0.18);
+  /* Actions and selection follow the app's colour theme (Settings › Appearance); blue is the fallback. */
+  --st-blue: var(--primary, #0067c0);
+  --st-blue-2: var(--primary-hover, #0078d4);
+  --st-blue-soft: var(--primary-soft, rgba(0, 120, 212, 0.18));
   --st-send: var(--st-blue);
   --st-send-2: var(--st-blue-2);
   --st-orange: #f59e0b;

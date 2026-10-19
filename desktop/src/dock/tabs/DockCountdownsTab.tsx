@@ -52,7 +52,7 @@ function makeDesignCountdown(title: string, subtitle: string, minutes: number, p
 }
 
 export const HARDCODED_COUNTDOWNS: CountdownConfig[] = [
-  makeDesignCountdown("Pre-Service", "Until we begin", 15, "welcome-crimson", 120, 30),
+  makeDesignCountdown("Pre-Service", "", 15, "minimal-black", 120, 30),
   makeDesignCountdown("Worship Set", "Starting in", 5, "brush-circle", 60, 15),
   makeDesignCountdown("Sermon Start", "Until the message", 10, "segment-coral", 60, 15),
 ];

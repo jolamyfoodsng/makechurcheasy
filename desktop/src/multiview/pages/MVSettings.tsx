@@ -2269,43 +2269,48 @@ export function MVSettings() {
                       <p className="form-hint" style={{ marginTop: 4, marginBottom: 10 }}>
                         Choose the same visual language for MakeChurchEazy and the OBS Dock.
                       </p>
-                      <div className="app-appearance-palette-grid">
-                        {APP_APPEARANCE_PALETTES.map((palette) => {
-                          const selected = appearance.palette === palette.id;
-                          return (
-                            <button
-                              key={palette.id}
-                              type="button"
-                              className={`app-appearance-palette${selected ? " app-appearance-palette--active" : ""}`}
-                              onClick={() => setAppearance({ palette: palette.id })}
-                              aria-pressed={selected}
-                            >
-                              <span className="app-appearance-palette__swatches" aria-hidden="true">
-                                {palette.swatches.map((swatch) => (
-                                  <span key={swatch} style={{ background: swatch }} />
-                                ))}
-                              </span>
-                              <span className="app-appearance-palette__copy">
-                                <span className="app-appearance-palette__title">{palette.label}</span>
-                                <span className="app-appearance-palette__desc">{palette.description}</span>
-                              </span>
-                              {selected && <Check size={15} className="app-appearance-palette__check" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <label className={`app-appearance-custom${appearance.palette === "custom" ? " app-appearance-custom--active" : ""}`}>
-                        <span>
-                          <span className="app-appearance-custom__title">Custom accent</span>
-                          <span className="app-appearance-custom__desc">Use a personal color for buttons and active states.</span>
-                        </span>
-                        <input
-                          type="color"
-                          value={appearance.customAccent}
-                          onChange={(event) => setAppearance({ palette: "custom", customAccent: event.target.value })}
-                          aria-label="Custom accent"
-                        />
-                      </label>
+                      {(() => {
+                        const current = APP_APPEARANCE_PALETTES.find((palette) => palette.id === appearance.palette);
+                        const custom = appearance.palette === "custom";
+                        return (
+                          <div className="app-theme-picker">
+                            <div className="app-theme-picker__row">
+                              <div className="form-select-container">
+                                <select
+                                  className="custom-select"
+                                  value={custom ? "custom" : appearance.palette}
+                                  onChange={(e) => setAppearance(e.target.value === "custom"
+                                    ? { palette: "custom", customAccent: appearance.customAccent }
+                                    : { palette: e.target.value as typeof appearance.palette })}
+                                  aria-label="Color theme"
+                                >
+                                  {APP_APPEARANCE_PALETTES.map((palette) => (
+                                    <option key={palette.id} value={palette.id}>{palette.label}</option>
+                                  ))}
+                                  <option value="custom">Custom accent</option>
+                                </select>
+                                <span className="select-arrow"><ChevronDown size={14} /></span>
+                              </div>
+                              {custom ? (
+                                <input
+                                  type="color"
+                                  className="app-theme-picker__color"
+                                  value={appearance.customAccent}
+                                  onChange={(event) => setAppearance({ palette: "custom", customAccent: event.target.value })}
+                                  aria-label="Custom accent"
+                                />
+                              ) : current ? (
+                                <span className="app-theme-picker__swatches" aria-hidden="true">
+                                  {current.swatches.map((swatch) => <span key={swatch} style={{ background: swatch }} />)}
+                                </span>
+                              ) : null}
+                            </div>
+                            <p className="form-hint" style={{ margin: 0 }}>
+                              {custom ? "Your own color for buttons and active states." : current?.description}
+                            </p>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     <hr className="settings-divider" />
@@ -2316,46 +2321,30 @@ export function MVSettings() {
                       <p className="form-hint" style={{ marginTop: 4, marginBottom: 10 }}>
                         Pick the default font for the whole app. Every option is bundled, so it works offline.
                       </p>
-                      <div className="app-font-group">
-                        <button
-                          type="button"
-                          className={`app-appearance-palette${!appearance.fontFamily ? " app-appearance-palette--active" : ""}`}
-                          onClick={() => setAppearance({ fontFamily: "" })}
-                          aria-pressed={!appearance.fontFamily}
-                        >
-                          <span className="app-appearance-palette__copy">
-                            <span className="app-appearance-palette__title">App default (Inter)</span>
-                            <span className="app-appearance-palette__desc">The font the app ships with</span>
-                          </span>
-                          {!appearance.fontFamily && <Check size={15} className="app-appearance-palette__check" />}
-                        </button>
-                      </div>
-                      {DOCK_FONT_FAMILY_GROUPS.map((group) => (
-                        <div key={group} className="app-font-group">
-                          <div className="app-font-group__title">{group}</div>
-                          <div className="app-appearance-palette-grid">
-                            {DOCK_FONT_FAMILY_OPTIONS.filter((option) => option.group === group).map((option) => {
-                              const selected = appearance.fontFamily === option.family;
-                              return (
-                                <button
-                                  key={option.id}
-                                  type="button"
-                                  className={`app-appearance-palette${selected ? " app-appearance-palette--active" : ""}`}
-                                  style={{ fontFamily: option.family }}
-                                  onClick={() => setAppearance({ fontFamily: option.family })}
-                                  aria-pressed={selected}
-                                >
-                                  <span className="app-appearance-palette__copy">
-                                    <span className="app-appearance-palette__title" style={{ fontFamily: "inherit", fontSize: "0.95rem" }}>{option.label}</span>
-                                    <span className="app-appearance-palette__desc" style={{ fontFamily: "inherit" }}>Grace and peace to you 0123456789</span>
-                                  </span>
-                                  {selected && <Check size={15} className="app-appearance-palette__check" />}
-                                </button>
-                              );
-                            })}
-                          </div>
+                      <div className="app-font-picker">
+                        <div className="form-select-container">
+                          <select
+                            className="custom-select"
+                            value={appearance.fontFamily}
+                            onChange={(e) => setAppearance({ fontFamily: e.target.value })}
+                            aria-label="Interface font"
+                          >
+                            <option value="">App default (Inter)</option>
+                            {DOCK_FONT_FAMILY_GROUPS.map((group) => (
+                              <optgroup key={group} label={group}>
+                                {DOCK_FONT_FAMILY_OPTIONS.filter((option) => option.group === group).map((option) => (
+                                  <option key={option.id} value={option.family}>{option.label}</option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          </select>
+                          <span className="select-arrow"><ChevronDown size={14} /></span>
                         </div>
-                      ))}
+                        {/* The list cannot show each font in its own style, so the choice is shown here. */}
+                        <div className="app-font-picker__sample" style={{ fontFamily: appearance.fontFamily || undefined }} aria-hidden="true">
+                          Grace and peace to you 0123456789
+                        </div>
+                      </div>
                     </div>
 
                     <hr className="settings-divider" />

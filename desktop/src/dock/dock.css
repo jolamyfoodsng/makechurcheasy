@@ -40314,7 +40314,7 @@ textarea.dock-lt-field-input {
 
 .dock-animation-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 8px;
   animation: dock-media-list-enter 0.18s ease-out both;
 }
@@ -40325,7 +40325,7 @@ textarea.dock-lt-field-input {
      put aspect-ratio on the child while its height was percentage-based,
      which could collapse remote video previews into thin strips. */
   aspect-ratio: 16 / 9;
-  min-height: 62px;
+  min-height: 92px;
   border-radius: 4px;
   overflow: hidden;
   background: var(--dock-surface-alt);

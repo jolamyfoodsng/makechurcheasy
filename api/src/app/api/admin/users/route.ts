@@ -6,6 +6,7 @@ import { checkAllExpiredAdminTemporaryPlans } from "@/lib/adminTemporaryPlan";
 import { checkAndApplyScheduledDowngrade } from "@/lib/scheduledDowngrade";
 import { getEffectivePlan } from "@/lib/trial";
 import { loadUserEngagement, scoreUserEngagement, presentsOf, type UserEngagement } from "@/lib/userEngagement";
+import { classifyRetention, loadRealUseTimes } from "@/lib/userRetention";
 import { GROWTH_REACTIVATION_CAMPAIGN_KEY } from "@/lib/reactivationAudience";
 
 export async function GET(req: NextRequest) {
@@ -199,6 +200,14 @@ export async function GET(req: NextRequest) {
       console.warn("Could not load user engagement:", err);
     }
 
+    // The last time each user really used the product (not just opened it): drives "still with us".
+    let realUseMap = new Map<string, { firstUseAt: string; lastUseAt: string }>();
+    try {
+      realUseMap = await loadRealUseTimes(db, userIds);
+    } catch (err) {
+      console.warn("Could not load real-use times:", err);
+    }
+
     // Query usage per user from user_usage collection
     const usageMap = new Map<string, { bibleSearches: number; songsCreated: number; mediaUploaded: number; transcriptCount: number; aiHoursUsed: number }>();
     try {
@@ -316,6 +325,12 @@ export async function GET(req: NextRequest) {
       const userUsage = usageMap.get(id) || usageMap.get(u._id.toString()) || null;
       const engagement = engagementMap.get(id);
       const activity = engagement ? scoreUserEngagement(engagement) : null;
+      const realUse = realUseMap.get(id);
+      const retention = classifyRetention({
+        createdAt: u.createdAt,
+        lastUseAt: realUse?.lastUseAt,
+        firstUseAt: realUse?.firstUseAt,
+      });
 
       const effectiveExpiresAt =
         u.adminManagedSubscription?.active && u.adminManagedSubscription.expiresAt
@@ -382,6 +397,7 @@ export async function GET(req: NextRequest) {
             method: activity.method,
           }
           : null,
+        retention,
         engagement30d: engagement
           ? {
             activeDays: engagement.month.activeDays,

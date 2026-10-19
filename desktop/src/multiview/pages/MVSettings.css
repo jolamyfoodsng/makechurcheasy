@@ -969,6 +969,68 @@
     margin-top: 12px;
 }
 
+/* Color theme: a dropdown with the theme's colors (or a color picker for a custom accent) beside it. */
+.app-theme-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 420px;
+}
+
+.app-theme-picker__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.app-theme-picker__row .form-select-container {
+    flex: 1;
+    min-width: 0;
+}
+
+.app-theme-picker__swatches {
+    display: flex;
+    flex: none;
+    height: 32px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.app-theme-picker__swatches span {
+    width: 16px;
+    height: 100%;
+}
+
+.app-theme-picker__color {
+    flex: none;
+    width: 48px;
+    height: 32px;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: transparent;
+    cursor: pointer;
+}
+
+/* Interface font: a grouped dropdown and a sample line in the chosen font. */
+.app-font-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-width: 420px;
+}
+
+.app-font-picker__sample {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--surface, transparent);
+    color: var(--text-primary, inherit);
+    font-size: 0.95rem;
+    line-height: 1.4;
+}
+
 .app-font-group__title {
     margin-bottom: 6px;
     color: var(--text-muted);

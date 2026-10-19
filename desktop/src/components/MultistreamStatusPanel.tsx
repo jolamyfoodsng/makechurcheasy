@@ -91,7 +91,7 @@ export function MultistreamStatusPanel({
 
   const box: CSSProperties = {
     border: "1px solid rgba(148, 163, 184, 0.22)",
-    borderRadius: 10,
+    borderRadius: 3,
     padding: compact ? 10 : 14,
     display: "flex",
     flexDirection: "column",
@@ -101,7 +101,7 @@ export function MultistreamStatusPanel({
   };
   const applyBtn: CSSProperties = {
     border: "none",
-    borderRadius: 6,
+    borderRadius: 3,
     padding: compact ? "5px 10px" : "6px 12px",
     fontSize: compact ? 11.5 : 12.5,
     fontWeight: 600,

@@ -576,17 +576,18 @@ select[style] {
   [class*="preview"],
   [class*="shell"],
   [class*="box"]:not([class*="spinner"]):not([class*="circle"]):not([class*="dot"]):not([class*="avatar"]),
-  [class*="badge"]:not([class*="pill"]):not([class*="dot"])) {
+  [class*="badge"]:not([class*="pill"]):not([class*="dot"])):not(.mtl-stage, .mtl-stage *) {
   border-radius: 4px !important;
 }
 
-/* Explicit safeguard for spinners, circles, avatars, and status dots */
-:where(.mce-spinner, .mce-spinner-wrapper, .mce-spinner-core, [class*="spinner"], [class*="avatar"], [class*="circle"], [class*="dot"], .rounded-full, [style*="50%"]) {
+/* Explicit safeguard for spinners, circles, avatars, and status dots.
+   Theme layer previews (.mtl-stage) keep the shapes their design gives them. */
+:where(.mce-spinner, .mce-spinner-wrapper, .mce-spinner-core, [class*="spinner"], [class*="avatar"], [class*="circle"], [class*="dot"], .rounded-full, [style*="border-radius: 50%"]):not(.mtl-stage, .mtl-stage *) {
   border-radius: 50% !important;
 }
 
 /* Explicit safeguard for pills */
-:where([class*="pill"], .rounded-pill, [style*="9999px"]) {
+:where([class*="pill"], .rounded-pill, [style*="9999px"]):not(.mtl-stage, .mtl-stage *) {
   border-radius: 9999px !important;
 }
 
