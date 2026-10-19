@@ -48,7 +48,7 @@ if (fs.existsSync(landingPath)) {
 
   // 3. Download URLs (tag + filename pattern)
   html = html.replace(
-    /https:\/\/github\.com\/jolamyfoodsng\/makechurcheasy-v2\/releases\/download\/v[\d.]+\/MakeChurchEasy_[\d.]+/g,
+    /https:\/\/github\.com\/jolamyfoodsng\/makechurcheasy\/releases\/download\/v[\d.]+\/MakeChurchEasy_[\d.]+/g,
     (match) =>
       match.replace(
         /v[\d.]+\/MakeChurchEasy_[\d.]+/,
