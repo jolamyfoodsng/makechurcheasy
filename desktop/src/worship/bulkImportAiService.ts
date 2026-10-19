@@ -2,6 +2,7 @@ import { parseNumberedSongDrafts } from "./numberedSongImport";
 import { invoke } from "@tauri-apps/api/core";
 import { deductCreditsWithSync, fetchCreditsFromBackend } from "../services/credits";
 import { parseCccHymnDrafts } from "./cccHymnImport";
+import { parseGenericSongDrafts, parseSlideDeckDrafts } from "./genericSongImport";
 import { detectSongs } from "./legacy/songDetector";
 import { parseWorshipLyricSections } from "./slideEngine";
 import { buildFallbackDraft } from "./smartImportService";
@@ -1259,15 +1260,18 @@ export async function processDocumentLocally(
       songs: numberedSlides, warnings: [], aiUsed: false, needsReview: true,
       stats: { totalChunks: 0, aiChunks: 0, fallbackChunks: 0, provider: "numbered-local", durationMs: Date.now() - startedAt },
     };
-    const presentationDraft = buildPowerPointDraft(trimmed, fileName);
-    if (presentationDraft) {
+    // A slide with only a title starts a new song; every other slide stays one section.
+    const deckDrafts = parseSlideDeckDrafts(trimmed, fileName);
+    const presentationDrafts = deckDrafts.length > 0 ? deckDrafts : [buildPowerPointDraft(trimmed, fileName)].filter((d): d is SmartImportSongDraft => Boolean(d));
+    if (presentationDrafts.length > 0) {
+      const slideCount = presentationDrafts.reduce((sum, d) => sum + d.sections.length, 0);
       onProgress?.({
-        completed: presentationDraft.sections.length,
-        total: presentationDraft.sections.length,
-        label: `Prepared ${presentationDraft.sections.length} PowerPoint slide${presentationDraft.sections.length === 1 ? "" : "s"}.`,
+        completed: slideCount,
+        total: slideCount,
+        label: `Prepared ${presentationDrafts.length} song${presentationDrafts.length === 1 ? "" : "s"} from ${slideCount} slide${slideCount === 1 ? "" : "s"}.`,
       });
       return {
-        songs: [presentationDraft],
+        songs: presentationDrafts,
         warnings: ["PowerPoint slide boundaries were preserved for review."],
         aiUsed: false,
         needsReview: true,
@@ -1333,6 +1337,33 @@ export async function processDocumentLocally(
     stats: { totalChunks: 0, aiChunks: 0, fallbackChunks: 0, provider: "numbered-local", durationMs: Date.now() - startedAt },
   };
 
+  // Headings, labels, title lines: when the file's own layout shows its songs and sections, split it
+  // here. That is instant, works offline and uses no credits.
+  const generic = parseGenericSongDrafts(trimmed, fileName);
+  const localResult = (warnings: string[]): AiProcessResult => ({
+    songs: generic.songs, warnings, aiUsed: false, needsReview: true,
+    stats: { totalChunks: 0, aiChunks: 0, fallbackChunks: 0, provider: "layout-local", durationMs: Date.now() - startedAt },
+  });
+  if (generic.confident) {
+    onProgress?.({ completed: generic.songs.length, total: generic.songs.length, label: `Found ${generic.songs.length} song${generic.songs.length === 1 ? "" : "s"}.` });
+    return localResult([]);
+  }
+
+  try {
+    return await processDocumentWithAiCredits(trimmed, fileName, onProgress);
+  } catch (error) {
+    // No AI structuring here (not set up, no credits, offline): split the songs by their layout instead.
+    if (generic.songs.length === 0) throw error;
+    console.warn("[worship import] AI structuring unavailable, using the layout:", error);
+    return localResult(["Automatic song structuring was unavailable, so the songs were split by their layout. Check them before importing."]);
+  }
+}
+
+async function processDocumentWithAiCredits(
+  trimmed: string,
+  fileName: string,
+  onProgress?: ImportAiProgressCallback,
+): Promise<AiProcessResult> {
   const creditsNeeded = estimateWorshipImportAiCredits(trimmed);
   onProgress?.({
     completed: 0,

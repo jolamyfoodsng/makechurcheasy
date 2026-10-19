@@ -1,5 +1,11 @@
 import { extractStructuredTextTitle, parseWorshipSectionLabelLine } from "./slideEngine";
 
+/** "Verse 1:" or "[Chorus]" alone on its line (not "1. Youth Choir Meeting", which has words after the number). */
+function isBareLabel(line: string): boolean {
+  const label = parseWorshipSectionLabelLine(line);
+  return Boolean(label && !label.rest);
+}
+
 /**
  * Extract the first non-empty line of text to use as a title.
  * Used for auto-titling both Worship songs and Notes as the user types/pastes.
@@ -24,8 +30,8 @@ export function extractFirstLineAsTitle(rawContent: string): string {
   // If first line is a section label (e.g. "Verse 1:" or "[Chorus]"),
   // look ahead for the first lyric line if one exists
   let target = lines[0];
-  if (parseWorshipSectionLabelLine(target)) {
-    const nextLyricLine = lines.find((line) => !parseWorshipSectionLabelLine(line));
+  if (isBareLabel(target)) {
+    const nextLyricLine = lines.find((line) => !isBareLabel(line));
     if (nextLyricLine) target = nextLyricLine;
   }
 
@@ -53,7 +59,7 @@ export function deriveSongTitleFromLyrics(rawLyrics: string): string {
     .map((line) => line.trim())
     .find(Boolean);
 
-  if (!firstLine || parseWorshipSectionLabelLine(firstLine)) return "";
+  if (!firstLine || isBareLabel(firstLine)) return "";
 
   return firstLine
     .replace(/^\s*[#*•\-–—]\s*/, "")

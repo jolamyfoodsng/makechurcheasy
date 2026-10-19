@@ -57,6 +57,8 @@ import Icon from "../DockIcon";
 import DockMotionControls from "./DockMotionControls";
 import { PER_KEY, isCycleTheme } from "../../lowerthirds/cycleSet";
 import DockGraphicPreviewModal from "../components/DockGraphicPreviewModal";
+import DockSceneRouteSendControl from "../components/DockSceneRouteSendControl";
+import type { DockSceneRoute } from "../dockSceneRouting";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,11 +71,19 @@ interface DockLTEditorProps {
   theme: LowerThirdTheme;
   themes: LowerThirdTheme[];
   onSelectTheme: (themeId: string) => void;
-  onSend: (url: string) => void;
+  onSend: (url: string, options?: { bypassSceneRoute?: boolean }) => void | Promise<void>;
   onBlank: (url: string) => void;
   onAnimateOut?: (url: string) => void;
   sending: boolean;
   size?: LTSize;
+  /** Content-slot storage id; each Dock tab has its own. */
+  editorId?: string;
+  /** Set to a function that saves the current editor state to its slot right away. */
+  flushRef?: { current: (() => void) | null };
+  /** Optional scene routing for this module. */
+  sceneRoute?: DockSceneRoute | null;
+  /** Callback to update scene routing (e.g. disable when requested from send menu). */
+  onUpdateSceneRoute?: (patch: Partial<DockSceneRoute>) => void;
 }
 
 type LTAppearanceColorKey = "bgColor" | "textColor" | "infoColor" | "accentColor";
@@ -228,9 +238,9 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-function loadInitialSlotState(themeId: string, slotIndex: number, theme: LowerThirdTheme): SlotState {
+function loadInitialSlotState(themeId: string, slotIndex: number, theme: LowerThirdTheme, editorId = "default"): SlotState {
   try {
-    const slots = loadSlots(themeId, "default");
+    const slots = loadSlots(themeId, editorId);
     const saved = slots[slotIndex];
     if (saved) return resolveSlotState(saved);
   } catch { /* ignore */ }
@@ -261,17 +271,21 @@ export default function DockLowerThirdEditor({
   onAnimateOut,
   sending,
   size = "xl",
+  editorId = "default",
+  flushRef,
+  sceneRoute,
+  onUpdateSceneRoute,
 }: DockLTEditorProps) {
   const { t } = useTranslation();
 
   const [activeSlotIndex, setActiveSlotIndex] = useState<number>(() => {
-    return loadActiveSlotIndex(theme.id, "default");
+    return loadActiveSlotIndex(theme.id, editorId);
   });
-  const [slots, setSlots] = useState<(ContentSlot | null)[]>(() => loadSlots(theme.id, "default"));
+  const [slots, setSlots] = useState<(ContentSlot | null)[]>(() => loadSlots(theme.id, editorId));
 
   const initialSlotState = useMemo(() => {
-    const activeIdx = loadActiveSlotIndex(theme.id, "default");
-    return loadInitialSlotState(theme.id, activeIdx, theme);
+    const activeIdx = loadActiveSlotIndex(theme.id, editorId);
+    return loadInitialSlotState(theme.id, activeIdx, theme, editorId);
   }, [theme]);
 
   // ── Preview modal ──
@@ -569,15 +583,15 @@ export default function DockLowerThirdEditor({
             animationIn: latestRef.current.animationIn,
             exitStyle: latestRef.current.exitStyle,
           };
-          saveSlot(prevThemeId.current, "default", activeSlotIndex, latestRef.current.variableValues, theme, fullState);
+          saveSlot(prevThemeId.current, editorId, activeSlotIndex, latestRef.current.variableValues, theme, fullState);
         }
       }
       prevThemeId.current = theme.id;
-      const targetSlotIdx = loadActiveSlotIndex(theme.id, "default");
-      const newSlots = loadSlots(theme.id, "default");
+      const targetSlotIdx = loadActiveSlotIndex(theme.id, editorId);
+      const newSlots = loadSlots(theme.id, editorId);
       setSlots(newSlots);
       setActiveSlotIndex(targetSlotIdx);
-      const slotState = loadInitialSlotState(theme.id, targetSlotIdx, theme);
+      const slotState = loadInitialSlotState(theme.id, targetSlotIdx, theme, editorId);
       setVariableValues({ ...slotState.variableValues });
       setCustomStyles({ ...slotState.customStyles });
       setPosition(slotState.position);
@@ -658,7 +672,7 @@ export default function DockLowerThirdEditor({
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
 
   const reloadSlots = useCallback(() => {
-    setSlots(loadSlots(theme.id, "default"));
+    setSlots(loadSlots(theme.id, editorId));
   }, [theme.id]);
 
   // Keep a ref with the latest state so saves always write fresh data
@@ -674,7 +688,7 @@ export default function DockLowerThirdEditor({
     setAnimationIn(resolved.animationIn);
     setExitStyle(resolved.exitStyle);
     setActiveSlotIndex(slot.index);
-    saveActiveSlotIndex(theme.id, "default", slot.index);
+    saveActiveSlotIndex(theme.id, editorId, slot.index);
 
     // Auto-match speaker from resolved slot values
     const speakerName = Object.entries(resolved.variableValues).find(([k]) => {
@@ -686,12 +700,12 @@ export default function DockLowerThirdEditor({
   }, [theme.id, speakers]);
 
   const handleDeleteSlot = useCallback((index: number) => {
-    deleteSlot(theme.id, "default", index);
+    deleteSlot(theme.id, editorId, index);
     reloadSlots();
   }, [theme.id, reloadSlots]);
 
   const handleRenameSlot = useCallback((index: number) => {
-    renameSlot(theme.id, "default", index, renamingSlotName);
+    renameSlot(theme.id, editorId, index, renamingSlotName);
     reloadSlots();
     setRenamingSlotIndex(null);
     setRenamingSlotName("");
@@ -721,8 +735,8 @@ export default function DockLowerThirdEditor({
           animationIn,
           exitStyle,
         };
-        saveSlot(currentTheme.id, "default", currentSlotIdx, variableValues, currentTheme, fullState);
-        setSlots(loadSlots(currentTheme.id, "default"));
+        saveSlot(currentTheme.id, editorId, currentSlotIdx, variableValues, currentTheme, fullState);
+        setSlots(loadSlots(currentTheme.id, editorId));
       } catch (err) {
         console.warn("[AutoSave] saveSlot failed:", err);
       }
@@ -750,12 +764,38 @@ export default function DockLowerThirdEditor({
               animationIn,
               exitStyle,
             };
-            saveSlot(currentTheme.id, "default", currentSlotIdx, variableValues, currentTheme, fullState);
+            saveSlot(currentTheme.id, editorId, currentSlotIdx, variableValues, currentTheme, fullState);
           } catch { /* ignore */ }
         }
       }
     };
   }, []);
+
+  // Lets the Dock save this tab right before it clones it.
+  useEffect(() => {
+    if (!flushRef) return;
+    flushRef.current = () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+      const { variableValues, customStyles, position, animationIn, exitStyle, activeSlotIndex: currentSlotIdx, theme: currentTheme } = latestRef.current;
+      if (currentSlotIdx === null) return;
+      try {
+        saveSlot(currentTheme.id, editorId, currentSlotIdx, variableValues, currentTheme, {
+          variableValues: { ...variableValues },
+          customStyles: { ...customStyles },
+          position,
+          animationIn,
+          exitStyle,
+        });
+        saveActiveSlotIndex(currentTheme.id, editorId, currentSlotIdx);
+      } catch { /* ignore */ }
+    };
+    return () => {
+      flushRef.current = null;
+    };
+  }, [flushRef, editorId]);
 
   // ── Context menu open (right-click or left-click empty slot) ──
   const openContextMenu = useCallback((slotIndex: number, x: number, y: number) => {
@@ -793,13 +833,13 @@ export default function DockLowerThirdEditor({
         animationIn: latestRef.current.animationIn,
         exitStyle: latestRef.current.exitStyle,
       };
-      saveSlot(theme.id, "default", activeSlotIndex, latestRef.current.variableValues, theme, fullState);
+      saveSlot(theme.id, editorId, activeSlotIndex, latestRef.current.variableValues, theme, fullState);
       isSavingRef.current = false;
     }
 
-    saveActiveSlotIndex(theme.id, "default", index);
+    saveActiveSlotIndex(theme.id, editorId, index);
     setActiveSlotIndex(index);
-    const freshSlots = loadSlots(theme.id, "default");
+    const freshSlots = loadSlots(theme.id, editorId);
     setSlots(freshSlots);
     skipAutoSaveRef.current = true;
 
@@ -861,7 +901,7 @@ export default function DockLowerThirdEditor({
   }, [contextMenu, closeContextMenu]);
 
   // ── Send / Blank handlers ──
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback((options?: { bypassSceneRoute?: boolean }) => {
     const overlayExitStyle = exitStyle === "fade" ? undefined : exitStyle;
     const url = buildOverlayUrl(
       theme,
@@ -877,7 +917,7 @@ export default function DockLowerThirdEditor({
       animationIn,
       overlayExitStyle,
     );
-    onSend(url);
+    onSend(url, options);
   }, [theme, variableValues, customStyles, position, animationIn, exitStyle, size, onSend, kineticTheme]);
 
   const handleAnimateOut = useCallback(() => {
@@ -1353,7 +1393,7 @@ export default function DockLowerThirdEditor({
                   setExitStyle("fade");
                   setSelectedSpeakerIdx(null);
                   if (activeSlotIndex !== null) {
-                    deleteSlot(theme.id, "default", activeSlotIndex);
+                    deleteSlot(theme.id, editorId, activeSlotIndex);
                     reloadSlots();
                   }
                 }}
@@ -1397,16 +1437,14 @@ export default function DockLowerThirdEditor({
           <Icon name="visibility" size={14} />
           <span>Preview</span>
         </button>
-        <button
-          type="button"
-          className={`dock-btn dock-btn--sm ${sending ? "dock-btn--loading" : "dock-btn--primary"}`}
-          onClick={handleSend}
+        <DockSceneRouteSendControl
+          route={sceneRoute}
+          onRouteChange={onUpdateSceneRoute}
+          onSend={handleSend}
+          sending={sending}
           disabled={sending}
           style={{ flex: 1 }}
-          title={t("common.sendToObs", "Send to OBS")}>
-          <Icon name="play_arrow" size={14} />
-          <span>{t("common.sendToObs", "Send to OBS")}</span>
-        </button>
+        />
         {onAnimateOut && (
           <button
             type="button"

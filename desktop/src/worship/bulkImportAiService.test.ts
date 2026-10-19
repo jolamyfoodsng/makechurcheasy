@@ -172,7 +172,7 @@ describe("Phase 1: Core Import", () => {
     expect(hymnNumbers.size).toBeGreaterThanOrEqual(450);
     expect(drafts[0].title).toBe("Hymn 1");
     expect(drafts[0].hymnNumber).toBe("1");
-    expect(drafts[0].sections.map((section) => section.label)).toEqual(["Yoruba", "English"]);
+    expect(drafts[0].sections.map((section) => section.label)).toEqual(["Verse 1 (Yoruba)", "Verse 1 (English)"]);
     expect(drafts[0].sections[0].content).toContain("Jerih mo yah mah");
     expect(drafts[0].sections[1].content).toContain("The host of Angels");
     expect(drafts.some((draft) => draft.title === "Hymn 51")).toBe(true);
@@ -189,7 +189,7 @@ describe("Phase 1: Core Import", () => {
 
     expect(drafts.length).toBeGreaterThanOrEqual(450);
     expect(drafts[0].title).toBe("Hymn 1");
-    expect(drafts[0].sections.map((section) => section.label)).toEqual(["Yoruba", "English"]);
+    expect(drafts[0].sections.map((section) => section.label)).toEqual(["Verse 1 (Yoruba)", "Verse 1 (English)"]);
   });
 });
 
@@ -422,7 +422,7 @@ describe("Phase 2: Two-Column PDF", () => {
       "As in Thy sight to live;              PH. 35",
     ].join("\n");
 
-    const normalized = normalizeExtractedLyricsText(reorderTwoColumnText(layoutText));
+    const normalized = normalizeExtractedLyricsText(reorderTwoColumnText(layoutText), { joinWrappedLines: true });
 
     expect(normalized).toContain("A charge to keep I have,");
     expect(normalized).toContain("And fit it for the sky");
@@ -454,7 +454,7 @@ describe("Phase 2: Two-Column PDF", () => {
       "with me abide,                        with me.",
     ].join("\n");
 
-    const normalized = normalizeExtractedLyricsText(reorderTwoColumnText(layoutText));
+    const normalized = normalizeExtractedLyricsText(reorderTwoColumnText(layoutText), { joinWrappedLines: true });
 
     expect(normalized).toContain("A greater rain is coming\nA greater rain is coming");
     expect(normalized).toContain("A greater rain is coming very soon");
@@ -485,7 +485,7 @@ describe("Phase 2b: PDF lyric reflow", () => {
       "PH. 35",
     ].join("\n");
 
-    const normalized = normalizeExtractedLyricsText(raw);
+    const normalized = normalizeExtractedLyricsText(raw, { joinWrappedLines: true });
 
     expect(normalized).toContain("2. I see the signs are all around");
     expect(normalized).toContain("My ear has heard a certain sound");
@@ -509,7 +509,7 @@ describe("Phase 2b: PDF lyric reflow", () => {
       "but now am found",
     ].join("\n");
 
-    const normalized = normalizeExtractedLyricsText(raw);
+    const normalized = normalizeExtractedLyricsText(raw, { joinWrappedLines: true });
 
     expect(normalized).toContain("Hymn 5\n\nVerse 1");
     expect(normalized).toContain("Where shall we await Jesus that we might all see Him,");
@@ -525,7 +525,7 @@ describe("Phase 2b: PDF lyric reflow", () => {
       "And fit it for the sky",
     ].join("\n");
 
-    const normalized = normalizeExtractedLyricsText(raw);
+    const normalized = normalizeExtractedLyricsText(raw, { joinWrappedLines: true });
 
     expect(normalized).toContain("A charge to keep I have,\nA God to glorify,");
     expect(normalized).toContain("A never-dying soul to save,\nAnd fit it for the sky");

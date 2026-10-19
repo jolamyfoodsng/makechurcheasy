@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoSplitLyricsText } from "./slideEngine";
+import { autoSplitLyricsText, generateSlides } from "./slideEngine";
 
 const authored = ["Verse 1:", "alpha", "bravo", "delta", "echo", "foxtrot", "golf"].join("\n");
 
@@ -20,5 +20,29 @@ describe("autoSplitLyricsText re-flows text that was split before", () => {
     const long = "this is a very long line of lyrics that would normally be wrapped by the splitter";
     expect(autoSplitLyricsText(long, 2, { maxLineLength: 0 })).toBe(long);
     expect(autoSplitLyricsText(long, 2).includes("\n")).toBe(true);
+  });
+});
+
+describe("hymns pasted from a hymn book", () => {
+  it("starts a new section at a mid-block label, keeps the Hymn number off the slides and tidies wide gaps", () => {
+    const pasted = "Hymn 5\n1: Let us sinners repent,\nJesus will come\n2: When Jesus has come,\nWe will kneel down\nChorus: Forgive us,\nForgive us all.        Amen";
+    const slides = generateSlides(pasted, 2, true, { continuousLineCount: true });
+    expect(slides.map((s) => [s.label, s.content])).toEqual([
+      ["Verse 1", "Let us sinners repent,\nJesus will come"],
+      ["Verse 2", "When Jesus has come,\nWe will kneel down"],
+      ["Chorus", "Forgive us,\nForgive us all. Amen"],
+    ]);
+    expect(autoSplitLyricsText(pasted, 2).startsWith("Hymn 5\n\nVerse 1:\n")).toBe(true);
+  });
+
+  it("reads a language on a label and drops a stray (cont)", () => {
+    const slides = generateSlides("Verse 1 (Yoruba):\nJesu awa de,\n\nVerse 1 (English):\nJesus here we come,\n\nChorus (cont):\nHallelujah", 2, true);
+    expect(slides.map((s) => s.label)).toEqual(["Verse 1 (Yoruba)", "Verse 1 (English)", "Chorus"]);
+  });
+
+  it("does not take a plain lyric line in the middle of a verse for a label", () => {
+    const slides = generateSlides("Verse 1:\nWe sing until the\nEnd\nof the world", 4, true);
+    expect(slides).toHaveLength(1);
+    expect(slides[0].content).toBe("We sing until the\nEnd\nof the world");
   });
 });

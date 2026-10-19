@@ -462,7 +462,7 @@ export default function AdminUsersPage() {
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
-  const perPage = 20;
+  const [perPage, setPerPage] = useState(20);
 
   // Modal states
   const [showGrantCredits, setShowGrantCredits] = useState<string | null>(null);
@@ -985,7 +985,7 @@ export default function AdminUsersPage() {
     ? users.find((u) => u.id === showRevokeAmbassador) ?? null
     : null;
 
-  useEffect(() => { setPage(1); }, [search, filter, activityFilter, selectedCountries, osFilter, versionFilter, contactFilter, billingCycleFilter]);
+  useEffect(() => { setPage(1); }, [search, filter, activityFilter, selectedCountries, osFilter, versionFilter, contactFilter, billingCycleFilter, perPage]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -2023,30 +2023,48 @@ export default function AdminUsersPage() {
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700/50">
-            <p className="text-xs text-slate-500">
-              Showing {(page - 1) * perPage + 1}–{Math.min(page * perPage, filtered.length)} of {filtered.length}
-            </p>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="p-1.5 rounded-xl text-slate-500 hover:text-slate-200 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-slate-700/50">
+          <p className="text-xs text-slate-500">
+            Showing {filtered.length === 0 ? 0 : (page - 1) * perPage + 1}–{Math.min(page * perPage, filtered.length)} of {filtered.length}
+          </p>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <label htmlFor="admin-users-per-page" className="flex items-center gap-2 text-xs text-slate-400">
+              Rows per page
+              <select
+                id="admin-users-per-page"
+                aria-label="Rows per page"
+                value={perPage}
+                onChange={(event) => setPerPage(Number(event.target.value))}
+                className="h-8 rounded-lg border border-slate-700 bg-gray-900 px-2 text-xs text-slate-100 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
               >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="text-xs text-slate-400 px-2">{page} / {totalPages}</span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="p-1.5 rounded-xl text-slate-500 hover:text-slate-200 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </label>
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  aria-label="Previous page"
+                  className="p-1.5 rounded-xl text-slate-500 hover:text-slate-200 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-xs text-slate-400 px-2">{page} / {totalPages}</span>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  aria-label="Next page"
+                  className="p-1.5 rounded-xl text-slate-500 hover:text-slate-200 hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       {confirmAction && (

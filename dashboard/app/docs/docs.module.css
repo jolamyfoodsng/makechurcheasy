@@ -716,3 +716,29 @@
 @media (prefers-reduced-motion: reduce) {
   .docsPage *, .docsPage *::before, .docsPage *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------------- Markdown pages (content/docs/*.md) ---------------- */
+.docIntro { margin-bottom: 8px; }
+.docIntro .docParagraph:first-child { font-size: 17px; color: var(--docs-secondary); }
+.docParagraph { margin: 0 0 14px; color: #334155; font-size: 15px; line-height: 1.7; }
+.docSubheading { margin: 28px 0 10px; color: var(--docs-ink); font-size: 18px; font-weight: 700; scroll-margin-top: 96px; }
+.docList, .docListOrdered { margin: 0 0 16px; padding-left: 22px; color: #334155; font-size: 15px; line-height: 1.7; }
+.docList { list-style: disc; }
+.docListOrdered { list-style: decimal; }
+.docList li, .docListOrdered li { margin: 4px 0; }
+.inlineCode { padding: 1px 6px; border: 1px solid var(--docs-line); border-radius: 3px; background: var(--docs-paper); color: #0F172A; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; }
+.inlineLink { color: var(--docs-accent); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.stepList { margin: 18px 0 22px; padding: 0; list-style: none; }
+.stepList .stepCard { padding: 16px 18px; margin-bottom: 10px; border-radius: 6px; }
+.stepList .stepHeader { margin-bottom: 6px; gap: 12px; }
+.stepList .stepNumber { width: 26px; height: 26px; border-radius: 4px; font-size: 13px; }
+.stepList .stepTitle { font-size: 16px; }
+.stepBody { margin: 0 0 0 38px; color: #334155; font-size: 14.5px; line-height: 1.65; }
+.callout { border-radius: 6px; }
+.callout p { margin: 4px 0 0; }
+.calloutTitle { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.docImage { display: block; max-width: 100%; height: auto; margin: 18px 0; border: 1px solid var(--docs-line); border-radius: 6px; }
+.sidebarHelp { margin-top: 28px; padding: 12px 14px; border: 1px solid var(--docs-line); border-radius: 6px; background: var(--docs-paper); font-size: 12.5px; line-height: 1.5; color: #475569; }
+.sidebarHelp p { margin: 4px 0 0; }
+.sidebarHelp a { color: var(--docs-accent); font-weight: 600; }
+.sidebarHelpTitle { display: flex; align-items: center; gap: 6px; color: var(--docs-ink); font-weight: 700; }

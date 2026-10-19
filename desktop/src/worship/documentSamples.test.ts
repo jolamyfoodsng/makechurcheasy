@@ -6,9 +6,10 @@ import { processDocumentLocally } from './bulkImportAiService';
 it('imports every numbered CCC hymn with language columns kept separate', { timeout: 30000 }, async () => {
   const file = new File([readFileSync(new URL('../CCC-Hymns.pdf', import.meta.url))], 'CCC-Hymns.pdf');
   const result = await processDocumentLocally(await extractTextFromFile(file), file.name);
-  expect(result.songs).toHaveLength(455);
-  expect(new Set(result.songs.map((song) => song.hymnNumber)).size).toBe(455);
-  expect(result.songs[0].sections.map((section) => section.label)).toEqual(['Yoruba', 'English']);
+  // 457: Hymns 78 and 131 have their heading printed without a space ("Hymn78") and are found too.
+  expect(result.songs).toHaveLength(457);
+  expect(new Set(result.songs.map((song) => song.hymnNumber)).size).toBe(457);
+  expect(result.songs[0].sections.map((section) => section.label)).toEqual(['Verse 1 (Yoruba)', 'Verse 1 (English)']);
   expect(result.songs[0].sections[0].content).not.toContain('The host of Angels');
   expect(result.songs.find((song) => song.hymnNumber === '473')).toBeDefined();
   expect(result.songs.find((song) => song.hymnNumber === '977')).toBeDefined();

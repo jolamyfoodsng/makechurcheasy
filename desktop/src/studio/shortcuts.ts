@@ -35,6 +35,7 @@ const DEFS = [
   { id: "section-text", label: "Go to Text (songs and notes)", group: "Go to", keys: ["Mod+2"], whileTyping: true },
   { id: "section-media", label: "Go to Media", group: "Go to", keys: ["Mod+3"], whileTyping: true },
   { id: "section-docs", label: "Go to Docs", group: "Go to", keys: ["Mod+4"], whileTyping: true },
+  { id: "section-ministry", label: "Go to Ministry (ticker, countdown, clock)", group: "Go to", keys: ["Mod+5"], whileTyping: true },
   { id: "text-songs", label: "Text: Songs", group: "Go to", keys: ["Mod+Shift+1"] },
   { id: "text-notes", label: "Text: Notes", group: "Go to", keys: ["Mod+Shift+2"] },
   { id: "search", label: "Search everything", group: "Go to", keys: ["Mod+K", "Mod+F"], whileTyping: true, hint: "Or just start typing" },

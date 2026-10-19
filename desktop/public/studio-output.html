@@ -138,6 +138,13 @@
     .mix-banner.c-top-right { right: 3vw; top: 5vh; }
     .mix-graphic { position: absolute; inset: 0; pointer-events: none; }
     .mix-graphic__frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; color-scheme: normal; }
+    /* An overlay page of the app's own (ticker, countdown, clock): drawn at 1920 wide and scaled to the screen. */
+    .mix-page { position: absolute; left: 0; right: 0; overflow: hidden; pointer-events: none; opacity: 0; transition: opacity 0.35s ease; }
+    .mix-page.is-on { opacity: 1; }
+    .mix-page.box-full { top: 0; bottom: 0; }
+    .mix-page.box-top { top: 0; }
+    .mix-page.box-bottom { bottom: 0; }
+    .mix-page__frame { position: absolute; left: 0; top: 0; border: 0; background: transparent; color-scheme: normal; transform-origin: 0 0; }
     .mix-logo { position: absolute; max-width: 14vw; max-height: 16vh; object-fit: contain; opacity: 0; transition: opacity 0.45s ease; }
     .mix-logo.is-on { opacity: 1; }
     .mix-logo.c-bottom-left { left: 3vw; bottom: 4vh; }
@@ -316,7 +323,7 @@ video { outline: none; }
       var appliedPacket = {};
       var hideTimers = {};
       var lastRevision = 0;
-      var PAGE_REV = 10;
+      var PAGE_REV = 12;
       var lastScreenKey = '';
       var lastMediaKey = '';
 
@@ -571,6 +578,31 @@ video { outline: none; }
         if (frameUrl) { try { URL.revokeObjectURL(frameUrl); } catch (e) { /* ignore */ } frameUrl = ''; }
         camImg.removeAttribute('src');
       }
+      /** Shows one camera picture (from the stream or a single fetch). */
+      var decoding = false;
+      function showFrame(blob, seq) {
+        if (!blob || !blob.size) return;
+        frameSeq = seq || frameSeq + 1;
+        var first = !frameLastAt;
+        frameLastAt = Date.now();
+        // A picture still being drawn: skip this one rather than queue up and fall behind.
+        if (decoding && !first) return;
+        decoding = true;
+        var next = URL.createObjectURL(blob);
+        var prev = frameUrl;
+        frameUrl = next;
+        camImg.onload = camImg.onerror = function () {
+          decoding = false;
+          if (prev) { try { URL.revokeObjectURL(prev); } catch (e) { /* ignore */ } }
+        };
+        camImg.src = next;
+        camBox.classList.add('has-frame');
+        if (first) {
+          // Pictures are arriving: the page's own camera is not needed.
+          stopCam();
+          applyCamera(lastCam);
+        }
+      }
       function pollFrame() {
         if (frameBusy) return;
         frameBusy = true;
@@ -585,31 +617,85 @@ video { outline: none; }
             if (frameLastAt && Date.now() - frameLastAt > 3000 && camBox.classList.contains('has-frame')) { dropFrame(); applyCamera(lastCam); }
             return;
           }
-          frameSeq = got.seq || frameSeq + 1;
-          var next = URL.createObjectURL(got.blob);
-          var prev = frameUrl;
-          frameUrl = next;
-          camImg.onload = function () {
-            if (prev) { try { URL.revokeObjectURL(prev); } catch (e) { /* ignore */ } }
-          };
-          camImg.src = next;
-          var first = !frameLastAt;
-          frameLastAt = Date.now();
-          camBox.classList.add('has-frame');
-          if (first) {
-            // Pictures are arriving: the page's own camera is not needed.
-            stopCam();
-            applyCamera(lastCam);
-          }
+          showFrame(got.blob, got.seq);
         }).catch(function () { frameBusy = false; diag.frameStatus = 'no answer'; });
+      }
+
+      // ── The camera stream ──
+      // The app sends the camera as one continuous MJPEG stream (like a video): each picture arrives
+      // the moment it exists, with no asking. Asking for single pictures is only the backup.
+      var streamCtl = null;
+      var streamFailedAt = 0;
+      function findHeaderEnd(buf) {
+        for (var i = 0; i + 3 < buf.length; i++) {
+          if (buf[i] === 13 && buf[i + 1] === 10 && buf[i + 2] === 13 && buf[i + 3] === 10) return i;
+        }
+        return -1;
+      }
+      function readCameraStream() {
+        if (streamCtl || !window.fetch || typeof TextDecoder === 'undefined') return false;
+        var abort = window.AbortController ? new AbortController() : null;
+        var mine = { abort: function () { if (abort) abort.abort(); } };
+        streamCtl = mine;
+        var decoder = new TextDecoder();
+        fetch(frameBase() + '/api/studio-camera/stream?w=' + encodeURIComponent(rtcId), { cache: 'no-store', signal: abort ? abort.signal : undefined }).then(function (res) {
+          if (res.status !== 200 || !res.body || !res.body.getReader) throw new Error('HTTP ' + res.status);
+          diag.frameStatus = 'stream';
+          var reader = res.body.getReader();
+          var buf = new Uint8Array(0);
+          function pump() {
+            return reader.read().then(function (part) {
+              if (part.done) throw new Error('ended');
+              if (mine !== streamCtl) { try { reader.cancel(); } catch (e) { /* ignore */ } return; }
+              var joined = new Uint8Array(buf.length + part.value.length);
+              joined.set(buf); joined.set(part.value, buf.length);
+              buf = joined;
+              for (;;) {
+                var headerEnd = findHeaderEnd(buf);
+                if (headerEnd < 0) break;
+                var head = decoder.decode(buf.subarray(0, headerEnd));
+                var len = /Content-Length:\s*(\d+)/i.exec(head);
+                if (!len) { buf = buf.subarray(headerEnd + 4); continue; }
+                var start = headerEnd + 4, size = Number(len[1]);
+                if (buf.length < start + size) break;
+                var seq = /X-Frame-Seq:\s*(\d+)/i.exec(head);
+                showFrame(new Blob([buf.slice(start, start + size)], { type: 'image/jpeg' }), seq ? Number(seq[1]) : 0);
+                buf = buf.subarray(start + size);
+              }
+              return pump();
+            });
+          }
+          return pump();
+        }).catch(function (err) {
+          if (mine !== streamCtl) return;
+          streamCtl = null;
+          streamFailedAt = Date.now();
+          diag.frameStatus = 'stream stopped (' + ((err && err.message) || 'error') + ')';
+        });
+        return true;
+      }
+      function stopCameraStream() {
+        if (streamCtl) { var ctl = streamCtl; streamCtl = null; ctl.abort(); }
+      }
+      /** Keeps the camera pictures coming: the stream when it works, single pictures as the backup. */
+      function frameTick() {
+        if (streamCtl) {
+          // A stream that has gone quiet (the camera may have changed): start it again.
+          if (frameLastAt && Date.now() - frameLastAt > 4000) stopCameraStream();
+          return;
+        }
+        if (Date.now() - streamFailedAt > 5000 && readCameraStream()) return;
+        pollFrame();
       }
       function startFramePolling(on) {
         if (!useFrames) return;
         if (on && !frameTimer) {
           frameWantedAt = Date.now();
-          frameTimer = setInterval(pollFrame, LITE ? 200 : 70);
+          frameTimer = setInterval(frameTick, LITE ? 200 : 70);
+          frameTick();
         } else if (!on && frameTimer) {
           clearInterval(frameTimer); frameTimer = null;
+          stopCameraStream();
           dropFrame();
         }
       }
@@ -734,8 +820,10 @@ video { outline: none; }
         if (NOCAM) { camBox.classList.remove('is-on'); return; }
         camBox.classList.remove('l-camera-only', 'l-in-front', 'l-behind-content');
         if (layout !== 'hidden') camBox.classList.add('l-' + layout);
-        startRtc(enabled && !(cam && cam.native)); // hidden keeps the live link open, so showing the camera again is instant (native: no link at all)
-        startFramePolling(enabled && layout !== 'hidden' && !rtcLive);
+        startRtc((enabled || cameraWarm) && !(cam && cam.native)); // hidden keeps the live link open, so showing the camera again is instant (native: no link at all)
+        // Like OBS, the pictures keep coming while the camera is hidden or only warmed up (an output is
+        // open and a camera is picked), so putting it on the screen shows the newest picture at once.
+        startFramePolling((enabled || cameraWarm) && !rtcLive);
         var haveFrame = hasFrame() || rtcLive;
         if (haveFrame) everLinked = true;
         camBox.classList.toggle('no-video', !camStream && !haveFrame);
@@ -806,6 +894,8 @@ video { outline: none; }
         });
       }
       var lastCam = null;
+      /** The Studio has the camera running and ready, though it may not be on this screen yet. */
+      var cameraWarm = false;
 
       function applyScreen(state) {
         var screen = String(state.screen || 'live');
@@ -912,8 +1002,47 @@ video { outline: none; }
 
       function mixSig(layer) {
         return [layer.kind, layer.url, layer.fit, layer.loop, layer.muted, layer.deviceId,
-          layer.text, layer.subtext, layer.corner, layer.logoUrl, layer.graphicKey].join('|');
+          layer.text, layer.subtext, layer.corner, layer.logoUrl, layer.graphicKey,
+          layer.pageKey, layer.pageBox, layer.pageHeight, pagePath(layer.pageUrl)].join('|');
       }
+
+      // ── Overlay pages (ticker, countdown, clock) ──
+      // The pages are built for a 1920 × 1080 canvas; they are drawn at that size and scaled to this window.
+      // A new `#data=` on the same page is handed to it in place (the page redraws), so a running
+      // countdown or clock is never reloaded.
+      var PAGE_BASE_W = 1920, PAGE_BASE_H = 1080;
+      function pagePath(url) { return String(url || '').split('#')[0]; }
+      function pageHash(url) { var i = String(url || '').indexOf('#'); return i < 0 ? '' : String(url).slice(i); }
+      function sizePage(entry) {
+        var layer = entry.layer, frame = entry.frame;
+        if (!frame) return;
+        var w = window.innerWidth || PAGE_BASE_W, h = window.innerHeight || PAGE_BASE_H;
+        var full = layer.pageBox !== 'top' && layer.pageBox !== 'bottom';
+        if (full) {
+          // A 1920 × 1080 page (like the OBS canvas), fitted and centred on any shape of screen.
+          var fs = Math.min(w / PAGE_BASE_W, h / PAGE_BASE_H);
+          frame.style.width = PAGE_BASE_W + 'px';
+          frame.style.height = PAGE_BASE_H + 'px';
+          frame.style.transform = 'translate(' + Math.round((w - PAGE_BASE_W * fs) / 2) + 'px,' + Math.round((h - PAGE_BASE_H * fs) / 2) + 'px) scale(' + fs + ')';
+          return;
+        }
+        // A strip (the ticker) runs the whole width.
+        var s = w / PAGE_BASE_W;
+        var baseH = Math.max(20, Number(layer.pageHeight) || 80);
+        frame.style.width = PAGE_BASE_W + 'px';
+        frame.style.height = baseH + 'px';
+        frame.style.transform = 'scale(' + s + ')';
+        entry.el.style.height = Math.round(baseH * s) + 'px';
+      }
+      function updatePage(entry, layer) {
+        var hash = pageHash(layer.pageUrl);
+        if (!entry.frame || !layer.pageUrl || hash === entry.pageHash) return;
+        entry.pageHash = hash;
+        try { entry.frame.contentWindow.location.hash = hash; } catch (e) { entry.frame.src = layer.pageUrl; }
+      }
+      window.addEventListener('resize', function () {
+        Object.keys(mixEntries).forEach(function (id) { if (mixEntries[id].layer.kind === 'page') sizePage(mixEntries[id]); });
+      });
 
       function buildMixElement(layer) {
         var el, media = null;
@@ -961,6 +1090,22 @@ video { outline: none; }
           // A Broadcast graphic: drawn by the app's own runtime inside a frame; In and Out are its real animations.
           el = document.createElement('div');
           el.className = 'mix-graphic';
+        } else if (layer.kind === 'page') {
+          el = document.createElement('div');
+          el.className = 'mix-page box-' + (layer.pageBox === 'top' || layer.pageBox === 'bottom' ? layer.pageBox : 'full');
+          var pf = document.createElement('iframe');
+          pf.className = 'mix-page__frame';
+          pf.setAttribute('allowtransparency', 'true');
+          pf.setAttribute('aria-hidden', 'true');
+          pf.setAttribute('tabindex', '-1');
+          if (layer.pageHtml) {
+            pf.setAttribute('sandbox', 'allow-same-origin allow-scripts');
+            pf.srcdoc = layer.pageHtml;
+          } else {
+            pf.src = layer.pageUrl || 'about:blank';
+          }
+          el.appendChild(pf);
+          return { el: el, media: null, stream: null, frame: pf, pageHash: pageHash(layer.pageUrl) };
         } else if (layer.kind === 'logo') {
           el = document.createElement('img');
           el.className = 'mix-logo c-' + (layer.corner || 'top-right');
@@ -1082,12 +1227,13 @@ video { outline: none; }
             entry.layer = layer;
             entry.shownNow = false;
             mixEntries[layer.id] = entry;
-            var host = (layer.kind === 'banner' || layer.kind === 'logo' || layer.kind === 'graphic') ? mixFront : mixBack;
+            var host = (layer.kind === 'banner' || layer.kind === 'logo' || layer.kind === 'graphic' || layer.kind === 'page') ? mixFront : mixBack;
             host.appendChild(entry.el);
             mixOrder = '';
           }
           entry.layer = layer;
           if (layer.kind === 'graphic') placeGraphic(entry.el, layer);
+          if (layer.kind === 'page') { sizePage(entry); updatePage(entry, layer); }
           var shown = layer.shown === true;
           if (shown !== entry.shownNow) {
             entry.shownNow = shown;
@@ -1105,18 +1251,14 @@ video { outline: none; }
             if (entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
           }, 500);
         });
-        // Keep the layers in the order of the list (moving a video element pauses it, so only when it changed).
+        // Keep the layers in the order of the list. They are stacked with z-index, never moved:
+        // moving a video pauses it and moving a frame reloads its page (a running countdown would restart).
         var order = layers.map(function (l) { return l && l.id; }).join(',');
         if (order !== mixOrder) {
           mixOrder = order;
-          layers.forEach(function (layer) {
+          layers.forEach(function (layer, index) {
             var entry = layer && mixEntries[layer.id];
-            if (entry && entry.el.parentNode) {
-              entry.el.parentNode.appendChild(entry.el);
-              if (entry.shownNow && entry.layer.kind === 'video' && entry.media) {
-                try { entry.media.play(); } catch (e) { /* ignore */ }
-              }
-            }
+            if (entry) entry.el.style.zIndex = String(index + 1);
           });
         }
       }
@@ -1159,6 +1301,7 @@ video { outline: none; }
         applyBrand(brandState);
         applyMix(mixLayers);
         lastCam = cameraState;
+        cameraWarm = feed !== 'preview' && !!state.cameraWarm;
         applyCamera(cameraState);
         applyAudio(audioState, audioCtrl);
         applyMedia(state.media || null);

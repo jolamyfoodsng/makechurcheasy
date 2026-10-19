@@ -1234,6 +1234,30 @@ describe("dockObsClient background reflection stress", () => {
     expect(client._lastCssOverlayBaseUrlBySource[sourceName]).toBe(baseUrl);
   });
 
+  it.each([
+    { label: "Worship", sourceName: "Worship - MCE Presentation", baseUrl: "http://overlay.test/mce-worship-overlay.html", initializedKey: "_worshipInitialized", primeMethod: "primeWorshipOverlay" },
+    { label: "Notes", sourceName: "Worship - MCE Presentation", baseUrl: "http://overlay.test/mce-note.html", initializedKey: "_notesInitialized", primeMethod: "primeNotesOverlay" },
+  ] as const)("sends a background-only change to a loaded $label overlay as a theme-only packet", async ({ sourceName, baseUrl, initializedKey, primeMethod }) => {
+    inputs.set(sourceName, { inputKind: "browser_source", inputSettings: { url: baseUrl, css: "" } });
+    sceneItems.set("MCE Presentation", new Map([[sourceName, { sourceName, sceneItemId: 111, sceneItemIndex: 0, enabled: true }]]));
+    client[initializedKey] = true;
+    client._lastBrowserSourceUrlBySource[sourceName] = baseUrl;
+    client._lastCssOverlayBaseUrlBySource[sourceName] = baseUrl;
+    client.publishFullscreenOverlayPacket = vi.fn();
+
+    await client[primeMethod]({
+      overlayMode: "lower-third",
+      backgroundOnly: true,
+      bibleThemeSettings: makeBackgroundTheme({ backgroundPattern: "diagonal-lines" }),
+    });
+
+    expect(client.publishFullscreenOverlayPacket).toHaveBeenCalledTimes(1);
+    const [packet] = (client.publishFullscreenOverlayPacket as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(packet.slide).toBeNull();
+    expect(packet.theme).toBeTruthy();
+    expect(packet.mode).toBe("lower-third");
+  });
+
   it("reflects 50 sequential Bible lower-third background changes through the fast overlay path", async () => {
     client._bibleLtInitialized = true;
     client._lastBibleMode = "lower-third";

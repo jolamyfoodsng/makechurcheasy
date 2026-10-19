@@ -73,6 +73,7 @@ import LoadingScreen from "../../components/LoadingScreen";
 import DockBottomToolbar from "../components/DockBottomToolbar";
 import DockBottomSearchPanel from "../components/DockBottomSearchPanel";
 import DockSceneRoutingControl from "../components/DockSceneRoutingControl";
+import DockSceneRouteConfirmDialog from "../components/DockSceneRouteConfirmDialog";
 import DockThemeSettingsModal from "../components/DockThemeSettingsModal";
 import DockTranslationControls, {
   type DockTranslationValue,
@@ -1582,12 +1583,32 @@ function DockWorshipTab({
   const fullscreenOnlyMode = Boolean(fullscreenOnly);
   const [sceneRoute, updateSceneRoute] = useDockSceneRoute("worship");
   const hasSceneRoute = sceneRoute.enabled && sceneRoute.targets.length > 0;
+  const worshipSceneRouteConfirmedRef = useRef(false);
+  const [pendingWorshipRouteConfirm, setPendingWorshipRouteConfirm] = useState<{
+    idx: number;
+    options?: {
+      overlayMode?: OverlayMode;
+      showPresentationMeta?: boolean;
+      quickSettingsOverride?: DockFullscreenQuickThemeSettings;
+      awaitFontFit?: boolean;
+      bypassSceneRoute?: boolean;
+    };
+  } | null>(null);
+
+  const sceneRouteTargetsKey = useMemo(() => {
+    return `${sceneRoute.enabled ? "1" : "0"}:${sceneRoute.targets.map((t) => `${t.sceneName}:${t.mode}`).join(",")}`;
+  }, [sceneRoute.enabled, sceneRoute.targets]);
+
+  useEffect(() => {
+    worshipSceneRouteConfirmedRef.current = false;
+  }, [sceneRouteTargetsKey]);
 
   const pushWorshipToConfiguredOutput = useCallback(async (
     data: DockTabContentPushData,
     options?: DockOverlayFitOptions,
+    pushOptions?: { bypassSceneRoute?: boolean },
   ) => {
-    if (!hasSceneRoute) {
+    if (!hasSceneRoute || pushOptions?.bypassSceneRoute) {
       return dockObsClient.pushWorshipLyrics(data, options);
     }
     await Promise.all(sceneRoute.targets.map((target) => {
@@ -2872,10 +2893,16 @@ function DockWorshipTab({
 
   const goLiveSection = useCallback(
     (idx: number, options?: {
+      overlayMode?: OverlayMode;
       showPresentationMeta?: boolean;
       quickSettingsOverride?: DockFullscreenQuickThemeSettings;
       awaitFontFit?: boolean;
+      bypassSceneRoute?: boolean;
     }) => {
+      if (hasSceneRoute && !worshipSceneRouteConfirmedRef.current && !options?.bypassSceneRoute) {
+        setPendingWorshipRouteConfirm({ idx, options });
+        return;
+      }
       void dockObsClient.ensureModuleSourceOpenAndOnTop("worship", fullscreenOnlyMode ? "fullscreen" : overlayMode);
       const payload = buildSectionPayload(idx, options);
       if (!payload) return;
@@ -2896,11 +2923,12 @@ function DockWorshipTab({
       }
 
       const fitOptions = options?.awaitFontFit ? { waitForFit: true } : undefined;
-      const pushLive = () => hasSceneRoute
+      const effectiveUseSceneRoute = hasSceneRoute && !options?.bypassSceneRoute;
+      const pushLive = () => effectiveUseSceneRoute
         ? pushWorshipToConfiguredOutput(payload.obsData, fitOptions)
-          : payload.obsData.overlayMode === "lower-third"
+        : payload.obsData.overlayMode === "lower-third"
           ? dockObsClient.pushWorshipOverlayFast(payload.obsData, fitOptions)
-          : pushWorshipToConfiguredOutput(payload.obsData, fitOptions);
+          : pushWorshipToConfiguredOutput(payload.obsData, fitOptions, { bypassSceneRoute: true });
       // Fullscreen and lower-third use different OBS paths. Queue them at the
       // dock boundary so a slower fullscreen mutation cannot finish after the
       // lower-third mutation and overwrite the active mode in OBS.
@@ -4109,6 +4137,31 @@ function DockWorshipTab({
     }
   }, [activeSectionIndex, clearWorshipFromConfiguredOutput, fullscreenOnlyMode, goLiveSection, hasSceneRoute, onStage, overlayMode, presentationLinkMode, sceneRoute.syncPresentation, sceneRoute.targets, worshipOverlayVisible]);
 
+  const handleConfirmWorshipRoute = useCallback(() => {
+    if (!pendingWorshipRouteConfirm) return;
+    worshipSceneRouteConfirmedRef.current = true;
+    const { idx, options } = pendingWorshipRouteConfirm;
+    setPendingWorshipRouteConfirm(null);
+    void goLiveSection(idx, { ...options, bypassSceneRoute: false });
+  }, [goLiveSection, pendingWorshipRouteConfirm]);
+
+  const handleSendWorshipToMceAlone = useCallback(async () => {
+    if (!pendingWorshipRouteConfirm) return;
+    const { idx, options } = pendingWorshipRouteConfirm;
+    setPendingWorshipRouteConfirm(null);
+    updateSceneRoute({ enabled: false });
+    if (sceneRoute.targets.length > 0) {
+      await Promise.allSettled(sceneRoute.targets.map((t) => (
+        dockObsClient.clearSceneRouteSource("worship", t.sceneName)
+      )));
+    }
+    void goLiveSection(idx, { ...options, bypassSceneRoute: true });
+  }, [goLiveSection, pendingWorshipRouteConfirm, sceneRoute.targets, updateSceneRoute]);
+
+  const handleCancelWorshipRouteConfirm = useCallback(() => {
+    setPendingWorshipRouteConfirm(null);
+  }, []);
+
   const handleTogglePresentationMeta = useCallback(async () => {
     const nextShowMeta = !showPresentationMeta;
     setShowPresentationMeta(nextShowMeta);
@@ -5293,6 +5346,19 @@ function DockWorshipTab({
                         placement="above"
                         showLabel
                         iconName="cast"
+                        itemLabel={t("worship.song", "worship slide")}
+                        onSend={(opts) => {
+                          if (selectedSong && activeSectionIndex !== null && activeSectionIndex >= 0) {
+                            if (opts?.bypassSceneRoute) {
+                              worshipSceneRouteConfirmedRef.current = false;
+                            } else {
+                              worshipSceneRouteConfirmedRef.current = true;
+                            }
+                            void goLiveSection(activeSectionIndex, {
+                              bypassSceneRoute: opts?.bypassSceneRoute,
+                            });
+                          }
+                        }}
                       />
 
                       {presentationLinkMode && (
@@ -5539,6 +5605,15 @@ function DockWorshipTab({
           ))}
         </div>
       )}
+
+      <DockSceneRouteConfirmDialog
+        open={Boolean(pendingWorshipRouteConfirm)}
+        route={sceneRoute}
+        itemLabel={t("worship.song", "worship slide")}
+        onConfirmRouted={handleConfirmWorshipRoute}
+        onSendToMceAlone={handleSendWorshipToMceAlone}
+        onCancel={handleCancelWorshipRouteConfirm}
+      />
 
       {showDeletedSectionsPopover && createPortal(
         <div

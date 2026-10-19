@@ -25,6 +25,9 @@ export interface SettingsOutputProps {
   wifiLink: string;
   copied: boolean;
   onCopy: () => void;
+  /** Keep the camera running while an output is open, so it goes on the screen at once. */
+  cameraReady: boolean;
+  onCameraReady: (on: boolean) => void;
 }
 
 /** What is behind the logo on the screen. */
@@ -239,6 +242,13 @@ export default function SettingsModal(props: SettingsModalProps) {
         <p className="st-set__hint">
           {output.outputOpen ? `Output is on ${output.outputName || "a screen"}. ` : "No output is open yet. "}
           It is drawn at 1920 × 1080. Press Esc on it to close it.
+        </p>
+        <label className="st-set__check">
+          <input type="checkbox" checked={output.cameraReady} onChange={(e) => output.onCameraReady(e.target.checked)} />
+          <span>Keep the camera ready while the output is on</span>
+        </label>
+        <p className="st-set__hint">
+          Like OBS: the camera keeps running in the background once you have used it, so switching to the camera is instant. The camera's light stays on while an output is open.
         </p>
       </section>
 

@@ -121,8 +121,9 @@ export function readLayoutBackdrop(source: unknown): LayoutBackdrop {
   const s = (source && typeof source === "object" ? source : {}) as Record<string, unknown>;
   const str = (k: string) => (typeof s[k] === "string" ? (s[k] as string).trim() : "");
   const type = str("backgroundType").toLowerCase();
-  const image = resolveBackdropMediaUrl(str("backgroundImage") || str("backgroundImageFilePath"));
-  const video = resolveBackdropMediaUrl(str("backgroundVideo") || str("backgroundVideoFilePath"));
+  // The first usable one: a large picture is sent as a "__FROM_CSS__" marker, and then its file path is the one to use.
+  const image = resolveBackdropMediaUrl(str("backgroundImage")) || resolveBackdropMediaUrl(str("backgroundImageFilePath"));
+  const video = resolveBackdropMediaUrl(str("backgroundVideo")) || resolveBackdropMediaUrl(str("backgroundVideoFilePath"));
   const color = str("backgroundColor");
   let kind: LayoutBackdropKind = "theme";
   if (type === "off") kind = "off";
@@ -201,6 +202,39 @@ function applyBackdrop(layers: ThemeLayer[], b: LayoutBackdrop): ThemeLayer[] {
   }
   next.splice(at, 0, ...added);
   return next;
+}
+
+/**
+ * Lower thirds, a picked colour / picture / video: the theme's card or bar is the background, so the
+ * pick fills that card (the top-level box that holds the words, else the biggest one). The words,
+ * lines and labels stay as the theme drew them.
+ */
+function applyLowerThirdBackdrop(layers: ThemeLayer[], b: LayoutBackdrop): ThemeLayer[] {
+  if (b.kind !== "color" && b.kind !== "image" && b.kind !== "video") return layers;
+  const parents = new Set(layers.map((l) => l.parentId).filter(Boolean) as string[]);
+  const cards = layers.filter((l) => !l.hidden && !l.parentId && l.type === "box");
+  const holders = cards.filter((l) => parents.has(l.id));
+  const area = (l: ThemeLayer) => l.w * (typeof l.h === "number" ? l.h : 0);
+  const targets = holders.length ? holders : cards.length ? [cards.reduce((a, c) => (area(c) > area(a) ? c : a))] : [];
+  if (targets.length === 0) return layers;
+  const ids = new Set(targets.map((l) => l.id));
+  return layers.map((l) => {
+    if (!ids.has(l.id)) return l;
+    const style: ThemeLayer["style"] = { ...l.style, gradient: undefined, src: undefined, videoSrc: undefined };
+    if (b.kind === "color") {
+      if (b.colorEnd) style.gradient = { type: "linear" as const, angle: b.angle, stops: [{ color: b.color, at: 0 }, { color: b.colorEnd, at: 100 }] };
+      else style.fill = b.color;
+    } else if (b.kind === "image") {
+      style.src = b.image;
+      style.fit = "cover";
+      if (b.darkness > 0) style.dim = Math.round(b.darkness * 100);
+    } else {
+      style.videoSrc = b.video;
+      style.fit = "cover";
+      if (b.darkness > 0) style.dim = Math.round(b.darkness * 100);
+    }
+    return { ...l, style };
+  });
 }
 
 /** Lower thirds, Background: Off. Hide card / bar boxes and images; boxes that hold other layers just lose their fill. */
@@ -324,6 +358,8 @@ function growVerseBoxes(layers: ThemeLayer[], factor: number): ThemeLayer[] {
     const newH = height + up + down;
     const localTop = verse.y + (ANCHOR_SHIFT_Y[verse.anchor] ?? 0) * height - up;
     const y = Math.round(localTop - (ANCHOR_SHIFT_Y[verse.anchor] ?? 0) * newH);
+    // A layer without a finite place loses its top/height on screen (the words end up 8px at the top).
+    if (!Number.isFinite(y) || !Number.isFinite(newH)) return verse;
     return { ...verse, y, h: newH };
   });
 }
@@ -334,13 +370,15 @@ export function applyLayoutAdjust(layout: ThemeLayout, source: unknown): ThemeLa
   const offset = layout.format === "lower-third" ? a.layoutOffsetY : 0;
   const backdrop = layout.format === "fullscreen" ? readLayoutBackdrop(source) : null;
   const backdropChanged = backdrop !== null && !isLayoutBackdropDefault(backdrop);
-  // Lower thirds: only "Off" applies (the card / bar is the background).
-  const ltOff = layout.format === "lower-third" && readLayoutBackdrop(source).kind === "off";
+  // Lower thirds: the card / bar is the background. "Off" removes it; a colour, picture or video fills it.
+  const ltBackdrop = layout.format === "lower-third" ? readLayoutBackdrop(source) : null;
+  const ltOff = ltBackdrop?.kind === "off";
+  const ltFill = ltBackdrop !== null && (ltBackdrop.kind === "color" || ltBackdrop.kind === "image" || ltBackdrop.kind === "video");
   const showTitle = readLayoutShowTitle(source);
   // Switch on = the theme's default (heading shown); switch off = hidden.
   const nextShowHeading = showTitle === undefined ? layout.showHeading : showTitle ? undefined : false;
   const titleChanged = nextShowHeading !== layout.showHeading;
-  if (a.layoutTextScale === 100 && a.layoutRefScale === 100 && a.layoutLineHeight === 100 && offset === 0 && !backdropChanged && !ltOff && !titleChanged) return layout;
+  if (a.layoutTextScale === 100 && a.layoutRefScale === 100 && a.layoutLineHeight === 100 && offset === 0 && !backdropChanged && !ltOff && !ltFill && !titleChanged) return layout;
   const textK = a.layoutTextScale / 100;
   const refK = a.layoutRefScale / 100;
   const lineK = a.layoutLineHeight / 100;
@@ -364,7 +402,7 @@ export function applyLayoutAdjust(layout: ThemeLayout, source: unknown): ThemeLa
     if (offset && !layer.parentId) next = { ...next, y: layer.y + offset };
     return next;
   });
-  const stripped = ltOff ? stripLowerThirdBackground(layers) : layers;
+  const stripped = ltOff ? stripLowerThirdBackground(layers) : ltFill && ltBackdrop ? applyLowerThirdBackdrop(layers, ltBackdrop) : layers;
   const grown = growVerseBoxes(stripped, textK * lineK);
   const finalLayers = backdropChanged && backdrop ? applyBackdrop(grown, backdrop) : grown;
   const out: ThemeLayout = { ...layout, layers: finalLayers };

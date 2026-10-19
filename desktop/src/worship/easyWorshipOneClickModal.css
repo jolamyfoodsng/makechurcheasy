@@ -222,3 +222,18 @@
   margin-bottom: 1rem;
   text-align: left;
 }
+
+/* Library choice (found EasyWorship libraries, or a folder the operator picked) */
+.ew-library-list { display: grid; gap: 8px; width: 100%; margin: 4px 0 10px; text-align: left; }
+.ew-library { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid rgba(40, 45, 41, 0.15); border-radius: 4px; background: #fff; cursor: pointer; }
+.ew-library.is-selected { border-color: #7d8a42; box-shadow: 0 0 0 1px #7d8a42 inset; }
+.ew-library input { margin: 0; accent-color: #7d8a42; }
+.ew-library-text { display: grid; min-width: 0; }
+.ew-library-text strong { font-size: 14px; }
+.ew-library-text span { overflow: hidden; color: rgba(40, 45, 41, 0.65); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.ew-library-empty { display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 12px; border: 1px dashed rgba(40, 45, 41, 0.25); border-radius: 4px; color: rgba(40, 45, 41, 0.75); font-size: 13px; line-height: 1.5; }
+.ew-choose-folder { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; }
+.ew-import-note { margin: 10px 0 0; color: rgba(40, 45, 41, 0.7); font-size: 12.5px; line-height: 1.5; text-align: left; }
+.ew-import-note--warn { padding: 8px 10px; border-radius: 4px; background: rgba(217, 119, 6, 0.1); color: #92400e; }
+.ew-import-error { display: flex; align-items: flex-start; gap: 8px; text-align: left; }
+.ew-summary-grid { grid-template-columns: 1fr 1fr; }

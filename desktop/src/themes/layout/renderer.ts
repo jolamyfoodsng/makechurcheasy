@@ -868,6 +868,45 @@ export class ThemeRenderer {
       n.empty = empty;
       n.pos.classList.toggle("mtl-hidden", empty);
     }
+    this.giveHeadingSpaceToVerse(empty);
+  }
+
+  /**
+   * With no heading (a song has no reference), the words take over the room the heading had above
+   * them, so a lower-third box is not left with an empty strip at the top and full-screen words
+   * centre on the screen. Only for words in the same box as the heading (or, on their own, words
+   * centred in their area), so a layout that keeps its words at a fixed line does not move.
+   */
+  private giveHeadingSpaceToVerse(empty: boolean) {
+    const headings = this.nodes.filter((n) => n.heading === "text");
+    for (const verse of this.nodes) {
+      if (!verse.isVerse || typeof verse.layer.h !== "number") continue;
+      const v = verse.layer;
+      const [, vsy] = ANCHOR_SHIFT[v.anchor] || ANCHOR_SHIFT["top-left"];
+      const vh = v.h as number;
+      const vTop = v.y + (vsy / 100) * vh;
+      const above = headings
+        .map((h) => {
+          const [, hsy] = ANCHOR_SHIFT[h.layer.anchor] || ANCHOR_SHIFT["top-left"];
+          const hh = typeof h.layer.h === "number" ? h.layer.h : 0;
+          return { node: h, top: h.layer.y + (hsy / 100) * hh };
+        })
+        .filter(({ node, top }) => (node.layer.parentId ?? "") === (v.parentId ?? "")
+          && top < vTop
+          && node.layer.x < v.x + v.w && v.x < node.layer.x + node.layer.w);
+      const inBox = Boolean(v.parentId);
+      const centred = (v.style?.verticalAlign ?? "middle") !== "top";
+      const top = above.length && (inBox || centred) ? Math.min(...above.map((a) => a.top)) : null;
+      // The layer itself keeps its place (other fitting may move it); only its inside reaches up.
+      const scaleY = (Number.parseFloat(verse.pos.style.height) || vh) / vh;
+      const reach = empty && top !== null ? Math.max(0, vTop - Math.max(0, top)) * scaleY : 0;
+      const es = verse.el.style;
+      const next = reach > 0 ? `-${reach}px` : "";
+      if (es.marginTop === next) continue;
+      es.marginTop = next;
+      es.height = reach > 0 ? `calc(100% + ${reach}px)` : "";
+      if (!verse.empty && verse.lastValue !== "\u0000") this.fitText(verse);
+    }
   }
 
   private applyContent(n: LayerNode, tokens: ResolvedTokens, content: ThemeContent) {

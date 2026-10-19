@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 
 use nokhwa::pixel_format::RgbFormat;
 use nokhwa::utils::{
-    ApiBackend, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType,
+    ApiBackend, CameraFormat, CameraIndex, FrameFormat, RequestedFormat, RequestedFormatType,
 };
 use nokhwa::{nokhwa_check, nokhwa_initialize, query, Camera};
 
@@ -104,6 +104,38 @@ fn list_cameras() -> Result<Vec<(u32, String)>, String> {
         out.push((index, info.human_name()));
     }
     Ok(out)
+}
+
+/**
+ * The camera format to ask for, like OBS's "Resolution/FPS" pick: the camera's own MJPEG at
+ * 1280x720 (then 1920x1080) at about 30 fps, so most pictures pass straight through without being
+ * decoded and compressed again. Without MJPEG, the closest format no larger than 1920x1080.
+ */
+fn pick_camera_format(formats: &[CameraFormat]) -> Option<CameraFormat> {
+    let score = |f: &CameraFormat| -> i64 {
+        let (w, h, fps) = (f.width() as i64, f.height() as i64, f.frame_rate() as i64);
+        if w < 640 || h < 360 || fps < 15 {
+            return i64::MIN;
+        }
+        let mut s = 0;
+        if f.format() == FrameFormat::MJPEG {
+            s += 10_000;
+        }
+        s += match (w, h) {
+            (1280, 720) => 3_000,
+            (1920, 1080) => 2_500,
+            _ if w <= 1920 && h <= 1080 => 1_000 - ((1280 - w).abs() / 4),
+            _ => -5_000,
+        };
+        // About 30 fps is best; 25-60 is fine.
+        s -= (fps - 30).abs() * 20;
+        s
+    };
+    formats
+        .iter()
+        .copied()
+        .filter(|f| score(f) > i64::MIN)
+        .max_by_key(|f| score(f))
 }
 
 fn stop_capture_locked(publish: fn(Vec<u8>)) {
@@ -252,6 +284,15 @@ fn start_capture(source: Source, publish: fn(Vec<u8>)) -> bool {
                 return;
             }
         };
+        // Ask for the best format before opening (keeps the default if the camera refuses).
+        if let Ok(formats) = camera.compatible_camera_formats() {
+            if let Some(best) = pick_camera_format(&formats) {
+                match camera.set_camera_requset(RequestedFormat::new::<RgbFormat>(RequestedFormatType::Exact(best))) {
+                    Ok(set) => println!("[Studio camera] Using {}x{} {:?} @ {} fps", set.width(), set.height(), set.format(), set.frame_rate()),
+                    Err(e) => println!("[Studio camera] Keeping the default format ({e})"),
+                }
+            }
+        }
         if let Err(e) = camera.open_stream() {
             finish_run(id, publish, Some(format!("The camera could not start: {e}")));
             return;
@@ -441,5 +482,35 @@ pub fn handle(mut request: tiny_http::Request, clean: &str, publish: fn(Vec<u8>)
             respond(request, 200, r#"{"ok":true}"#.to_string());
         }
         _ => respond(request, 404, r#"{"error":"unknown"}"#.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nokhwa::utils::Resolution;
+
+    fn fmt(w: u32, h: u32, f: FrameFormat, fps: u32) -> CameraFormat {
+        CameraFormat::new(Resolution::new(w, h), f, fps)
+    }
+
+    #[test]
+    fn prefers_mjpeg_720p_at_30fps() {
+        let formats = [
+            fmt(3840, 2160, FrameFormat::MJPEG, 30),
+            fmt(1920, 1080, FrameFormat::NV12, 30),
+            fmt(1920, 1080, FrameFormat::MJPEG, 30),
+            fmt(1280, 720, FrameFormat::MJPEG, 60),
+            fmt(1280, 720, FrameFormat::MJPEG, 30),
+            fmt(640, 480, FrameFormat::YUYV, 30),
+        ];
+        assert_eq!(pick_camera_format(&formats), Some(fmt(1280, 720, FrameFormat::MJPEG, 30)));
+    }
+
+    #[test]
+    fn without_mjpeg_takes_the_closest_format_no_larger_than_1080p() {
+        let formats = [fmt(3840, 2160, FrameFormat::NV12, 30), fmt(1920, 1080, FrameFormat::NV12, 30), fmt(1280, 720, FrameFormat::NV12, 30)];
+        assert_eq!(pick_camera_format(&formats), Some(fmt(1280, 720, FrameFormat::NV12, 30)));
+        assert_eq!(pick_camera_format(&[fmt(320, 240, FrameFormat::YUYV, 30)]), None);
     }
 }

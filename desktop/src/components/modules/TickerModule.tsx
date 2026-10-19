@@ -39,6 +39,7 @@ import "./ticker.css";
 import Icon from "../Icon";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { getRecommendedPollingInterval } from "../../services/performanceManager";
+import { applyTextCase, TEXT_CASE_CONVERSIONS } from "../../lowerthirds/textStyle";
 
 const TICKER_SOURCE_NAME = "⚡ MCE Ticker Overlay";
 const TICKER_HEIGHT = 80;
@@ -1168,6 +1169,20 @@ export function TickerModule({ isActive = true }: TickerModuleProps) {
                       onChange={(e) => setNewText(e.target.value.slice(0, MAX_CHARS))}
                       onKeyDown={handleTextareaKeyDown}
                     />
+                    <div className="ticker-case-row" role="group" aria-label="Text case">
+                      {TEXT_CASE_CONVERSIONS.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          className="ticker-case-btn"
+                          onClick={() => setNewText((text) => applyTextCase(text, opt.value).slice(0, MAX_CHARS))}
+                          disabled={!newText.trim()}
+                          title={opt.hint}
+                          aria-label={opt.hint}>
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
                     <div className="ticker-input-footer">
                       <span className={`ticker-char-count${newText.length >= MAX_CHARS ? " ticker-char-count--full" : ""}`}>{newText.length}/{MAX_CHARS}</span>
                       <button

@@ -69,7 +69,8 @@ describe("Worship document imports", () => {
     expect(result.stats.provider).toBe("pptx-local");
     expect(result.songs).toHaveLength(1);
     expect(result.songs[0]?.title).toBe("opening-praise");
-    expect(result.songs[0]?.sections.map((section) => section.label)).toEqual(["Slide 1", "Slide 2"]);
+    // A slide that starts with "Chorus" is labelled Chorus; other slides keep their slide number.
+    expect(result.songs[0]?.sections.map((section) => section.label)).toEqual(["Slide 1", "Chorus"]);
     expect(result.songs[0]?.sections[1]?.content).toContain("We will lift Your name");
   });
 });
@@ -87,7 +88,8 @@ describe("additional document formats", () => {
     const zip = new JSZip();
     zip.file('content.xml', '<office:text><text:h>Hymn 1</text:h><text:p>First lyric<text:line-break/>Second lyric</text:p></office:text>');
     const file = new File([await zip.generateAsync({ type: 'uint8array' })], 'hymn.odt');
-    expect(await extractTextFromFile(file)).toBe('Hymn 1\n\nFirst lyric\nSecond lyric');
+    // The heading is marked "# " so the importer knows a song starts there.
+    expect(await extractTextFromFile(file)).toBe('# Hymn 1\n\nFirst lyric\nSecond lyric');
   });
   it("reads Markdown through the document entrypoint", async () => {
     const file = new File(['# Hymn 1\nFirst lyric\nSecond lyric'], 'hymn.md');

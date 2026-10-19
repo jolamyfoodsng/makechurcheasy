@@ -11,6 +11,42 @@ import {
   type DockThemeScope,
   type DockOverlayMode,
 } from "../dockThemeSync";
+import { readNativeDockSetting, writeNativeDockSetting } from "../../services/localDockSettings";
+
+/** Where the "Apply changes to" choice is kept, so the window reopens on the last one saved. */
+const SYNC_SCOPE_SETTING_KEY = "dtb-theme-sync-scope";
+
+type SyncScopeMode = "current" | "all" | "custom";
+interface SavedSyncScope {
+  mode: SyncScopeMode;
+  tabs: Record<DockThemeScope, boolean>;
+  modes: Record<DockOverlayMode, boolean>;
+}
+
+/** The last saved "Apply changes to" choice; All Tabs & Scenes until something else is saved. */
+export function readSavedSyncScope(): SavedSyncScope {
+  const fallback: SavedSyncScope = {
+    mode: "all",
+    tabs: { bible: true, worship: true, notes: true },
+    modes: { fullscreen: true, "lower-third": true },
+  };
+  const raw = readNativeDockSetting<Partial<SavedSyncScope>>(SYNC_SCOPE_SETTING_KEY);
+  if (!raw || typeof raw !== "object") return fallback;
+  const mode = raw.mode === "current" || raw.mode === "custom" || raw.mode === "all" ? raw.mode : "all";
+  const bool = (value: unknown, otherwise: boolean) => (typeof value === "boolean" ? value : otherwise);
+  return {
+    mode,
+    tabs: {
+      bible: bool(raw.tabs?.bible, true),
+      worship: bool(raw.tabs?.worship, true),
+      notes: bool(raw.tabs?.notes, true),
+    },
+    modes: {
+      fullscreen: bool(raw.modes?.fullscreen, true),
+      "lower-third": bool(raw.modes?.["lower-third"], true),
+    },
+  };
+}
 
 export interface DockThemeSettingsSaveContext {
   backgroundPreset?: DockBackgroundPreset | null;
@@ -238,16 +274,11 @@ export default function DockThemeSettingsModal({
       setDraftSelectedThemeId(selectedThemeId);
       draftSelectedThemeRef.current = null;
       pendingBackgroundPresetRef.current = null;
-      setSyncScopeMode("all");
-      setSyncTabs({
-        bible: true,
-        worship: true,
-        notes: true,
-      });
-      setSyncModes({
-        fullscreen: true,
-        "lower-third": true,
-      });
+      // Open on the choice saved last time (All, Current only, or the same Custom tabs and scenes).
+      const saved = readSavedSyncScope();
+      setSyncScopeMode(saved.mode);
+      setSyncTabs(saved.tabs);
+      setSyncModes(saved.modes);
     }
   }, [currentMode, currentTab, referenceFormat, referenceVersionVisible, view, quickSettings, selectedThemeId]);
 
@@ -340,6 +371,8 @@ export default function DockThemeSettingsModal({
     })();
 
     const shouldCrossSync = effectiveTargetTabs.length > 1 || effectiveTargetModes.length > 1;
+    // The next time this opens, it starts on this choice.
+    void writeNativeDockSetting(SYNC_SCOPE_SETTING_KEY, { mode: syncScopeMode, tabs: syncTabs, modes: syncModes });
 
     setSaving(true);
     flushSync(() => setView("closed"));

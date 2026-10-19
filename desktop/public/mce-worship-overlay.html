@@ -914,6 +914,11 @@
       order: 0;
     }
 
+    /* Songs and notes have no reference: an empty line must not leave a gap above or below the words. */
+    #lt-bar #ref-text:empty {
+      display: none;
+    }
+
     #lt-translation-text:empty {
       display: none;
     }

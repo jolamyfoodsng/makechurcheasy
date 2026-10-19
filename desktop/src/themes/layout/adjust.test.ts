@@ -107,8 +107,10 @@ describe("layout backdrop (Dock background for full-screen layer themes)", () =>
     expect(out.layers.map((l) => l.id).slice(0, 3)).toEqual(["mce-backdrop", "mce-backdrop-dim", "bg"]);
   });
 
-  it("does not touch lower thirds", () => {
-    expect(applyLayoutAdjust(LT, { backgroundType: "color", backgroundColor: "#f00", layoutBackdropDarkness: 80 })).toBe(LT);
+  it("never adds a full-screen background to a lower third (the colour fills its card instead)", () => {
+    const out = applyLayoutAdjust(LT, { backgroundType: "color", backgroundColor: "#f00", layoutBackdropDarkness: 80 });
+    expect(out.layers.some((l) => l.id.startsWith("mce-backdrop"))).toBe(false);
+    expect(out.layers.find((l) => l.id === "band")?.style.fill).toBe("#f00");
   });
 
   it("falls back to the theme when the picked media is missing or unusable", () => {
@@ -199,5 +201,60 @@ describe("layout adjust: verse box grows with bigger text", () => {
     expect(verseOf(applyLayoutAdjust(GROW, { layoutTextScale: 80 })).h).toBe(400);
     const auto = { ...GROW, layers: GROW.layers.map((l) => (l.id === "verse" ? { ...l, h: "auto" as const } : l)) };
     expect(verseOf(applyLayoutAdjust(auto, { layoutTextScale: 150 })).h).toBe("auto");
+  });
+});
+
+describe("layout backdrop: lower-third card", () => {
+  const card = (out: ThemeLayout) => out.layers.find((l) => l.id === "band")!;
+
+  it("a picked colour fills the card that holds the words", () => {
+    const out = applyLayoutAdjust(LT, { backgroundType: "color", backgroundColor: "#123456" });
+    expect(card(out).style.fill).toBe("#123456");
+    expect(card(out).hidden).toBeFalsy();
+    // The words are untouched.
+    expect(out.layers.find((l) => l.id === "verse")).toEqual(LT.layers.find((l) => l.id === "verse"));
+  });
+
+  it("a picked picture or video covers the card", () => {
+    const pic = applyLayoutAdjust(LT, { backgroundType: "image", backgroundImage: "/uploads/hills.jpg", layoutBackdropDarkness: 40 });
+    expect(card(pic).style).toMatchObject({ src: "/uploads/hills.jpg", fit: "cover", dim: 40 });
+    const vid = applyLayoutAdjust(LT, { backgroundType: "video", backgroundVideo: "/uploads/loop.mp4" });
+    expect(card(vid).style).toMatchObject({ videoSrc: "/uploads/loop.mp4", fit: "cover" });
+  });
+
+  it("keeps the theme's own card when the background is the theme's", () => {
+    expect(applyLayoutAdjust(LT, { backgroundType: "theme", backgroundColor: "#123456" })).toBe(LT);
+  });
+
+  it("uses the file path when a large picture was replaced by a marker", () => {
+    const b = readLayoutBackdrop({ backgroundType: "image", backgroundImage: "__FROM_CSS__", backgroundImageFilePath: "/uploads/big.jpg" });
+    expect(b.kind).toBe("image");
+    expect(b.image).toBe("/uploads/big.jpg");
+  });
+});
+
+describe("layout adjust: verse box growth", () => {
+  // The Bible full-screen theme pushed to OBS: an auto-height reference above a fixed verse box.
+  const FULL: ThemeLayout = {
+    version: 1,
+    format: "fullscreen",
+    layers: [
+      { id: "bg", name: "Background", type: "box", x: 0, y: 0, w: 1920, h: 1080, anchor: "top-left", style: { fill: "#11053b" } },
+      { id: "reference", name: "Reference", type: "text", content: "{reference}", x: 960, y: 210, w: 1500, h: "auto", anchor: "top-center", style: { fontSize: 72, maxLines: 1, hug: true, padding: [10, 28, 8, 40] } },
+      { id: "verse", name: "Verse", type: "text", content: "{text}", x: 960, y: 360, w: 1600, h: 560, anchor: "top-center", style: { fontSize: 80, lineHeight: 1.22, minFontSize: 38 } },
+    ],
+  } as ThemeLayout;
+
+  it("keeps a finite place for the verse when the line spacing grows it", () => {
+    const verse = applyLayoutAdjust(FULL, { layoutLineHeight: 105 }).layers.find((l) => l.id === "verse")!;
+    expect(verse.y).toBe(346);
+    expect(verse.h).toBe(588);
+  });
+
+  it("leaves the verse where it was rather than giving it no place", () => {
+    const broken = { ...FULL, layers: FULL.layers.map((l) => (l.id === "reference" ? { ...l, y: Number.NaN } : l)) } as ThemeLayout;
+    const verse = applyLayoutAdjust(broken, { layoutLineHeight: 105 }).layers.find((l) => l.id === "verse")!;
+    expect(Number.isFinite(verse.y)).toBe(true);
+    expect(Number.isFinite(verse.h as number)).toBe(true);
   });
 });

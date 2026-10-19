@@ -14,6 +14,9 @@ describe("textStyle", () => {
     expect(applyTextCase("WHAT IS faith? it is trust", "title")).toBe("What Is Faith? It Is Trust");
     expect(applyTextCase("WHAT IS FAITH? IT IS TRUST.", "sentence")).toBe("What is faith? It is trust.");
     expect(applyTextCase("As Typed", "none")).toBe("As Typed");
+    expect(applyTextCase("Have you registered for REVAYAH 2026? Don't wait!", "title")).toBe("Have You Registered For Revayah 2026? Don't Wait!");
+    expect(applyTextCase('he said "come" and \'go\'', "title")).toBe('He Said "Come" And \'Go\'');
+    expect(applyTextCase("Have you registered? DON'T WAIT! register today.", "sentence")).toBe("Have you registered? Don't wait! Register today.");
   });
 
   it("round-trips and clamps the style string", () => {

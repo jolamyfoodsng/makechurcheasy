@@ -50,6 +50,7 @@ import {
   Eye,
   RefreshCw,
   FileCode,
+  Fingerprint,
   MousePointerClick,
   Layers,
   Footprints,

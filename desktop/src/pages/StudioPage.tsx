@@ -32,6 +32,7 @@ import {
   MonitorOff,
   MonitorPlay,
   Lock,
+  Megaphone,
   Music,
   Play,
   Type as TextIcon,
@@ -78,7 +79,6 @@ import {
   goLive,
   noteSlides,
   previewMonitorUrl,
-  programFrameUrl,
   setPreviewState,
   setProgramBrand,
   setProgramCamera,
@@ -89,9 +89,11 @@ import {
   setProgramMix,
   setProgramScroll,
   setProgramScreen,
+  setProgramCameraWarm,
   setAltOutputMode,
   setStudioTextScale,
   setStudioTextStyle,
+  setStudioTextLook,
   stopProgramAudio,
   studioBaseUrl,
   type StudioMediaControl,
@@ -141,7 +143,7 @@ import QueueDrawer from "../studio/ui/QueueDrawer";
 import BroadcastGraphicsDrawer, { type ProjectedGraphic } from "../studio/ui/BroadcastGraphicsDrawer";
 import ScheduleDock from "../studio/ui/ScheduleDock";
 import ThemePanel from "../studio/ui/ThemePanel";
-import PreviewPanel, { type CompareRow, type PreviewTab } from "../studio/ui/PreviewPanel";
+import PreviewPanel, { type PreviewTab } from "../studio/ui/PreviewPanel";
 import SharedControls from "../studio/ui/SharedControls";
 import ScenePicker, { type StudioScene } from "../studio/ui/ScenePicker";
 import BibleWorkspace from "../studio/ui/BibleWorkspace";
@@ -151,6 +153,8 @@ import SlideshowControls from "../studio/ui/SlideshowControls";
 import { probeVideoDuration, useSlideshow } from "../studio/useSlideshow";
 import DocsWorkspace, { groupDocuments, type DocsSelection } from "../studio/ui/DocsWorkspace";
 import MixPanel from "../studio/ui/MixPanel";
+import MinistryWorkspace from "../studio/ui/MinistryWorkspace";
+import { checkEntitlementSync } from "../services/entitlementClient";
 import SettingsModal, { type LogoBg, type SettingsTab } from "../studio/ui/SettingsModal";
 import { eventToCombo, isMacPlatform, matchShortcut, shortcutDef, useShortcutBindings, type ShortcutId } from "../studio/shortcuts";
 import GlobalSearch, { type GlobalCommand, type GlobalResult, type GlobalRunMode } from "../studio/ui/GlobalSearch";
@@ -183,9 +187,13 @@ const SECTIONS: Array<{ id: StudioSection; label: string; icon: typeof BookOpen 
   { id: "worship", label: "Text", icon: TextIcon },
   { id: "media", label: "Media", icon: ImageIcon },
   { id: "docs", label: "Docs", icon: FileText },
+  { id: "ministry", label: "Ministry", icon: Megaphone },
 ];
 
 type Message = { text: string; tone: "info" | "error" } | null;
+
+/** The Ministry section has no slides of its own. */
+const NO_SLIDES: StudioSlide[] = [];
 
 /** Bible choices the operator keeps between visits: verses per slide and the side-by-side translation. */
 interface PassageDraft { reference: string; translation: string }
@@ -431,11 +439,15 @@ function localUploadNameFromMediaUrl(url: string): string | null {
 // The theme editor opens in a window on top of the Studio (never a different page).
 const ThemeCreatorModal = lazy(() => import("./ThemeCreatorModal"));
 const WorshipSongModal = lazy(() => import("../worship/WorshipSongModal"));
+const DocumentSongImport = lazy(() => import("../../others/SongImportFullprocess"));
 
 export default function StudioPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const canUseAlternateOutput = getEffectivePlan(user) !== "free" || isProUnlocked();
+  // The Dock's Ministry tools follow the same plan rules here.
+  const canUseTicker = isProUnlocked() || checkEntitlementSync("tickers", getEffectivePlan(user)).allowed;
+  const canUseTime = isProUnlocked() || checkEntitlementSync("countdowns", getEffectivePlan(user)).allowed;
   const promptAlternateOutputUpgrade = useCallback(() => {
     void openDashboardSubscriptionPlans();
   }, []);
@@ -447,7 +459,7 @@ export default function StudioPage() {
     setTextTabState(tab);
     try { localStorage.setItem(TEXT_TAB_KEY, tab); } catch { /* not remembered */ }
   }, []);
-  const view: "bible" | "worship" | "notes" | "media" | "docs" = section === "worship" && textTab === "notes" ? "notes" : section;
+  const view: "bible" | "worship" | "notes" | "media" | "docs" | "ministry" = section === "worship" && textTab === "notes" ? "notes" : section;
   const [bibleOpts, setBibleOptsState] = useState<BibleOpts>(readBibleOpts);
   const bibleOptsRef = useRef(bibleOpts);
   bibleOptsRef.current = bibleOpts;
@@ -466,16 +478,26 @@ export default function StudioPage() {
   const textBold = layout.textBold;
   const textItalic = layout.textItalic;
   setStudioTextStyle(textBold, textItalic);
+  const textColor = layout.textColor;
+  const textShadow = layout.textShadow;
+  const textAlign = layout.textAlign;
+  const textBackground = layout.textBackground;
+  const textLook = useMemo(
+    () => ({ color: textColor, shadow: textShadow, align: textAlign, background: textBackground }),
+    [textColor, textShadow, textAlign, textBackground],
+  );
+  setStudioTextLook(textLook);
   const [base, setBase] = useState("");
   const [themeModal, setThemeModal] = useState(false);
   const themeGate = useThemeCreateGate();
   const guardTheme = themeGate.guard;
   // Adding or editing a song also opens on top of the Studio ("new" = a blank song, or the song being edited).
   const [songEdit, setSongEdit] = useState<"new" | "edit" | null>(null);
+  const [songImport, setSongImport] = useState(false);
   const [themeEdit, setThemeEdit] = useState<{ theme: BibleTheme | null } | null>(null);
   const [message, setMessage] = useState<Message>(null);
   const [immersive, setImmersive] = useState(false);
-  const [previewTab, setPreviewTab] = useState<PreviewTab>("output");
+  const [previewTab, setPreviewTab] = useState<PreviewTab>("preview");
 
   // Side panel (right): Verse AI or the full Broadcast graphics list (remembered on this computer).
   const [leftTab, setLeftTabState] = useState<"verseai" | "graphics">(() => {
@@ -604,16 +626,11 @@ export default function StudioPage() {
   const liveModeRef = useRef<StudioMode | null>(null);
   liveSlideRef.current = liveSlide;
   screenRef.current = screen;
-  // The big monitor shows what is on the screen. Picking something (Preview first) flips it to Preview;
-  // sending it to the screen flips it back.
+  // Picking something (Preview first) flips the monitor from Alternate back to Preview.
   const previewKeyNow = previewSlide?.key ?? "";
-  const liveKeyNow = liveSlide?.key ?? "";
   useEffect(() => {
-    if (previewKeyNow && previewFirst) setPreviewTab((t) => (t === "compare" ? t : "preview"));
+    if (previewKeyNow && previewFirst) setPreviewTab("preview");
   }, [previewKeyNow, previewFirst]);
-  useEffect(() => {
-    if (liveKeyNow) setPreviewTab((t) => (t === "compare" ? t : "output"));
-  }, [liveKeyNow]);
   const [mediaCtl, setMediaCtl] = useState<StudioMediaControl>(DEFAULT_MEDIA_CONTROL);
   const [audioSlide, setAudioSlide] = useState<StudioSlide | null>(null);
   const [audioCtl, setAudioCtl] = useState<StudioMediaControl>(DEFAULT_MEDIA_CONTROL);
@@ -665,7 +682,6 @@ export default function StudioPage() {
     if (errors.length === 0) {
       setPreviewSlide(passagesSlide(results.map((r) => r.column as StudioCompareColumn)));
       say("Both passages are in Preview. Press Go Live to show them on the screen.");
-      setPreviewTab((t) => (t === "compare" ? "preview" : t));
     }
     return errors;
   }, [patchBibleOpts, say]);
@@ -739,7 +755,8 @@ export default function StudioPage() {
   const selectedSlide: StudioSlide | null = view === "bible" ? bibleSelectedSlide
     : view === "worship" ? worshipDeck[songIdx] ?? null
       : view === "media" ? mediaDeck.find((s) => s.origin?.id === mediaId) ?? null
-        : docsDeck[docIdx] ?? null;
+        : view === "docs" || view === "notes" ? docsDeck[docIdx] ?? null
+          : null;
 
   /** The module whose look (theme, Full Screen / Lower Third) applies to what is open. */
   const lookModule: StudioTextModule | null = previewSlide && previewSlide.module !== "media"
@@ -749,7 +766,7 @@ export default function StudioPage() {
   // Keep the Preview screen on the previewed slide (never touches the projector).
   useEffect(() => {
     void setPreviewState(compareFor(previewSlide), themes, displayMode);
-  }, [previewSlide, themes, displayMode, textScale, textBold, textItalic, compareFor]);
+  }, [previewSlide, themes, displayMode, textScale, textBold, textItalic, textLook, compareFor]);
 
   // ── Outputs (projector windows) ──
   const [monitors, setMonitors] = useState<StudioMonitor[]>([]);
@@ -853,7 +870,29 @@ export default function StudioPage() {
   // (so taking it off Preview never cuts the camera that is on air). Opening the Studio
   // no longer switches the camera (and its light) on by itself.
   const wordsOn = layout.wordsOn;
-  const camera = useStudioCamera(layout.camera, Boolean(liveCamera?.enabled), !wordsOn);
+  // Like an OBS source, the camera stays running while an output is open (once it has been used here),
+  // so switching to it is instant instead of waiting for the camera to start.
+  const [cameraReady, setCameraReadyState] = useState(() => {
+    try { return localStorage.getItem("mce-studio-camera-ready") !== "0"; } catch { return true; }
+  });
+  const setCameraReady = useCallback((on: boolean) => {
+    setCameraReadyState(on);
+    try { localStorage.setItem("mce-studio-camera-ready", on ? "1" : "0"); } catch { /* ignore */ }
+  }, []);
+  const [cameraUsed, setCameraUsed] = useState(() => {
+    try { return localStorage.getItem("mce-studio-camera-used") === "1"; } catch { return false; }
+  });
+  const anyOutputOpen = projectorList.some((p) => p.feed !== "preview");
+  const warmCamera = cameraReady && cameraUsed && anyOutputOpen;
+  const camera = useStudioCamera(layout.camera, Boolean(liveCamera?.enabled) || warmCamera, !wordsOn);
+  useEffect(() => {
+    if (!camera.enabled || cameraUsed) return;
+    setCameraUsed(true);
+    try { localStorage.setItem("mce-studio-camera-used", "1"); } catch { /* ignore */ }
+  }, [camera.enabled, cameraUsed]);
+  // The screens keep fetching the camera's pictures while it is warm, so it shows the instant it goes on.
+  const cameraIsWarm = warmCamera && Boolean(camera.stream);
+  useEffect(() => { void setProgramCameraWarm(cameraIsWarm); }, [cameraIsWarm]);
   const cameraRef = useRef(camera);
   cameraRef.current = camera;
   // The screen windows can't always open the camera themselves, so this window always sends them the
@@ -913,7 +952,8 @@ export default function StudioPage() {
         if (left) say(left);
       }
       cam.setLayout(layoutRef.current.wordsOn ? "behind-content" : "camera-only");
-      if (!cam.enabled) void cam.requestAccess();
+      // Only ask for access when it is missing: asking opens the camera a second time and restarts it.
+      if (!cam.enabled && (cam.denied || cam.devices.length === 0)) void cam.requestAccess();
     } else {
       cam.setLayout("hidden");
       // Camera off: Show Bible / Text goes on and stays on (its switch is locked), so the screen is never empty by accident.
@@ -1059,7 +1099,7 @@ export default function StudioPage() {
 
   // Changing the look or the theme re-draws what is live (it is not a new item in History).
   const liveModule: StudioTextModule | null = liveSlide && liveSlide.module !== "media" ? liveSlide.module : null;
-  const lookSig = `${displayMode}|${liveModule ? themesApi.current(liveModule, displayMode)?.id ?? "" : ""}|${liveSlide?.key ?? ""}|${textScale}|${textBold ? "b" : ""}${textItalic ? "i" : ""}`;
+  const lookSig = `${displayMode}|${liveModule ? themesApi.current(liveModule, displayMode)?.id ?? "" : ""}|${liveSlide?.key ?? ""}|${textScale}|${textBold ? "b" : ""}${textItalic ? "i" : ""}|${textColor}|${textShadow}|${textAlign}|${textBackground}`;
   const lastLookSig = useRef(lookSig);
   const switchingRef = useRef(false);
   useEffect(() => {
@@ -1114,8 +1154,8 @@ export default function StudioPage() {
   }, [displayMode, liveSlide, screen, transition, themes, patchLayout, say, previewFirst]);
 
   // ── "What's on the screen": Full screen / Lower third / Camera / Camera + lower third ──
-  // One choice instead of separate words and camera switches. It goes on the screen at once,
-  // even with "Preview first" on, because it decides what the screen shows, not which slide.
+  // One choice instead of separate words and camera switches. "Straight to screen": it goes on
+  // the screen at once. "Preview first": it is set up in Preview, and Send to Screen puts it up.
   const cameraShown = camera.enabled && camera.layout !== "hidden";
   const activeScene: StudioScene | null =
     cameraShown && !wordsOn ? "camera"
@@ -1131,28 +1171,30 @@ export default function StudioPage() {
       await changeDisplayMode(mode);
       return;
     }
+    // Preview first: only Preview changes; Send to Screen puts the new look up.
     patchLayout({ displayMode: mode });
-    if (liveSlide && liveSlide.module !== "media" && screen === "live") {
-      const ok = await goLive(liveSlide, themes, mode, "cut");
-      if (ok) liveModeRef.current = mode;
-    }
-  }, [displayMode, previewFirst, changeDisplayMode, patchLayout, liveSlide, screen, themes]);
+  }, [displayMode, previewFirst, changeDisplayMode, patchLayout]);
 
   // Set by the word choices (not Camera); the effect below then puts the selected verse/song up
   // (once the look has switched) if nothing is on the screen yet.
   const [sceneGo, setSceneGo] = useState<{ mode: StudioMode; n: number } | null>(null);
   const chooseScene = useCallback(async (scene: StudioScene) => {
-    // Show what is on the screen now, not Preview, so the change is visible straight away.
-    setPreviewTab((t) => (t === "compare" ? t : "output"));
-    setSceneGo(scene === "camera" ? null : { mode: scene === "fullscreen" ? "fullscreen" : "lower-third", n: Date.now() });
+    // Media and Docs fill the screen on their own: there the choice is only the picture or the
+    // camera, and the Bible / song look (Full screen / Lower third) is left as it is.
+    const pictureView = view === "media" || view === "docs";
+    setSceneGo(scene === "camera" || previewFirst || pictureView ? null : { mode: scene === "fullscreen" ? "fullscreen" : "lower-third", n: Date.now() });
     const cam = cameraRef.current;
     const camWasOn = cam.enabled && cam.layout !== "hidden";
     if (scene === "fullscreen" || scene === "lower-third") {
-      // Words only (Bible, songs, notes): the camera goes off.
+      // Words / picture only: the camera goes off.
       if (camWasOn) cam.setLayout("hidden");
       if (!layoutRef.current.wordsOn) patchLayout({ wordsOn: true });
+      if (previewFirst) {
+        if (!pictureView) patchLayout({ displayMode: scene });
+        return;
+      }
       await pushCameraLive({ enabled: false, deviceId: cam.deviceId, layout: "hidden", wordsOff: false });
-      await applyLook(scene);
+      if (!pictureView) await applyLook(scene);
       return;
     }
     if (!camWasOn) {
@@ -1163,19 +1205,25 @@ export default function StudioPage() {
       }
       const left = freeLeftNote("camera");
       if (left) say(left);
-      if (!cam.enabled) void cam.requestAccess();
+      // Only ask for access when it is missing: asking opens the camera a second time and restarts it.
+      if (!cam.enabled && (cam.denied || cam.devices.length === 0)) void cam.requestAccess();
     }
     if (scene === "camera") {
       patchLayout({ wordsOn: false });
       cam.setLayout("camera-only");
+      if (previewFirst) return;
       await pushCameraLive({ enabled: true, deviceId: cam.deviceId, layout: "camera-only", wordsOff: true });
       return;
     }
     patchLayout({ wordsOn: true });
     cam.setLayout("behind-content");
+    if (previewFirst) {
+      patchLayout({ displayMode: "lower-third" });
+      return;
+    }
     await pushCameraLive({ enabled: true, deviceId: cam.deviceId, layout: "behind-content", wordsOff: false });
     await applyLook("lower-third");
-  }, [applyLook, patchLayout, pushCameraLive, say]);
+  }, [applyLook, patchLayout, pushCameraLive, say, previewFirst, view]);
 
   // A word choice with nothing on the screen yet: put up the selected verse or song
   // in the new look. Runs after the look has changed, so `project` uses the new Full Screen / Lower Third.
@@ -1839,7 +1887,28 @@ export default function StudioPage() {
     setGraphicLive({ id: g.id, name: g.name });
     if (g.seconds > 0) mixTimers.current[GRAPHIC_LAYER_ID] = window.setTimeout(closeGraphic, g.seconds * 1000);
   }, [closeGraphic]);
-  const searchMix = useMemo(() => mix.filter((l) => l.kind !== "graphic"), [mix]);
+  // ── Ministry tools (ticker, countdown, clock): layers on top, run from the Ministry section ──
+  const putMinistryLayers = useCallback((layers: StudioMixLayer[]) => {
+    const ids = new Set(layers.map((l) => l.id));
+    ids.forEach((id) => window.clearTimeout(mixTimers.current[`${id}-drop`]));
+    // Replace in place so the output keeps the running page; new ones go on top.
+    setMix((current) => {
+      const byId = new Map(layers.map((l) => [l.id, l]));
+      const kept = current.map((l) => byId.get(l.id) ?? l);
+      const added = layers.filter((l) => !current.some((c) => c.id === l.id));
+      return [...kept, ...added];
+    });
+  }, []);
+  const hideMinistryLayers = useCallback((ids: string[]) => {
+    setMix((current) => current.map((l) => (ids.includes(l.id) ? { ...l, shown: false } : l)));
+    ids.forEach((id) => {
+      window.clearTimeout(mixTimers.current[`${id}-drop`]);
+      mixTimers.current[`${id}-drop`] = window.setTimeout(() => {
+        setMix((current) => current.filter((l) => l.id !== id || l.shown));
+      }, 800);
+    });
+  }, []);
+  const searchMix = useMemo(() => mix.filter((l) => l.kind !== "graphic" && l.kind !== "page"), [mix]);
 
   // ── Camera ──
   useEffect(() => {
@@ -1887,7 +1956,7 @@ export default function StudioPage() {
   }, [navigate]);
 
   // ── Stepping through what is open (keys and the ‹ › buttons) ──
-  const currentDeck: StudioSlide[] = view === "bible" ? bibleDeck : view === "worship" ? worshipDeck : view === "media" ? mediaDeck : docsDeck;
+  const currentDeck: StudioSlide[] = view === "bible" ? bibleDeck : view === "worship" ? worshipDeck : view === "media" ? mediaDeck : view === "ministry" ? NO_SLIDES : docsDeck;
 
   /** Index in the open deck of a slide (a Bible passage counts as its first / last verse). */
   const deckIndexOf = useCallback((slide: StudioSlide | null, end: "first" | "last"): number => {
@@ -1956,6 +2025,25 @@ export default function StudioPage() {
       if (cam.enabled !== Boolean(liveCameraRef.current?.enabled)) void pushCameraLive({ enabled: cam.enabled, deviceId: cam.deviceId, layout: cam.layout });
       return;
     }
+    // Preview first: the slide is already up, but Preview has a new camera arrangement or look.
+    // Send to Screen puts that change up instead of moving on to the next slide.
+    if (liveSlide && target.key === liveSlide.key) {
+      const now = liveCameraRef.current;
+      const camOn = cam.enabled && cam.layout !== "hidden";
+      const cameraChanged = camOn !== Boolean(now?.enabled)
+        || (camOn && (cam.layout !== now?.layout || cam.deviceId !== now?.deviceId))
+        || Boolean(now?.wordsOff) !== !layoutRef.current.wordsOn;
+      const lookChanged = target.module !== "media" && liveModeRef.current !== null && liveModeRef.current !== displayMode;
+      if (lookChanged) {
+        void project(target);
+        return;
+      }
+      if (cameraChanged) {
+        // A picture or video keeps playing: only the camera changes.
+        void pushCameraLive({ enabled: camOn, deviceId: cam.deviceId, layout: camOn ? cam.layout : "hidden", wordsOff: !layoutRef.current.wordsOn });
+        return;
+      }
+    }
     if (!liveSlide || target.key !== liveSlide.key) {
       void project(target).then((ok) => {
         if (!ok || !previewFirst) return;
@@ -1966,7 +2054,7 @@ export default function StudioPage() {
     }
     const at = deckIndexOf(liveSlide, "last");
     if (at >= 0 && at + 1 < currentDeck.length) selectIndex(at + 1, true);
-  }, [previewSlide, selectedSlide, liveSlide, project, previewFirst, deckIndexOf, currentDeck, selectIndex, pushCameraLive, handleClear]);
+  }, [previewSlide, selectedSlide, liveSlide, project, previewFirst, deckIndexOf, currentDeck, selectIndex, pushCameraLive, handleClear, displayMode]);
 
   const goLivePrev = useCallback(() => {
     const at = deckIndexOf(liveSlide ?? selectedSlide, "first");
@@ -2076,11 +2164,13 @@ export default function StudioPage() {
     { id: "sec-text", title: "Go to Text (songs and notes)", keywords: "open text songs lyrics worship section", run: () => chooseSection("worship") },
     { id: "sec-media", title: "Go to Media", keywords: "open media pictures videos section", run: () => chooseSection("media") },
     { id: "sec-docs", title: "Go to Docs", keywords: "open docs documents section", run: () => chooseSection("docs") },
+    { id: "sec-ministry", title: "Go to Ministry (ticker, countdown, clock)", keywords: "open ministry ticker announcements countdown timer clock time section", run: () => chooseSection("ministry") },
     { id: "graphics", title: "Open Broadcast graphics", hint: "The Graphics tab in the side panel", keywords: "broadcast graphics lower third banner templates drawer", run: () => openGraphics() },
     ...(graphicLive ? [{ id: "graphic-close", title: `Close the graphic (${graphicLive.name})`, keywords: "close graphic out animation hide", run: () => closeGraphic() }] : []),
     { id: "shortcuts", title: "Keyboard shortcuts", hint: "See and change the keys", keywords: "keyboard shortcuts keys hotkeys", run: () => { setSettingsTab("shortcuts"); setSettingsPanel(true); } },
+    { id: "import-songs", title: "Import songs from a document", hint: "PDF, Word, PowerPoint, text and more", keywords: "import songs document pdf word docx powerpoint pptx odt rtf txt lyrics hymn file", run: () => { chooseSection("worship"); setTextTab("worship"); setSongImport(true); } },
     { id: "settings", title: "Open Settings and Output", keywords: "settings output options preferences projector monitor", run: () => setSettingsPanel(true) },
-  ], [autoMode, setAutoMode, ai, handleClear, screen, toggleScreen, previewFirst, patchLayout, chooseScene, projectNextItem, chooseSection, layout.drawer, graphicLive, closeGraphic]);
+  ], [autoMode, setAutoMode, ai, handleClear, screen, toggleScreen, previewFirst, patchLayout, chooseScene, projectNextItem, chooseSection, layout.drawer, graphicLive, closeGraphic, setTextTab]);
 
 
   // ── Projectors ──
@@ -2132,7 +2222,6 @@ export default function StudioPage() {
 
   // ── Send Preview to Screen (the Send to Screen button, Enter) ──
   const goLiveNow = () => {
-    setPreviewTab((t) => (t === "compare" ? t : "output"));
     if (slideshow.show) {
       // Sending the current Preview item also moves the running slideshow onto Program.
       slideshowIsLiveRef.current = true;
@@ -2162,6 +2251,7 @@ export default function StudioPage() {
       case "section-text": chooseSection("worship"); break;
       case "section-media": chooseSection("media"); break;
       case "section-docs": chooseSection("docs"); break;
+      case "section-ministry": chooseSection("ministry"); break;
       case "text-songs": chooseSection("worship"); setTextTab("worship"); break;
       case "text-notes": chooseSection("worship"); setTextTab("notes"); break;
       case "search": setSearchAll(""); break;
@@ -2197,7 +2287,7 @@ export default function StudioPage() {
         if (ai.queue[0]) void projectCandidate(ai.queue[0]);
         else say("The Queue is empty.");
         break;
-      case "monitor-toggle": setPreviewTab((t) => (t === "output" ? "preview" : "output")); break;
+      case "monitor-toggle": setPreviewTab((t) => (altOpen && t === "preview" ? "alternate" : "preview")); break;
       case "panel-verseai": setLeftTab("verseai"); patchLayout({ verseAiCollapsed: false }); break;
       case "vai-tab":
         setLeftTab("verseai");
@@ -2238,7 +2328,7 @@ export default function StudioPage() {
         runShortcutRef.current(id);
         return;
       }
-      if (settingsPanel || themeModal || themeEdit || songEdit) return;
+      if (settingsPanel || themeModal || themeEdit || songEdit || songImport) return;
       if (searchAllRef.current !== null) return; // the search box handles its own keys
       const typing = isTyping(event.target);
       const plain = !event.metaKey && !event.ctrlKey && !event.altKey;
@@ -2260,7 +2350,7 @@ export default function StudioPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [menu, themeModal, themeEdit, songEdit, settingsPanel, shortcutBindings]);
+  }, [menu, themeModal, themeEdit, songEdit, songImport, settingsPanel, shortcutBindings]);
 
   // When the Output menu opens, the drop-down starts on the screen the output is on (or the saved / second screen).
   useEffect(() => {
@@ -2389,7 +2479,6 @@ export default function StudioPage() {
 
   // ── Labels ──
   const previewUrl = base ? previewMonitorUrl(base) : "";
-  const outputUrl = base ? programFrameUrl(base) : "";
   const alternateUrl = base ? alternateFrameUrl(base) : "";
   const outputMonitorName = projectorList.find((p) => p.feed === "program")?.where ?? "";
   const liveKey = liveSlide?.key ?? "";
@@ -2398,39 +2487,6 @@ export default function StudioPage() {
     if (!slide || slide.module !== "bible" || !o || o.book !== bible.book || o.chapter !== bible.chapter || !o.verse) return [];
     return range(o.verse, o.endVerse ?? o.verse);
   };
-
-  // Compare: the previewed verse(s) in every installed translation.
-  const [compare, setCompare] = useState<CompareRow[] | null>(null);
-  const [compareLoading, setCompareLoading] = useState(false);
-  useEffect(() => {
-    const o = previewSlide?.origin;
-    if (previewTab !== "compare" || !previewSlide || previewSlide.module !== "bible" || !o?.book || !o.chapter || !o.verse) {
-      setCompare(null);
-      return undefined;
-    }
-    let cancelled = false;
-    setCompareLoading(true);
-    const book = o.book;
-    const chapter = o.chapter;
-    const first = o.verse;
-    const last = o.endVerse ?? o.verse;
-    void Promise.all(bible.translations.map(async (translation) => {
-      try {
-        const verses = await loadChapterVerses(book, chapter, translation);
-        const text = verses.filter((v) => v.verse >= first && v.verse <= last).map((v) => (last > first ? `[${v.verse}] ${v.text}` : v.text)).join(" ");
-        return { translation, text };
-      } catch {
-        return { translation, text: "" };
-      }
-    })).then((rows) => {
-      if (cancelled) return;
-      setCompare(rows);
-      setCompareLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [previewTab, previewSlide, bible.translations]);
 
   const lookThemes = lookModule ? themesApi.forMode(displayMode) : [];
   const currentTheme = lookModule ? themesApi.current(lookModule, displayMode) : null;
@@ -2510,6 +2566,7 @@ export default function StudioPage() {
         onScheduleSection={(i) => schedule(worshipDeck[i] ?? null)}
         onScheduleSong={() => schedule(worshipDeck[0] ?? null, { whole: "song" })}
         onNewSong={() => setSongEdit("new")}
+        onImportSongs={() => setSongImport(true)}
         onEditSong={() => setSongEdit(song ? "edit" : "new")}
         tools={(
           <TextSlideTools
@@ -2564,6 +2621,17 @@ export default function StudioPage() {
             onLowerThird={(on) => patchLayout({ displayMode: on ? "lower-third" : "fullscreen" })}
           />
         )}
+      />
+    );
+  } else if (view === "ministry") {
+    workspace = (
+      <MinistryWorkspace
+        mix={mix}
+        onPut={putMinistryLayers}
+        onHide={hideMinistryLayers}
+        canTicker={canUseTicker}
+        canTime={canUseTime}
+        onUpgrade={promptAlternateOutputUpgrade}
       />
     );
   } else {
@@ -2788,7 +2856,7 @@ export default function StudioPage() {
           >
             <div className="st-workspace">
               {sectionsInBody && (
-                // One row, left: Bible · Worship · Notes · Media · Docs (Worship and Notes are the two halves of "Text").
+                // One row, left: Bible · Worship · Notes · Media · Docs · Ministry (Worship and Notes are the two halves of "Text").
                 <div className="st-subtabs st-subtabs--sections" role="tablist" aria-label="Studio sections">
                   {([
                     { key: "bible", label: "Bible", icon: BookOpen, on: view === "bible", go: () => chooseSection("bible") },
@@ -2796,6 +2864,7 @@ export default function StudioPage() {
                     { key: "notes", label: "Notes", icon: FileText, on: view === "notes", go: () => { chooseSection("worship"); setTextTab("notes"); } },
                     { key: "media", label: "Media", icon: ImageIcon, on: view === "media", go: () => chooseSection("media") },
                     { key: "docs", label: "Docs", icon: FileText, on: view === "docs", go: () => chooseSection("docs") },
+                    { key: "ministry", label: "Ministry", icon: Megaphone, on: view === "ministry", go: () => chooseSection("ministry") },
                   ]).map(({ key, label, icon: Icon, on, go }) => (
                     <button key={key} type="button" role="tab" aria-selected={on} className={on ? "is-on" : ""} onClick={go}>
                       <Icon size={14} /> {label}
@@ -2817,23 +2886,17 @@ export default function StudioPage() {
                 />
               )}
               <PreviewPanel
-                tab={previewTab}
+                // Alternate is only a tab while an alternate output is running.
+                tab={previewTab === "alternate" && altOpen ? "alternate" : "preview"}
+                alternateOpen={altOpen}
                 onTab={setPreviewTab}
                 previewUrl={previewUrl}
-                outputUrl={outputUrl}
                 alternateUrl={alternateUrl}
                 canUseAlternateOutput={canUseAlternateOutput}
                 onUpgradeAlternate={promptAlternateOutputUpgrade}
                 previewSlide={previewSlide}
                 liveSlide={liveSlide}
                 screen={screen}
-                compare={compare}
-                compareLoading={compareLoading}
-                onUseTranslation={(t) => {
-                  bible.setTranslation(t);
-                  const o = previewSlide?.origin;
-                  if (o?.book && o.chapter && o.verse) goToReference(o.book, o.chapter, o.verse, o.endVerse, "preview");
-                }}
                 displayMode={displayMode}
                 onDisplayMode={(mode: StudioMode) => void changeDisplayMode(mode)}
                 alternateMode={altLook}
@@ -2849,6 +2912,13 @@ export default function StudioPage() {
                 textItalic={textItalic}
                 onTextBold={(on) => patchLayout({ textBold: on })}
                 onTextItalic={(on) => patchLayout({ textItalic: on })}
+                textLook={textLook}
+                onTextLook={(patch) => patchLayout({
+                  ...(patch.color !== undefined ? { textColor: patch.color } : {}),
+                  ...(patch.shadow !== undefined ? { textShadow: patch.shadow } : {}),
+                  ...(patch.align !== undefined ? { textAlign: patch.align } : {}),
+                  ...(patch.background !== undefined ? { textBackground: patch.background } : {}),
+                })}
                 onMonitorMenu={openMonitorMenu}
                 playback={playbar}
                 canGoLive={Boolean(previewSlide ?? selectedSlide) || camera.enabled || Boolean(liveCamera?.enabled) || nothingToShow}
@@ -2874,8 +2944,9 @@ export default function StudioPage() {
                 notice={liveCamera?.enabled && liveCamera.layout === "camera-only" ? "Camera only: the screen shows just the camera, no words." : ""}
                 previewCam={{ enabled: camera.enabled, layout: camera.layout, stream: camera.stream }}
                 cameraCard={<><SharedControls camera={camera} cameraHint={cameraHint} wordsOn={wordsOn} onCamera={setCameraOn} showToggle={false} /><StudioTip tips={generalTips()} /></>}
-                hideWordsCard={view === "media" || view === "docs"}
-                scenePicker={<ScenePicker active={activeScene} onChoose={(scene) => void chooseScene(scene)} />}
+                scenePicker={view === "media" || view === "docs"
+                  ? <ScenePicker fillLabel={view === "media" ? "Media" : "Document"} active={cameraShown ? (wordsOn ? null : "camera") : "fullscreen"} onChoose={(scene) => void chooseScene(scene)} />
+                  : <ScenePicker active={activeScene} onChoose={(scene) => void chooseScene(scene)} />}
                 graphicLive={graphicLive}
                 onCloseGraphic={closeGraphic}
                 liveCam={{
@@ -3033,6 +3104,17 @@ export default function StudioPage() {
           />
         </Suspense>
       )}
+      {songImport && (
+        <Suspense fallback={null}>
+          <DocumentSongImport
+            onClose={() => setSongImport(false)}
+            onImported={() => {
+              void getAllSongs().then(setSongs).catch(() => undefined);
+              say("Songs imported.");
+            }}
+          />
+        </Suspense>
+      )}
       {themeEdit && (
         <Suspense fallback={null}>
           <ThemeCreatorModal
@@ -3090,7 +3172,7 @@ export default function StudioPage() {
           onTransition={(value) => patchLayout({ transition: value })}
           textScale={textScale}
           onTextScale={(percent) => patchLayout({ textScale: percent })}
-          onResetLayout={() => setLayout((c) => ({ ...DEFAULT_LAYOUT, section: c.section, displayMode: c.displayMode, transition: c.transition, previewFirst: c.previewFirst, camera: c.camera, micId: c.micId, textScale: c.textScale, textBold: c.textBold, textItalic: c.textItalic, logoScale: c.logoScale }))}
+          onResetLayout={() => setLayout((c) => ({ ...DEFAULT_LAYOUT, section: c.section, displayMode: c.displayMode, transition: c.transition, previewFirst: c.previewFirst, camera: c.camera, micId: c.micId, textScale: c.textScale, textBold: c.textBold, textItalic: c.textItalic, textColor: c.textColor, textShadow: c.textShadow, textAlign: c.textAlign, textBackground: c.textBackground, logoScale: c.logoScale }))}
           onClose={() => { setSettingsPanel(false); setSettingsTab("general"); setSettingsFocus(undefined); }}
           logo={{ url: logoOverride ? resolveOverlayAssetUrl(logoOverride) : resolveOverlayAssetUrl(getMvSettings().brandLogoPath), custom: Boolean(logoOverride), onPick: (file) => void pickLogo(file), onReset: () => applyLogo(""), scale: layout.logoScale, onScale: (percent) => patchLayout({ logoScale: clamp(percent, 30, 250) }), bg: logoBg, onBg: applyLogoBg, onPickBgImage: (file) => void pickLogoBg(file) }}
           output={{
@@ -3105,6 +3187,8 @@ export default function StudioPage() {
             wifiLink,
             copied,
             onCopy: () => void copyWifiLink(),
+            cameraReady,
+            onCameraReady: setCameraReady,
           }}
         />
       )}

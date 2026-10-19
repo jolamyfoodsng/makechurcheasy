@@ -287,13 +287,17 @@ export const DOCK_SAVED_GRAPHICS_FILE = "dock-saved-graphics";
  * the Dock to refresh. The Dock runs inside OBS with its own storage, so it cannot
  * read this app's localStorage directly.
  */
-export async function syncSavedGraphicsToDock(items: SavedBroadcastGraphic[] = loadSavedBroadcastGraphics()): Promise<void> {
+export async function syncSavedGraphicsToDock(items?: SavedBroadcastGraphic[]): Promise<void> {
   if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
   try {
+    // Called without a list (catalog refresh at start-up), the list may not be read from
+    // the app folder yet; reading it here keeps an empty list from wiping the Dock file.
+    if (!items && !(cache && cacheName === diskName()) && !(await hydrateSavedBroadcastGraphics())) return;
+    const list = items ?? loadSavedBroadcastGraphics();
     const { invoke } = await import("@tauri-apps/api/core");
     await invoke("save_dock_data", {
       name: DOCK_SAVED_GRAPHICS_FILE,
-      data: JSON.stringify(await savedGraphicsForDock(items)),
+      data: JSON.stringify(await savedGraphicsForDock(list)),
     });
     const { dockBridge } = await import("./dockBridge");
     dockBridge.sendFavoriteThemesUpdated({ source: "saved-graphics" });

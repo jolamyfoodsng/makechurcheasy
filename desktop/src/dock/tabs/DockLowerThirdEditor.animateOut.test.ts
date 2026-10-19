@@ -7,7 +7,7 @@ import lowerThirdOverlayHtml from "../../../public/lower-third-overlay.html?raw"
 describe("Dock lower-third animate out wiring", () => {
   it("routes animate out through the dock client instead of discarding the prepared URL", () => {
     expect(editorSource).toContain("onAnimateOut(url)");
-    expect(ministrySource).toContain("animateLowerThirdOverlayUrlOut(url, exitDuration)");
+    expect(ministrySource).toContain("animateLowerThirdOverlayUrlOut(url, exitDuration, { sourceName: activeLtSource() })");
     expect(ministrySource).not.toContain("onAnimateOut={async (url) => {\n                      void url;");
   });
 
@@ -16,7 +16,7 @@ describe("Dock lower-third animate out wiring", () => {
     const methodEnd = dockObsClientSource.indexOf("\n  // ── Worship lyrics overlay ──", methodStart);
     const methodSource = dockObsClientSource.slice(methodStart, methodEnd);
     const eventIndex = methodSource.indexOf('emitBrowserOverlayPacket("lower-third"');
-    const fallbackIndex = methodSource.indexOf('buildBlankedOverlayUrlFromCurrentSource(resources.ltSource, "")');
+    const fallbackIndex = methodSource.indexOf('buildBlankedOverlayUrlFromCurrentSource(ltSource, "")');
     expect(eventIndex).toBeGreaterThan(-1);
     expect(fallbackIndex).toBeGreaterThan(-1);
     expect(eventIndex).toBeLessThan(fallbackIndex);
@@ -24,13 +24,13 @@ describe("Dock lower-third animate out wiring", () => {
   });
 
   it("replaces a live Ministry lower third without reloading the OBS browser URL", () => {
-    const replaceIndex = ministrySource.indexOf("await dockObsClient.replaceLiveLowerThirdOverlayUrl(url, sourceSize, exitDuration);");
-    const firstPushIndex = ministrySource.indexOf("await dockObsClient.pushLowerThirdOverlayUrl(url, sourceSize);");
+    const replaceIndex = ministrySource.indexOf("await dockObsClient.replaceLiveLowerThirdOverlayUrl(url, ltSourceOptions, exitDuration);");
+    const firstPushIndex = ministrySource.indexOf("await dockObsClient.pushLowerThirdOverlayUrl(url, ltSourceOptions);");
     expect(replaceIndex).toBeGreaterThan(-1);
     expect(firstPushIndex).toBeGreaterThan(-1);
     expect(replaceIndex).toBeLessThan(firstPushIndex);
     expect(dockObsClientSource).toContain("async replaceLiveLowerThirdOverlayUrl");
-    expect(dockObsClientSource).toContain('emitBrowserOverlayPacket("lower-third", nextPacket, overlayCss)');
+    expect(dockObsClientSource).toContain('emitBrowserOverlayPacket("lower-third", nextPacket, overlayCss, packetTarget)');
     expect(dockObsClientSource).toContain('inputSettings: { url, css: overlayCss }');
   });
 
@@ -89,7 +89,50 @@ describe("Dock lower-third animate out wiring", () => {
   it("keeps the source visible until the exit duration completes", () => {
     expect(dockObsClientSource).toContain("async animateLowerThirdOverlayUrlOut");
     expect(dockObsClientSource).toContain("sceneItemEnabled: true");
-    expect(dockObsClientSource).toContain("await this.sleep(delivered ? waitMs : 0)");
-    expect(dockObsClientSource).toContain("await this.hideOverlaySource(sceneName, resources.ltSource)");
+    // Waits for slow (staggered) exits too, not only the theme's stated duration.
+    expect(dockObsClientSource).toContain("await this.sleep(delivered ? Math.max(waitMs, LT_EXIT_SETTLE_MS) : 0)");
+    expect(dockObsClientSource).toContain("await this.hideOverlaySource(sceneName, ltSource)");
+  });
+
+  it("empties the page before hiding it, so the next Send never shows the old graphic", () => {
+    const animateOut = dockObsClientSource.slice(dockObsClientSource.indexOf("async animateLowerThirdOverlayUrlOut"));
+    const empty = animateOut.indexOf("await this.emptyLowerThirdPage(ltSource)");
+    const hide = animateOut.indexOf("await this.hideOverlaySource(sceneName, ltSource)");
+    expect(empty).toBeGreaterThan(0);
+    expect(empty).toBeLessThan(hide);
+    expect(dockObsClientSource).toContain('{ action: "clear", timestamp: Date.now() }');
+    // Scene-routed lower thirds are emptied before they are hidden as well.
+    expect(dockObsClientSource).toContain('if (module === "lower-third") await this.emptyLowerThirdPage(sourceName);');
+    expect(lowerThirdOverlayHtml).toContain('if (packet.action === "clear")');
+  });
+
+  it("gives the source its new page before turning it back on", () => {
+    const push = dockObsClientSource.slice(dockObsClientSource.indexOf("async pushLowerThirdOverlayUrl("));
+    const body = push.slice(0, push.indexOf("async replaceLiveLowerThirdOverlayUrl"));
+    expect(body).toContain('"keep",');
+    expect(body.indexOf('"SetInputSettings"')).toBeLessThan(body.indexOf('"SetSceneItemEnabled"'));
+  });
+});
+
+describe("Ministry lower-third tabs in OBS", () => {
+  it("checks OBS for a lower third already on screen and plays it out before the new one", () => {
+    expect(ministrySource).toContain("if (ltLive || await dockObsClient.isLowerThirdSourceShowing(ltSourceOptions.sourceName)) {");
+    expect(ministrySource).toContain("await dockObsClient.replaceLiveLowerThirdOverlayUrl(url, ltSourceOptions, exitDuration);");
+  });
+
+  it("offers one shared source or a source per tab, and remembers the choice", () => {
+    expect(ministrySource).toContain('const MINISTRY_LT_SOURCE_MODE_KEY = "dock-ministry-lower-third-source-mode";');
+    expect(ministrySource).toContain("void writeNativeDockSetting(MINISTRY_LT_SOURCE_MODE_KEY, mode);");
+    expect(ministrySource).toContain("dockObsClient.setLowerThirdPerTabSources(ltPerTab);");
+  });
+
+  it("with a source per tab, sends packets to that tab's page only and leaves the other tabs on screen", () => {
+    expect(dockObsClientSource).toContain("const packetTarget = this._ltPerTabSources ? ltSource : undefined;");
+    expect(dockObsClientSource).toContain("const deliveredGlobal = !onlyThisSource && await this.emitBrowserOverlayPacket(");
+    expect(dockObsClientSource).toContain("this._ltPerTabSources && isMinistryLtTabSource(primary) && isMinistryLtTabSource(item.sourceName)");
+    expect(dockObsClientSource).toContain('return `MCE LT: Tab ${tabId.slice(-6)}`;');
+    // Per-tab pages get ?mceSource= so they ignore packets meant for another tab.
+    expect(dockObsClientSource).toContain("return this.buildSceneRouteOverlayUrl(url, sourceName);");
+    expect(lowerThirdOverlayHtml).toContain('new URLSearchParams(window.location.search).get("mceSource")');
   });
 });

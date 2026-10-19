@@ -4,7 +4,7 @@
  * data kept in the Studio's program state; `public/studio-output.html` draws them.
  */
 
-export type MixKind = "video" | "image" | "camera" | "banner" | "logo" | "graphic";
+export type MixKind = "video" | "image" | "camera" | "banner" | "logo" | "graphic" | "page";
 export type MixCorner = "bottom-left" | "bottom-center" | "bottom-right" | "top-left" | "top-right";
 
 export interface StudioMixLayer {
@@ -37,6 +37,15 @@ export interface StudioMixLayer {
   /** graphic: where on the screen (e.g. "bottom-left") and how big (percent). */
   graphicPos?: string;
   graphicScale?: number;
+  /** page: one of the app's own overlay pages (ticker, countdown, clock) drawn over the screen:
+   *  a path on the overlay server (its `#data=` can change in place) or a whole page. */
+  pageUrl?: string;
+  pageHtml?: string;
+  /** page: the whole screen, or a strip along the top or bottom `pageHeight` tall (on a 1920-wide screen). */
+  pageBox?: "full" | "top" | "bottom";
+  pageHeight?: number;
+  /** page: changes when the page must be loaded again from scratch. */
+  pageKey?: string;
 }
 
 /** Layers behind the words (video, picture, camera) and in front of them (banner, logo). */
@@ -84,8 +93,8 @@ export function loadMix(): StudioMixLayer[] {
 
 export function saveMix(layers: StudioMixLayer[]): void {
   try {
-    // A projected Broadcast graphic is temporary (and large), so it is never saved.
-    localStorage.setItem(KEY, JSON.stringify(layers.filter((layer) => layer.kind !== "graphic")));
+    // A projected Broadcast graphic and the Ministry tools (ticker, countdown, clock) are live only, so they are never saved.
+    localStorage.setItem(KEY, JSON.stringify(layers.filter((layer) => layer.kind !== "graphic" && layer.kind !== "page")));
   } catch {
     /* ignore */
   }

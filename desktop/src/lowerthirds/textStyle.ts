@@ -38,6 +38,11 @@ export const TEXT_CASE_OPTIONS: { value: TextCase; label: string; hint: string }
   { value: "lower", label: "aa", hint: "lowercase" },
 ];
 
+/** Case buttons that rewrite typed text in place (ticker message box). */
+export const TEXT_CASE_CONVERSIONS = (["upper", "lower", "title", "sentence"] as const).map(
+  (value) => TEXT_CASE_OPTIONS.find((o) => o.value === value)!,
+);
+
 export const TEXT_WEIGHT_OPTIONS: { value: TextWeight; label: string; css: string }[] = [
   { value: "default", label: "Weight: design", css: "" },
   { value: "light", label: "Light", css: "300" },
@@ -106,7 +111,8 @@ export function applyTextCase(text: string, textCase: TextCase): string {
     case "lower":
       return value.toLowerCase();
     case "title":
-      return value.toLowerCase().replace(/(^|[\s\-/("'“‘|])(\p{L})/gu, (_m, sep: string, ch: string) => sep + ch.toUpperCase());
+      // A quote only opens a word after a space or bracket, so "don't" stays "Don't".
+      return value.toLowerCase().replace(/(?<=^|[\s\-/(|]|(?:^|[\s(])["'“‘])\p{L}/gu, (ch) => ch.toUpperCase());
     case "sentence":
       return value.toLowerCase().replace(/(^\s*|[.!?|]\s+)(\p{L})/gu, (_m, sep: string, ch: string) => sep + ch.toUpperCase());
     default:

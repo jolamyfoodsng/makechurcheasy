@@ -79,6 +79,8 @@ import {
 import Icon from "../DockIcon";
 import DockBottomToolbar from "../components/DockBottomToolbar";
 import DockSceneRoutingControl from "../components/DockSceneRoutingControl";
+import DockSceneRouteConfirmDialog from "../components/DockSceneRouteConfirmDialog";
+import DockSceneRouteSendControl from "../components/DockSceneRouteSendControl";
 import { DockOnboardingTour } from "../components/DockOnboardingTour";
 import {
   applyMeasuredFontFitSettings,
@@ -1686,16 +1688,32 @@ function DockBibleTab({
   const fullscreenOnlyMode = Boolean(fullscreenOnly);
   const [sceneRoute, updateSceneRoute] = useDockSceneRoute("bible");
   const hasSceneRoute = sceneRoute.enabled && sceneRoute.targets.length > 0;
+  const bibleSceneRouteConfirmedRef = useRef(false);
+  const [pendingVerseRouteConfirm, setPendingVerseRouteConfirm] = useState<{
+    book: string;
+    chapter: number;
+    verse: number;
+    options?: Parameters<typeof goLiveVerse>[3];
+  } | null>(null);
+
+  const sceneRouteTargetsKey = useMemo(() => {
+    return `${sceneRoute.enabled ? "1" : "0"}:${sceneRoute.targets.map((t) => `${t.sceneName}:${t.mode}`).join(",")}`;
+  }, [sceneRoute.enabled, sceneRoute.targets]);
+
+  useEffect(() => {
+    bibleSceneRouteConfirmedRef.current = false;
+  }, [sceneRouteTargetsKey]);
 
   const pushBibleToConfiguredOutput = useCallback(async (
     data: DockBiblePushData,
     options?: DockOverlayFitOptions,
+    pushOptions?: { bypassSceneRoute?: boolean },
   ) => {
     // Free users are presentation-link only. Keep this guard at the output
     // boundary so a future action cannot accidentally touch the MCE Bible
     // source even if it forgets an earlier presentation-mode branch.
     if (presentationLinkMode) return null;
-    if (!hasSceneRoute) {
+    if (!hasSceneRoute || pushOptions?.bypassSceneRoute) {
       return dockObsClient.pushBible(data, options);
     }
     await dockObsClient.pushBibleToScenes(sceneRoute.targets.map((target) => {
@@ -3886,8 +3904,13 @@ function DockBibleTab({
         pushComparePassages?: boolean;
         awaitFontFit?: boolean;
         compareTranslationsOverride?: { translationA: string; translationB: string };
+        bypassSceneRoute?: boolean;
       },
     ) => {
+      if (hasSceneRoute && !bibleSceneRouteConfirmedRef.current && !options?.bypassSceneRoute) {
+        setPendingVerseRouteConfirm({ book, chapter, verse, options });
+        return null;
+      }
       void dockObsClient.ensureModuleSourceOpenAndOnTop(
         "bible",
         fullscreenOnlyMode ? "fullscreen" : (options?.overlayMode ?? overlayModeRef.current),
@@ -4202,15 +4225,16 @@ function DockBibleTab({
         translationB: (stageData.translationB as string | undefined) ?? (shouldCompareTranslations ? effectiveTranslationB : undefined),
       };
       const fitOptions = options?.awaitFontFit ? { waitForFit: true } : undefined;
-      const pushLive = () => hasSceneRoute
+      const effectiveUseSceneRoute = hasSceneRoute && !options?.bypassSceneRoute;
+      const pushLive = () => effectiveUseSceneRoute
         ? pushBibleToConfiguredOutput(stageData as unknown as DockBiblePushData, fitOptions)
         : liveOverlayMode === "lower-third"
           ? dockObsClient.pushBibleOverlayFast(lowerThirdPayload, fitOptions)
-          : pushBibleToConfiguredOutput(stageData as unknown as DockBiblePushData, fitOptions);
+          : pushBibleToConfiguredOutput(stageData as unknown as DockBiblePushData, fitOptions, { bypassSceneRoute: true });
 
       // In fullscreen mode, publish the selected verse to the already-loaded Bible
       // browser source without queuing duplicate presentation focus mutations.
-      if (!hasSceneRoute && liveOverlayMode !== "lower-third") {
+      if (!effectiveUseSceneRoute && liveOverlayMode !== "lower-third") {
         void dockObsClient
           .primeBibleOverlay(stageData as unknown as Parameters<typeof dockObsClient.primeBibleOverlay>[0])
           .catch(() => { });
@@ -6412,6 +6436,31 @@ function DockBibleTab({
       setVisibilityActionPending(false);
     }
   }, [bibleOverlayVisible, clearBibleFromConfiguredOutput, fullscreenOnlyMode, goLiveVerse, hasSceneRoute, onStage, overlayMode, presentationLinkMode, pushBibleToConfiguredOutput, sceneRoute.syncPresentation, sceneRoute.targets, selectedBook, selectedChapter, selectedVerse]);
+
+  const handleConfirmBibleRoute = useCallback(() => {
+    if (!pendingVerseRouteConfirm) return;
+    bibleSceneRouteConfirmedRef.current = true;
+    const { book, chapter, verse, options } = pendingVerseRouteConfirm;
+    setPendingVerseRouteConfirm(null);
+    void goLiveVerse(book, chapter, verse, { ...options, bypassSceneRoute: false });
+  }, [goLiveVerse, pendingVerseRouteConfirm]);
+
+  const handleSendBibleToMceAlone = useCallback(async () => {
+    if (!pendingVerseRouteConfirm) return;
+    const { book, chapter, verse, options } = pendingVerseRouteConfirm;
+    setPendingVerseRouteConfirm(null);
+    updateSceneRoute({ enabled: false });
+    if (sceneRoute.targets.length > 0) {
+      await Promise.allSettled(sceneRoute.targets.map((t) => (
+        dockObsClient.clearSceneRouteSource("bible", t.sceneName)
+      )));
+    }
+    void goLiveVerse(book, chapter, verse, { ...options, bypassSceneRoute: true });
+  }, [goLiveVerse, pendingVerseRouteConfirm, sceneRoute.targets, updateSceneRoute]);
+
+  const handleCancelBibleRouteConfirm = useCallback(() => {
+    setPendingVerseRouteConfirm(null);
+  }, []);
 
   const handleTranslationAChange = useCallback((newTranslation: string) => {
     if (newTranslation === translationB) {
@@ -9001,6 +9050,19 @@ function DockBibleTab({
                   placement="above"
                   showLabel
                   iconName="cast"
+                  itemLabel={t("bible.scripture", "scripture")}
+                  onSend={(opts) => {
+                    if (selectedBook && selectedChapter) {
+                      if (opts?.bypassSceneRoute) {
+                        bibleSceneRouteConfirmedRef.current = false;
+                      } else {
+                        bibleSceneRouteConfirmedRef.current = true;
+                      }
+                      void goLiveVerse(selectedBook, selectedChapter, selectedVerse ?? 1, {
+                        bypassSceneRoute: opts?.bypassSceneRoute,
+                      });
+                    }
+                  }}
                 />
               }
             />
@@ -9083,11 +9145,20 @@ function DockBibleTab({
                       <Icon name="menu_book" size={14} />
                       {t("bible.goToChapter")}
                     </button>
-                    <button
-                      type="button"
+                    <DockSceneRouteSendControl
+                      route={sceneRoute}
+                      onRouteChange={updateSceneRoute}
                       className="dock-btn dock-btn--primary dock-btn--compact"
-                      onClick={() => {
+                      iconName="cast"
+                      label={t("common.sendToObs", "Send to OBS")}
+                      itemLabel={t("bible.scripture", "scripture")}
+                      onSend={async (opts) => {
                         const keywordOutputOptions = getDockBibleKeywordMatchOutputOptions(keywordActionResult, MAX_VERSE_LINES);
+                        if (opts?.bypassSceneRoute && sceneRoute.targets.length > 0) {
+                          await Promise.allSettled(sceneRoute.targets.map((t) => (
+                            dockObsClient.clearSceneRouteSource("bible", t.sceneName)
+                          )));
+                        }
                         void goLiveVerse(
                           keywordActionResult.book,
                           keywordActionResult.chapter,
@@ -9097,14 +9168,12 @@ function DockBibleTab({
                             lineCount: keywordOutputOptions.lineCount,
                             rangeEndVerse: keywordOutputOptions.rangeEndVerse,
                             pushComparePassages: true,
+                            bypassSceneRoute: opts?.bypassSceneRoute,
                           },
                         );
                         setKeywordActionResult(null);
                       }}
-                      title={t("common.sendToObs", "Send to OBS")}>
-                      <Icon name="cast" size={14} />
-                      {t("common.sendToObs", "Send to OBS")}
-                    </button>
+                    />
                   </div>
                 </div>
               </div>
@@ -9278,6 +9347,15 @@ function DockBibleTab({
               }}
             />
           )}
+
+          <DockSceneRouteConfirmDialog
+            open={Boolean(pendingVerseRouteConfirm)}
+            route={sceneRoute}
+            itemLabel={t("bible.scripture", "scripture")}
+            onConfirmRouted={handleConfirmBibleRoute}
+            onSendToMceAlone={handleSendBibleToMceAlone}
+            onCancel={handleCancelBibleRouteConfirm}
+          />
 
           <DockOnboardingTour />
         </>

@@ -114,8 +114,50 @@ export const nativeIndex = (id: string): number => {
 };
 
 /**
+ * Reads the app's camera stream (`/api/studio-camera/stream`, multipart MJPEG) and hands over each
+ * picture the moment it arrives. Resolves when the stream ends or fails (the caller falls back).
+ */
+export async function readCameraStream(
+  url: string,
+  onFrame: (jpeg: Blob, seq: number) => void,
+  signal: AbortSignal,
+): Promise<void> {
+  const res = await fetch(url, { cache: "no-store", signal });
+  if (res.status !== 200 || !res.body) throw new Error(`The camera stream answered ${res.status}.`);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = new Uint8Array(0);
+  const headerEnd = (b: Uint8Array): number => {
+    for (let i = 0; i + 3 < b.length; i++) if (b[i] === 13 && b[i + 1] === 10 && b[i + 2] === 13 && b[i + 3] === 10) return i;
+    return -1;
+  };
+  for (;;) {
+    const part = await reader.read();
+    if (part.done) return;
+    const joined = new Uint8Array(buf.length + part.value.length);
+    joined.set(buf);
+    joined.set(part.value, buf.length);
+    buf = joined;
+    for (;;) {
+      const end = headerEnd(buf);
+      if (end < 0) break;
+      const head = decoder.decode(buf.subarray(0, end));
+      const len = /Content-Length:\s*(\d+)/i.exec(head);
+      if (!len) { buf = buf.subarray(end + 4); continue; }
+      const start = end + 4;
+      const size = Number(len[1]);
+      if (buf.length < start + size) break;
+      const seq = Number(/X-Frame-Seq:\s*(\d+)/i.exec(head)?.[1] ?? 0);
+      onFrame(new Blob([buf.slice(start, start + size)], { type: "image/jpeg" }), seq);
+      buf = buf.subarray(start + size);
+    }
+  }
+}
+
+/**
  * The native pictures as a MediaStream (a canvas that is redrawn from them), so the thumbnail and the
  * monitors in the Studio work exactly as they did with a browser camera. Call close() when done.
+ * The pictures come from the camera stream; asking for single pictures is only the backup.
  */
 export function openNativeStream(onFirstFrame?: () => void): { stream: MediaStream; close: () => void } {
   const canvas = document.createElement("canvas");
@@ -126,38 +168,62 @@ export function openNativeStream(onFirstFrame?: () => void): { stream: MediaStre
   let closed = false;
   let seq = 0;
   let first = true;
+  let drawing = false;
+  const abort = new AbortController();
+  const draw = async (blob: Blob) => {
+    if (!ctx || blob.size === 0 || drawing) return; // still drawing the last one: skip, never fall behind
+    drawing = true;
+    try {
+      const bitmap = await createImageBitmap(blob);
+      if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+      }
+      ctx.drawImage(bitmap, 0, 0);
+      bitmap.close?.();
+      if (first) { first = false; onFirstFrame?.(); }
+    } catch {
+      /* a broken picture: wait for the next one */
+    } finally {
+      drawing = false;
+    }
+  };
   void (async () => {
     const base = await studioBaseUrl().catch(() => "");
     while (!closed && base) {
       try {
-        const res = await fetch(`${base}/api/studio-camera?since=${seq}`, { cache: "no-store" });
-        const next = Number(res.headers.get("X-Frame-Seq") || 0);
-        if (res.status === 200) {
-          const blob = await res.blob();
-          seq = next || seq + 1;
-          if (blob.size > 0 && ctx) {
-            const bitmap = await createImageBitmap(blob);
-            if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
-              canvas.width = bitmap.width;
-              canvas.height = bitmap.height;
-            }
-            ctx.drawImage(bitmap, 0, 0);
-            bitmap.close?.();
-            if (first) { first = false; onFirstFrame?.(); }
-          }
-          continue;
-        }
-        if (next) seq = next;
+        await readCameraStream(`${base}/api/studio-camera/stream?w=studio`, (blob, next) => {
+          if (next) seq = next;
+          void draw(blob);
+        }, abort.signal);
       } catch {
-        /* the local server is busy: try again */
+        /* no stream (older app, or it was stopped): single pictures below */
       }
-      await new Promise((resolve) => window.setTimeout(resolve, 15));
+      if (closed) break;
+      // Backup: ask for single pictures for a few seconds, then try the stream again.
+      const until = Date.now() + 3000;
+      while (!closed && Date.now() < until) {
+        try {
+          const res = await fetch(`${base}/api/studio-camera?since=${seq}`, { cache: "no-store" });
+          const next = Number(res.headers.get("X-Frame-Seq") || 0);
+          if (res.status === 200) {
+            seq = next || seq + 1;
+            await draw(await res.blob());
+            continue;
+          }
+          if (next) seq = next;
+        } catch {
+          /* the local server is busy: try again */
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 40));
+      }
     }
   })();
   return {
     stream,
     close: () => {
       closed = true;
+      abort.abort();
       stream.getTracks().forEach((t) => t.stop());
     },
   };

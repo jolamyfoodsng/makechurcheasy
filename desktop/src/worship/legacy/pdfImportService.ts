@@ -46,11 +46,31 @@ export async function extractPdfText(file: File): Promise<string> {
 /** Matches "Orin N" anywhere on a line (the Yoruba hymn header). */
 const ORIN_RE = /Orin\s+(\d+)/i;
 /** Matches a standalone "Orin N" line. */
-const STANDALONE_ORIN_RE = /^\s*Orin\s+(\d+)\s*$/i;
+const STANDALONE_ORIN_RE = /^\s*Orin\s*(\d+)\s*$/i;
 /** Matches a standalone "Hymn N" line (right-column header when Orin is alone). */
-const STANDALONE_HYMN_RE = /^\s*Hymn\s+(\d+)\s*$/i;
+const STANDALONE_HYMN_RE = /^\s*Hymn\s*(\d+)\s*$/i;
 /** Musical notation lines — skip entirely. */
 const MUSICAL_RE = /^[msdflrt:\-\s\.]+$/i;
+/** Tonic sol-fa syllables (with the sharpened / flattened ones: fe, de, ta …), alone or run together ("drm", "fes"). */
+const SOLFA_RUN_RE = /^(?:de|di|re|ri|fe|fi|se|si|le|li|ta|te|ma|me|ra|la|lo|ba|d|r|m|f|s|l|t)+$/i;
+
+/**
+ * True for a tonic sol-fa line such as "m : s : m : d : f : m : r:", "s: s: l: s: fe: s: s"
+ * or "cr: s : d : r : m" (a chorus tune). These are music, not words for the screen.
+ */
+export function isMusicalLine(raw: string): boolean {
+  const line = raw.trim();
+  if (!line) return false;
+  if (MUSICAL_RE.test(line)) return true;
+  const body = line.replace(/^(?:cr|chorus)\s*:\s*/i, "");
+  const separators = (body.match(/[:–—]/g) ?? []).length;
+  if (separators < 3) return false;
+  const tokens = body.split(/[\s:.,;|–—-]+/).map((token) => token.replace(/^['’]+|['’]+$/g, "")).filter(Boolean);
+  if (tokens.length < 3) return false;
+  // Notes are often run together ("drm", "ssrfm"); a lyric line is never almost all note names.
+  const notes = tokens.filter((token) => SOLFA_RUN_RE.test(token)).length;
+  return notes === tokens.length || (tokens.length >= 6 && notes / tokens.length >= 0.9);
+}
 /** Trailing Amin/Amen to strip from lyric lines. */
 const AMEN_RE = /\s*\b(Amin|Amen)\b\.?\s*$/i;
 /** Default column split position (chars). Overridden by dynamic detection. */
@@ -127,7 +147,7 @@ function collectPlainBlock(lines: string[], startI: number, endI: number): strin
     const line = lines[j];
     if (!line.trim()) continue;
     if (isSectionHeader(line)) continue;
-    if (MUSICAL_RE.test(line.trim())) continue;
+    if (isMusicalLine(line)) continue;
     if (STANDALONE_ORIN_RE.test(line) || STANDALONE_HYMN_RE.test(line)) continue;
     block.push(stripTrailingAmen(line));
   }
@@ -170,7 +190,7 @@ function cleanLyricLines(lines: string[]): string {
   for (const raw of lines) {
     const line = raw.trimEnd();
     if (!line.trim() && out.length === 0) continue; // skip leading blanks
-    if (MUSICAL_RE.test(line.trim())) continue;
+    if (isMusicalLine(line)) continue;
     if (/^Amin\.?\s*$/i.test(line.trim())) continue;
     if (/^Amen\.?\s*$/i.test(line.trim())) continue;
     out.push(line);
@@ -207,8 +227,17 @@ export function parseBilingualHymns(text: string): ParsedHymn[] {
       let current: ParsedHymn | null = null;
       let sectionLabel = "";
       for (const line of lines) {
-        const part = splitLine(line, splitCol)[column].trim();
-        const header = part.match(/^(?:Orin|Hymn)\s+(\d+)\s*[:.]?\s*$/i);
+        const [left, right] = splitLine(line, splitCol);
+        // The Yoruba column's closing "Amin" is printed far right and can spill past the column
+        // split onto the English line ("Amin Worship Father in Heaven."): give it back to Yoruba.
+        const spilledAmin = /^Amin\b\.?\s*/i.exec(right);
+        let part = (column === 0 ? left : right).trim();
+        if (spilledAmin) {
+          if (column === 0) part = /\bAmin\.?$/i.test(part) ? part : part ? `${part} Amin` : "Amin";
+          else part = right.slice(spilledAmin[0].length).trim();
+        }
+        // "Hymn 78", and also "Hymn78" (some pages print the number without a space).
+        const header = part.match(/^(?:Orin|Hymn)\s*(\d+)\s*[:.]?\s*$/i);
         if (header) {
           current = getOrCreateHymn(hymns, byNumber, Number(header[1]));
           if (sectionLabel) current.sectionLabel = sectionLabel;
@@ -216,7 +245,7 @@ export function parseBilingualHymns(text: string): ParsedHymn[] {
         }
         if (/\bHymns?\s+\d+.*\bReserved\b/i.test(part)) { current = null; continue; }
         if (isSectionHeader(part)) { sectionLabel = part; continue; }
-        if (!current || MUSICAL_RE.test(part)) continue;
+        if (!current || isMusicalLine(part)) continue;
         current[language] += (current[language] ? "\n" : "") + part;
       }
     }
@@ -252,7 +281,7 @@ export function parseBilingualHymns(text: string): ParsedHymn[] {
       const line = lines[j];
       if (!line.trim()) continue;
       if (isSectionHeader(line)) continue;
-      if (MUSICAL_RE.test(line.trim())) continue;
+      if (isMusicalLine(line)) continue;
       if (STANDALONE_HYMN_RE.test(line)) continue; // skip right-col "Hymn N" header
 
       const [left, right] = splitLine(line, splitCol);

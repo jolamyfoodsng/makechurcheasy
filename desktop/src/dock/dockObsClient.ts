@@ -283,6 +283,10 @@ const MCE_PRESENTATION_FOCUS_SOURCES: Record<DockPresentationModule, string> = {
 };
 const MCE_PRESENTATION_ACTIVE_MODULE_KEY = "ocs-dock-presentation-active-module-v1";
 const FULLSCREEN_CLEAR_WAIT_MS = 240;
+/** Lower thirds with staggered parts can take longer to exit than their theme says. */
+const LT_EXIT_SETTLE_MS = 1400;
+/** Long enough for OBS to draw a couple of frames at 30–60 fps. */
+const LT_EMPTY_FRAME_MS = 120;
 /** Time to let a Bible / Worship / Notes overlay play its exit before OBS hides the source. */
 const OVERLAY_EXIT_WAIT_MS = 500;
 const DOCK_PREVIEW_SCENE_STATE_KEY = "ocs-dock-preview-scene-state-v1";
@@ -416,6 +420,15 @@ function getMcePresentationSourceFamily(sourceName: string): string | null {
   return null;
 }
 
+/**
+ * The ticker under any of its names: the Ministry tab's "MCE Ticker", the older
+ * "Ticker - MCE Presentation" and per-scene route copies. Only MCE-managed names
+ * count, so a user's own source that mentions "ticker" is never touched.
+ */
+export function isMceTickerSourceName(sourceName: string): boolean {
+  return isMcePresentationManagedSource(sourceName) && getMcePresentationSourceFamily(sourceName) === "ticker";
+}
+
 export function isMceAudioSource(sourceName: string): boolean {
   const norm = sourceName.trim().toLowerCase();
   if (!norm) return false;
@@ -436,6 +449,12 @@ export function isMceAudioSource(sourceName: string): boolean {
 }
 
 /** True for the sources that carry a lower third (the main one, animated ones and "MCE LT:" designs). */
+/** The shared Ministry lower-third source or one tab's own ("MCE LT: Tab …"). */
+export function isMinistryLtTabSource(sourceName: string): boolean {
+  const name = sourceName.trim();
+  return name === DOCK_LT_SOURCE || name.startsWith("MCE LT: Tab ");
+}
+
 export function isMceLowerThirdSourceName(sourceName: string): boolean {
   const name = sourceName.trim();
   return name === DOCK_LT_SOURCE
@@ -466,6 +485,11 @@ export function getMcePresentationVisibilityKeepSet(
 
   for (const item of items) {
     if (isMceBackgroundOrAuxiliaryForPrimary(primary, item.sourceName)) {
+      keepSet.add(item.sourceName);
+    }
+    // The ticker is an overlay the operator starts and stops in the Ministry tab;
+    // showing a verse, song or media must not switch it off (it popped back in later).
+    if (isMceTickerSourceName(item.sourceName)) {
       keepSet.add(item.sourceName);
     }
     if (preserveAudio && isMceAudioSource(item.sourceName)) {
@@ -930,6 +954,8 @@ export class DockObsClient {
   private _lastVerifiedStackedBySceneSource: Record<string, number> = {};
   /** Track the active presentation primary source for instant visibility reconciliation */
   private _lastActivePresentationSource: string | null = null;
+  /** Ministry lower thirds: every tab has its own OBS source (they can be on screen together). */
+  private _ltPerTabSources = false;
   /** Whether the last reconciled presentation source was showing as a lower third. */
   private _lastActivePresentationLowerThirdMode = false;
   /**
@@ -2372,7 +2398,8 @@ export class DockObsClient {
       let item = items.find((i) => i.sourceName === sourceName || aliases.includes(i.sourceName));
       if (!item) {
         if (sceneName === PRESENTATION_SCENE_NAME || sceneName === DOCK_PRESENTATION_SCENE) {
-          if (!isMediaNativeManagedSource(sourceName) && isMcePresentationManagedSource(sourceName)) {
+          // The ticker is only created by starting it in the Ministry tab.
+          if (!isMediaNativeManagedSource(sourceName) && isMcePresentationManagedSource(sourceName) && !isMceTickerSourceName(sourceName)) {
             await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, true).catch(() => { });
             this.invalidateSceneItemListCache(sceneName);
             items = await this.getSceneItemListCached(sceneName);
@@ -2511,7 +2538,8 @@ export class DockObsClient {
       let item = items.find((entry) => entry.sourceName === sourceName || aliases.includes(entry.sourceName));
       if (!item) {
         if (sceneName === PRESENTATION_SCENE_NAME || sceneName === DOCK_PRESENTATION_SCENE) {
-          if (!isMediaNativeManagedSource(sourceName) && isMcePresentationManagedSource(sourceName)) {
+          // The ticker is only created by starting it in the Ministry tab.
+          if (!isMediaNativeManagedSource(sourceName) && isMcePresentationManagedSource(sourceName) && !isMceTickerSourceName(sourceName)) {
             await this.ensureOverlaySource(sceneName, sourceName, undefined, undefined, true).catch(() => { });
             this.invalidateSceneItemListCache(sceneName);
             items = await this.getSceneItemListCached(sceneName);
@@ -2521,7 +2549,7 @@ export class DockObsClient {
       }
       if (!item) return false;
 
-      const tickerItem = items.find((entry) => entry.sourceName === DOCK_TICKER_SOURCE);
+      const tickerItem = items.find((entry) => isMceTickerSourceName(entry.sourceName));
       const topIndex = Math.max(0, items.length - 1);
       let changed = false;
 
@@ -2618,7 +2646,7 @@ export class DockObsClient {
     items: Array<{ sourceName: string; sceneItemId: number; sceneItemEnabled?: boolean }>,
   ): Promise<number> {
     const tickerItem = items.find(
-      (item) => item.sourceName === DOCK_TICKER_SOURCE && item.sceneItemEnabled !== false,
+      (item) => isMceTickerSourceName(item.sourceName) && item.sceneItemEnabled !== false,
     );
     if (!tickerItem) return 0;
 
@@ -2881,6 +2909,9 @@ export class DockObsClient {
     );
     for (const item of presentationItems) {
       if (!isMcePresentationManagedSource(item.sourceName)) continue;
+      // The ticker is switched on and off only from the Ministry tab: a verse, song or
+      // media going live never hides it (it popped back in later) or shows a stopped one.
+      if (isMceTickerSourceName(item.sourceName) && item.sourceName !== primary) continue;
 
       const shouldKeep = keepSet.has(item.sourceName);
       if (lowerThirdOverlay) {
@@ -2891,6 +2922,8 @@ export class DockObsClient {
             addVisibilityRequest(PRESENTATION_SCENE_NAME, item.sceneItemId, true);
           }
           this._mcePresentationSourcesDisabledByVisibility.delete(item.sourceName);
+        } else if (this._ltPerTabSources && isMinistryLtTabSource(primary) && isMinistryLtTabSource(item.sourceName)) {
+          // A source for each Ministry tab: the other tabs' lower thirds stay as they are.
         } else if (!shouldKeep && item.sceneItemEnabled !== false) {
           addVisibilityRequest(PRESENTATION_SCENE_NAME, item.sceneItemId, false);
           this._mcePresentationSourcesDisabledByVisibility.add(item.sourceName);
@@ -3758,7 +3791,8 @@ export class DockObsClient {
     if (currentPreviewScene) scenes.add(currentPreviewScene);
 
     for (const sceneName of scenes) {
-      await this.ensureTickerAboveSource(sceneName, DOCK_TICKER_SOURCE).catch(() => { });
+      // Only the order: a ticker the operator cleared or hid stays off.
+      await this.ensureTickerAboveSource(sceneName, DOCK_TICKER_SOURCE, { leaveVisibility: true }).catch(() => { });
     }
   }
 
@@ -7483,6 +7517,18 @@ export class DockObsClient {
     const baseUrl = this.buildCssOverlayHtmlUrlForTab("worship", sourceName);
 
     if (await this.keepLoadedCssOverlaySourceStable(sourceName, "worship", packet, baseUrl, themeCss)) {
+      // The page is already loaded, so nothing was sent. A background change still has to reach it:
+      // a theme-only packet (no words) updates the look without putting anything on the screen.
+      if (backgroundOnly) {
+        this.publishFullscreenOverlayPacket({
+          slide: null,
+          theme: cleanSettings ?? null,
+          live: true,
+          blanked: false,
+          timestamp: Number(packet.timestamp) || Date.now(),
+          mode,
+        }, "worship", themeCss, sourceName);
+      }
       return;
     }
 
@@ -7632,7 +7678,51 @@ export class DockObsClient {
     const target = sceneName.trim();
     if (!target) return;
     const sourceName = this.getSceneRouteSourceName(module, target, variant);
+    if (module === "lower-third") await this.emptyLowerThirdPage(sourceName);
     await this.hideOverlaySource(target, sourceName).catch(() => { });
+  }
+
+  /** Ministry lower-third tabs: one shared OBS source (the default) or a source for each tab. */
+  setLowerThirdPerTabSources(on: boolean): void {
+    if (this._ltPerTabSources === on) return;
+    this._ltPerTabSources = on;
+    this.invalidateActiveMceOverlayState();
+  }
+
+  /** The OBS source a Ministry lower-third tab uses (the shared one unless each tab has its own). */
+  lowerThirdSourceForTab(tabId: string, isFirstTab: boolean): string {
+    if (!this._ltPerTabSources || isFirstTab) return getDockResources().ltSource;
+    return `MCE LT: Tab ${tabId.slice(-6)}`;
+  }
+
+  /** Is this lower-third source switched on in its OBS scene right now? */
+  async isLowerThirdSourceShowing(sourceName?: string): Promise<boolean> {
+    try {
+      const target = await this.getPresentationTargetScene("lower-third");
+      if (!target.sceneName) return false;
+      const item = await this.getSceneItemBySource(target.sceneName, sourceName ?? getDockResources().ltSource);
+      return Boolean(item && (item as { sceneItemEnabled?: boolean }).sceneItemEnabled !== false);
+    } catch {
+      return false;
+    }
+  }
+
+  /** With a source per tab, each page only listens to packets meant for its own source. */
+  private routeLowerThirdUrl(url: string, sourceName: string): string {
+    if (!this._ltPerTabSources || /[?&]mceSource=/.test(url.split("#")[0])) return url;
+    return this.buildSceneRouteOverlayUrl(url, sourceName);
+  }
+
+  /**
+   * Empty a lower-third page and give OBS a moment to draw that empty frame. OBS shows a
+   * hidden browser source's last picture again when it is turned back on, so hiding it
+   * while an exit is still playing brings the old graphic back on the next Send.
+   */
+  private async emptyLowerThirdPage(sourceName: string): Promise<void> {
+    try {
+      const cleared = await this.emitBrowserOverlayPacket("lower-third", { action: "clear", timestamp: Date.now() }, "", sourceName);
+      if (cleared) await this.sleep(LT_EMPTY_FRAME_MS);
+    } catch { /* hiding still goes ahead */ }
   }
 
   async pushBibleToScene(
@@ -9118,6 +9208,18 @@ export class DockObsClient {
     const baseUrl = this.buildCssOverlayHtmlUrlForTab("notes", sourceName);
 
     if (await this.keepLoadedCssOverlaySourceStable(sourceName, "notes", packet, baseUrl, themeCss)) {
+      // The page is already loaded, so nothing was sent. A background change still has to reach it:
+      // a theme-only packet (no words) updates the look without putting anything on the screen.
+      if (backgroundOnly) {
+        this.publishFullscreenOverlayPacket({
+          slide: null,
+          theme: cleanSettings ?? null,
+          live: true,
+          blanked: false,
+          timestamp: Number(packet.timestamp) || Date.now(),
+          mode,
+        }, "notes", themeCss, sourceName);
+      }
       return;
     }
 
@@ -9414,25 +9516,29 @@ export class DockObsClient {
    */
   async pushLowerThirdOverlayUrl(
     url: string,
-    options?: { sourceWidth?: number; sourceHeight?: number },
+    options?: { sourceWidth?: number; sourceHeight?: number; sourceName?: string },
   ): Promise<void> {
     const resources = getDockResources();
+    const ltSource = options?.sourceName ?? resources.ltSource;
+    url = this.routeLowerThirdUrl(url, ltSource);
     const target = await this.getPresentationTargetScene("lower-third");
     const sceneName = target.sceneName;
     if (!sceneName) throw new Error("Could not determine the MCE Presentation scene.");
 
     await this.ensureProgramSceneAsSourceInPresentation();
-    await this.clearAllOverlays(resources.ltSource, sceneName, resources);
-    await this.ensureOverlaySource(
+    await this.clearAllOverlays(ltSource, sceneName, resources);
+    // Give the source its new page before turning it on: turned on first, OBS would show
+    // whatever the previous graphic left behind until the new page loads.
+    const sceneItemId = await this.ensureOverlaySource(
       sceneName,
-      resources.ltSource,
+      ltSource,
       options?.sourceWidth,
       options?.sourceHeight,
-      true,
+      "keep",
     );
 
     await this.call("SetInputSettings", {
-      inputName: resources.ltSource,
+      inputName: ltSource,
       inputSettings: {
         url,
         width: options?.sourceWidth,
@@ -9443,16 +9549,18 @@ export class DockObsClient {
         restart_when_active: false,
       },
     });
-    this._lastBrowserSourceUrlBySource[resources.ltSource] = url;
+    await this.call("SetSceneItemEnabled", { sceneName, sceneItemId, sceneItemEnabled: true }).catch(() => { });
+    this.invalidateSceneItemListCache(sceneName);
+    this._lastBrowserSourceUrlBySource[ltSource] = url;
     const parsed = this.parseOverlayPayloadUrl(url);
     if (parsed) {
-      this._lastCssOverlayPacketBySource[resources.ltSource] = parsed.payload;
-      this._lastCssOverlayBaseUrlBySource[resources.ltSource] = parsed.baseUrl;
-      this._lastCssOverlayThemeCssBySource[resources.ltSource] = "";
+      this._lastCssOverlayPacketBySource[ltSource] = parsed.payload;
+      this._lastCssOverlayBaseUrlBySource[ltSource] = parsed.baseUrl;
+      this._lastCssOverlayThemeCssBySource[ltSource] = "";
     }
 
-    await this.ensureTickerAboveSource(sceneName, resources.ltSource).catch(() => { });
-    await this.applyMcePresentationSourceVisibility(resources.ltSource).catch(() => { });
+    await this.ensureTickerAboveSource(sceneName, ltSource).catch(() => { });
+    await this.applyMcePresentationSourceVisibility(ltSource).catch(() => { });
   }
 
   /**
@@ -9462,10 +9570,14 @@ export class DockObsClient {
    */
   async replaceLiveLowerThirdOverlayUrl(
     url: string,
-    options?: { sourceWidth?: number; sourceHeight?: number },
+    options?: { sourceWidth?: number; sourceHeight?: number; sourceName?: string },
     waitMs = FULLSCREEN_CLEAR_WAIT_MS,
   ): Promise<void> {
     const resources = getDockResources();
+    const ltSource = options?.sourceName ?? resources.ltSource;
+    // With a source per tab, packets go to this tab's page only.
+    const packetTarget = this._ltPerTabSources ? ltSource : undefined;
+    url = this.routeLowerThirdUrl(url, ltSource);
     const target = await this.getPresentationTargetScene("lower-third");
     const sceneName = target.sceneName;
     if (!sceneName) throw new Error("Could not determine the MCE Presentation scene.");
@@ -9473,10 +9585,10 @@ export class DockObsClient {
     await this.ensureProgramSceneAsSourceInPresentation();
 
     const parsed = this.parseOverlayPayloadUrl(url);
-    const existing = await this.getSceneItemBySource(sceneName, resources.ltSource).catch(() => null);
+    const existing = await this.getSceneItemBySource(sceneName, ltSource).catch(() => null);
     if (!parsed || !existing) {
       if (existing) {
-        await this.animateLowerThirdOverlayUrlOut("", waitMs, { restoreProgram: false });
+        await this.animateLowerThirdOverlayUrlOut("", waitMs, { restoreProgram: false, sourceName: options?.sourceName });
       }
       await this.pushLowerThirdOverlayUrl(url, options);
       return;
@@ -9487,8 +9599,8 @@ export class DockObsClient {
       sceneItemId: existing.sceneItemId,
       sceneItemEnabled: true,
     }).catch(() => { });
-    await this.ensureTickerAboveSource(sceneName, resources.ltSource).catch(() => { });
-    await this.applyMcePresentationSourceVisibility(resources.ltSource).catch(() => { });
+    await this.ensureTickerAboveSource(sceneName, ltSource).catch(() => { });
+    await this.applyMcePresentationSourceVisibility(ltSource).catch(() => { });
 
     const nextPacket = {
       ...parsed.payload,
@@ -9503,22 +9615,22 @@ export class DockObsClient {
       const exitDelivered = await this.emitBrowserOverlayPacket("lower-third", {
         action: "animate-out",
         timestamp: Date.now(),
-      }, "");
+      }, "", packetTarget);
       nextPacket.timestamp = Date.now();
-      delivered = exitDelivered && await this.emitBrowserOverlayPacket("lower-third", nextPacket, overlayCss);
+      delivered = exitDelivered && await this.emitBrowserOverlayPacket("lower-third", nextPacket, overlayCss, packetTarget);
     } catch {
       delivered = false;
     }
 
     if (!delivered) {
-      await this.animateLowerThirdOverlayUrlOut("", waitMs, { restoreProgram: false });
+      await this.animateLowerThirdOverlayUrlOut("", waitMs, { restoreProgram: false, sourceName: options?.sourceName });
       await this.pushLowerThirdOverlayUrl(url, options);
       return;
     }
 
     try {
       await this.call("SetInputSettings", {
-        inputName: resources.ltSource,
+        inputName: ltSource,
         // Persist both transports. OBS can refresh the browser source when its
         // CSS changes; leaving the old URL here would bring the previous size
         // back after the live packet briefly renders.
@@ -9526,10 +9638,10 @@ export class DockObsClient {
       });
     } catch { /* keep the live event result */ }
 
-    this._lastBrowserSourceUrlBySource[resources.ltSource] = url;
-    this._lastCssOverlayPacketBySource[resources.ltSource] = nextPacket;
-    this._lastCssOverlayBaseUrlBySource[resources.ltSource] = parsed.baseUrl;
-    this._lastCssOverlayThemeCssBySource[resources.ltSource] = "";
+    this._lastBrowserSourceUrlBySource[ltSource] = url;
+    this._lastCssOverlayPacketBySource[ltSource] = nextPacket;
+    this._lastCssOverlayBaseUrlBySource[ltSource] = parsed.baseUrl;
+    this._lastCssOverlayThemeCssBySource[ltSource] = "";
   }
 
   /**
@@ -9895,9 +10007,12 @@ export class DockObsClient {
   async animateLowerThirdOverlayUrlOut(
     _url: string,
     waitMs = FULLSCREEN_CLEAR_WAIT_MS,
-    options?: { restoreProgram?: boolean },
+    options?: { restoreProgram?: boolean; sourceName?: string },
   ): Promise<void> {
     const resources = getDockResources();
+    const ltSource = options?.sourceName ?? resources.ltSource;
+    // With a source per tab, only this tab's lower third goes out.
+    const onlyThisSource = this._ltPerTabSources;
     const scenes = new Set<string>();
     scenes.add(DOCK_PRESENTATION_SCENE);
     try {
@@ -9910,11 +10025,11 @@ export class DockObsClient {
     } catch { /* ignore */ }
 
     // BroadcastChannel message for local/embedded browser sources
-    try {
+    if (!onlyThisSource) try {
       const bc1 = new BroadcastChannel("ocs-lower-third");
       bc1.postMessage({ type: "animate-out", action: "animate-out", timestamp: Date.now() });
       bc1.close();
-      const bc2 = new BroadcastChannel(`ocs-lower-third:${resources.ltSource}`);
+      const bc2 = new BroadcastChannel(`ocs-lower-third:${ltSource}`);
       bc2.postMessage({ type: "animate-out", action: "animate-out", timestamp: Date.now() });
       bc2.close();
     } catch { /* ignore */ }
@@ -9924,8 +10039,8 @@ export class DockObsClient {
       const deliveredSpecific = await this.emitBrowserOverlayPacket("lower-third", {
         action: "animate-out",
         timestamp: Date.now(),
-      }, "", resources.ltSource);
-      const deliveredGlobal = await this.emitBrowserOverlayPacket("lower-third", {
+      }, "", ltSource);
+      const deliveredGlobal = !onlyThisSource && await this.emitBrowserOverlayPacket("lower-third", {
         action: "animate-out",
         timestamp: Date.now(),
       }, "");
@@ -9936,14 +10051,14 @@ export class DockObsClient {
 
     if (!delivered) {
       try {
-        const exitUrl = _url || await this.buildBlankedOverlayUrlFromCurrentSource(resources.ltSource, "");
+        const exitUrl = _url || await this.buildBlankedOverlayUrlFromCurrentSource(ltSource, "");
         if (!exitUrl) {
           throw new Error("No current lower-third payload is available for exit animation.");
         }
         const parsed = this.parseOverlayPayloadUrl(exitUrl);
         const overlayCss = parsed ? this.buildCssOverlayDataCss({ ...parsed.payload, blanked: true, action: "animate-out" }, "") : "";
         await this.call("SetInputSettings", {
-          inputName: resources.ltSource,
+          inputName: ltSource,
           inputSettings: {
             url: exitUrl,
             css: overlayCss,
@@ -9954,7 +10069,7 @@ export class DockObsClient {
             fps: 60,
           },
         });
-        this._lastBrowserSourceUrlBySource[resources.ltSource] = exitUrl;
+        this._lastBrowserSourceUrlBySource[ltSource] = exitUrl;
         delivered = true;
       } catch {
         delivered = false;
@@ -9963,7 +10078,7 @@ export class DockObsClient {
 
     if (delivered) {
       for (const sceneName of scenes) {
-        const item = await this.getSceneItemBySource(sceneName, resources.ltSource).catch(() => null);
+        const item = await this.getSceneItemBySource(sceneName, ltSource).catch(() => null);
         if (!item) continue;
         await this.call("SetSceneItemEnabled", {
           sceneName,
@@ -9973,20 +10088,21 @@ export class DockObsClient {
       }
     }
 
-    await this.sleep(delivered ? waitMs : 0);
+    await this.sleep(delivered ? Math.max(waitMs, LT_EXIT_SETTLE_MS) : 0);
+    if (delivered) await this.emptyLowerThirdPage(ltSource);
 
     // Hide only: the lower-third source stays in the scene (no delete / re-create
     // on the next send).
     for (const sceneName of scenes) {
-      await this.hideOverlaySource(sceneName, resources.ltSource);
+      await this.hideOverlaySource(sceneName, ltSource);
       await this.hideFullscreenBg(sceneName, resources);
     }
 
-    delete this._lastOverlayMode[resources.ltSource];
-    delete this._lastFullscreenSourceSignature[resources.ltSource];
-    delete this._lastCssOverlayPacketBySource[resources.ltSource];
-    delete this._lastCssOverlayBaseUrlBySource[resources.ltSource];
-    delete this._lastCssOverlayThemeCssBySource[resources.ltSource];
+    delete this._lastOverlayMode[ltSource];
+    delete this._lastFullscreenSourceSignature[ltSource];
+    delete this._lastCssOverlayPacketBySource[ltSource];
+    delete this._lastCssOverlayBaseUrlBySource[ltSource];
+    delete this._lastCssOverlayThemeCssBySource[ltSource];
 
     if (options?.restoreProgram !== false) {
       await this.restoreProgramSceneBeforePush("lower-third");

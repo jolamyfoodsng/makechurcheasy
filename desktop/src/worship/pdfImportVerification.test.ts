@@ -45,7 +45,7 @@ describe("Worship PDF Import Verification", () => {
     console.log("Generated slides count for Song 1:", slides.length);
     console.log("Slide 1 content:", slides[0].content);
 
-    expect(result.songs.length).toBe(455);
+    expect(result.songs.length).toBe(457);
     expect(slides.length).toBeGreaterThan(0);
     expect(slides[0].content.trim().length).toBeGreaterThan(0);
     expect(slides[0].label).toBeTruthy();

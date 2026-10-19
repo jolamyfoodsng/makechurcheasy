@@ -212,7 +212,8 @@ export default function MixPanel({ layers, media, logoUrl, onChange, onToggle, l
     </div>
   );
 
-  const front = layers.filter((l) => !isBackdrop(l));
+  // The Ministry tools (ticker, countdown, clock) are run from their own tab.
+  const front = layers.filter((l) => !isBackdrop(l) && l.kind !== "page");
   const back = layers.filter(isBackdrop);
 
   return (

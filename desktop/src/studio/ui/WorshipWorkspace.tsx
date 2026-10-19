@@ -5,10 +5,11 @@
  *  Right  the open song's sections (Verse 1, Chorus, Bridge…). Click = Preview,
  *         double-click = Project, right-click = more.
  *
- * Songs are added and edited on the Worship page (New / Edit open it).
+ * Songs are added and edited on the Worship page (New / Edit open it); Import document
+ * opens the document song import.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { CalendarPlus, Eye, Music, Pencil, Play, Plus, Search, Star, X } from "../../components/icons/NativeIcons";
+import { CalendarPlus, Eye, FileUp, Music, Pencil, Play, Plus, Search, Star, X } from "../../components/icons/NativeIcons";
 import type { Song } from "../../worship/types";
 import { toneStyle, type DeckSlide } from "../studioSlides";
 import { lineStats, songLineStats } from "../../worship/lyricTools";
@@ -58,6 +59,7 @@ interface WorshipWorkspaceProps {
   onScheduleSection: (index: number) => void;
   onScheduleSong: () => void;
   onNewSong: () => void;
+  onImportSongs: () => void;
   onEditSong: (id: string) => void;
   /** Lines per slide + Translate row, shown above the sections. */
   tools?: ReactNode;
@@ -156,8 +158,9 @@ export default function WorshipWorkspace(props: WorshipWorkspaceProps) {
             </div>
           ))}
         </div>
-        <div className="st-lib__foot">
+        <div className="st-lib__foot st-lib__foot--pair">
           <button type="button" className="studio-btn" onClick={props.onNewSong}><Plus size={13} /> New song</button>
+          <button type="button" className="studio-btn" onClick={props.onImportSongs} title="Import songs from a PDF, Word, PowerPoint or text file"><FileUp size={13} /> Import document</button>
         </div>
       </div>
 

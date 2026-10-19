@@ -12,6 +12,7 @@ import type {
 import { ensureObsConnected } from "../obsConnectionGuard";
 import Icon from "../DockIcon";
 import "./DockSceneRoutingControl.css";
+import "./DockSceneRouteSendControl.css";
 import { useDockOutputTarget } from "../dockOutputTargetContext";
 
 interface Props {
@@ -23,6 +24,8 @@ interface Props {
   placement?: "above" | "below";
   showLabel?: boolean;
   iconName?: string;
+  itemLabel?: string;
+  onSend?: (options?: { bypassSceneRoute?: boolean }) => void | Promise<void>;
 }
 
 /** OBS scene routing ("Output → Send to another scene"). Hidden when the Dock drives the Presentation link / Studio. */
@@ -41,9 +44,12 @@ function DockSceneRoutingControlInner({
   placement = "below",
   showLabel = false,
   iconName = "settings",
+  itemLabel,
+  onSend,
 }: Props) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [scenes, setScenes] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -51,6 +57,57 @@ function DockSceneRoutingControlInner({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number } | null>(null);
+
+  const targets = route.targets ?? [];
+  const targetCount = targets.length;
+  const isMulti = targetCount > 1;
+  const primarySceneName = targets[0]?.sceneName ?? "";
+  const hasActiveRoute = Boolean(route.enabled && targetCount > 0);
+  const targetSummary = targets.map((t) => t.sceneName).filter(Boolean).join(", ");
+  const badgeText = targetCount === 0 ? "" : targetCount === 1 ? primarySceneName : `${targetCount} Scenes`;
+
+  const confirmTitle = isMulti
+    ? t("sceneRouting.sendToConfirmTitleMulti", "Send to {{count}} target scenes?", { count: targetCount })
+    : t("sceneRouting.sendToConfirmTitleSingle", "Send to {{scene}}?", { scene: primarySceneName });
+
+  const confirmDesc = isMulti
+    ? (itemLabel
+      ? t("sceneRouting.sendToConfirmDescMultiCustom", "Your {{item}} is currently set to project to {{count}} scenes:", { item: itemLabel, count: targetCount })
+      : t("sceneRouting.sendToConfirmDescMulti", "Currently set to project to {{count}} scenes:", { count: targetCount }))
+    : (itemLabel
+      ? t("sceneRouting.sendToConfirmDescSingleCustom", "Your {{item}} is currently set to project to {{scene}}.", { item: itemLabel, scene: primarySceneName })
+      : t("sceneRouting.sendToConfirmDescSingleContent", "Currently set to project to {{scene}}.", { scene: primarySceneName }));
+
+  const sendToTargetLabel = isMulti
+    ? t("sceneRouting.sendToTargetOptionMulti", "Yes, send to all {{count}} scenes", { count: targetCount })
+    : t("sceneRouting.sendToTargetOptionSingle", "Yes, send to {{scene}}", { scene: primarySceneName });
+
+  const sendToTargetSub = isMulti
+    ? t("sceneRouting.sendToTargetSubMulti", "Projects to {{scenes}}", { scenes: targetSummary })
+    : t("sceneRouting.sendToTargetSubSingle", "Projects to {{scene}}", { scene: primarySceneName });
+
+  const sendToMceSub = isMulti
+    ? t("sceneRouting.sendToMceAloneSubMulti", "Turns off target scenes and sends to presentation")
+    : t("sceneRouting.sendToMceAloneSubSingle", "Turns off {{scene}} and sends to presentation", { scene: primarySceneName });
+
+  const handleConfirmRouted = () => {
+    setOpen(false);
+    if (onSend) void onSend({ bypassSceneRoute: false });
+  };
+
+  const handleSendToMceAlone = () => {
+    setOpen(false);
+    onRouteChange({ enabled: false });
+    void Promise.allSettled(route.targets.map((t) => (
+      dockObsClient.clearSceneRouteSource(module, t.sceneName)
+    )));
+    if (onSend) void onSend({ bypassSceneRoute: true });
+  };
+
+  const handleOpenAdvanced = () => {
+    setShowAdvancedSettings(true);
+    void loadScenes();
+  };
 
   const loadScenes = useCallback(async () => {
     if (disabled) return;
@@ -86,8 +143,10 @@ function DockSceneRoutingControlInner({
   }, [disabled, onRouteChange, route.enabled, route.targets.length, t]);
 
   useEffect(() => {
-    if (open) void loadScenes();
-  }, [loadScenes, open]);
+    if (open && (!hasActiveRoute || showAdvancedSettings)) {
+      void loadScenes();
+    }
+  }, [hasActiveRoute, loadScenes, open, showAdvancedSettings]);
 
   useEffect(() => {
     if (!open) return;
@@ -253,8 +312,11 @@ function DockSceneRoutingControlInner({
       <button
         type="button"
         ref={triggerRef}
-        className={`dock-btm-toolbar__icon-btn${route.enabled ? " dock-btm-toolbar__icon-btn--active" : ""}${showLabel ? " dock-scene-routing-control__trigger--labelled" : ""}`}
-        onClick={() => setOpen((value) => !value)}
+        className={`dock-btm-toolbar__icon-btn${route.enabled ? " dock-btm-toolbar__icon-btn--active" : ""}${showLabel ? " dock-scene-routing-control__trigger--labelled" : ""}${hasActiveRoute ? " dock-scene-route-send-btn--routed" : ""}`}
+        onClick={() => {
+          setShowAdvancedSettings(false);
+          setOpen((value) => !value);
+        }}
         aria-label={label}
         aria-expanded={open}
         aria-haspopup="dialog"
@@ -262,6 +324,19 @@ function DockSceneRoutingControlInner({
       >
         <Icon name={iconName} size={14} />
         {showLabel && <span>{label}</span>}
+        {hasActiveRoute && (
+          <>
+            <span className="dock-scene-route-send-btn__route-badge" title={targetSummary}>
+              <Icon name="alt_route" size={11} />
+              <span className="dock-scene-route-send-btn__route-text">{badgeText}</span>
+            </span>
+            <Icon
+              name={open ? "expand_more" : "expand_less"}
+              size={13}
+              className="dock-scene-route-send-btn__arrow"
+            />
+          </>
+        )}
       </button>
 
       {open && typeof document !== "undefined" && createPortal(
@@ -282,117 +357,217 @@ function DockSceneRoutingControlInner({
             boxSizing: "border-box",
             padding: 12,
             border: "1px solid var(--dock-border)",
-            borderRadius: 8,
+            borderRadius: 10,
             background: "var(--dock-surface)",
-            boxShadow: "0 10px 28px rgba(0, 0, 0, 0.28)",
+            boxShadow: "0 12px 32px rgba(0, 0, 0, 0.45)",
             color: "var(--dock-text)",
             visibility: popoverPosition ? "visible" : "hidden",
           }}
         >
-          <div className="dock-scene-routing-popover">
-            <div className="dock-scene-routing-popover__head">
-              <div>
-                <div className="dock-scene-routing-popover__title">{label}</div>
-                <div className="dock-scene-routing-popover__sub">
-                  {t("sceneRouting.independentHint", "Separate OBS output.")}
+          {hasActiveRoute && !showAdvancedSettings ? (
+            <div className="dock-scene-route-send-menu">
+              {/* Header */}
+              <div className="dock-scene-route-send-menu__head">
+                <div className="dock-scene-route-send-menu__badge-row">
+                  <div className="dock-scene-route-send-menu__title">
+                    {confirmTitle}
+                  </div>
+                  <button
+                    type="button"
+                    className="dock-btn dock-btn--ghost dock-btn--compact dock-scene-route-send-menu__close"
+                    onClick={() => setOpen(false)}
+                    title={t("common.close", "Close")}
+                    aria-label={t("common.close", "Close")}
+                  >
+                    <Icon name="close" size={14} />
+                  </button>
                 </div>
+                <div className="dock-scene-route-send-menu__desc">
+                  {confirmDesc}
+                </div>
+                {isMulti && (
+                  <div className="dock-scene-route-send-menu__scenes-list">
+                    {targets.map((t) => (
+                      <span key={t.sceneName} className="dock-scene-route-send-menu__scene-tag">
+                        <Icon name="check" size={11} /> {t.sceneName}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
+
+              {/* Option 1: Yes, send to target scene(s) */}
               <button
                 type="button"
-                className="dock-btn dock-btn--ghost dock-btn--compact dock-scene-routing-popover__refresh"
-                onClick={() => void loadScenes()}
-                disabled={loading}
-                title={t("common.refresh", "Refresh scenes")}
-                aria-label={t("common.refresh", "Refresh scenes")}
+                className="dock-btn dock-scene-route-send-menu__action-btn dock-scene-route-send-menu__action-btn--routed"
+                onClick={handleConfirmRouted}
+                title={sendToTargetLabel}
               >
-                <Icon name="refresh" size={14} />
+                <div className="dock-scene-route-send-menu__btn-main">
+                  <Icon name="play_arrow" size={14} />
+                  <span>{sendToTargetLabel}</span>
+                </div>
+                <div className="dock-scene-route-send-menu__btn-sub">
+                  {sendToTargetSub}
+                </div>
               </button>
-            </div>
 
-            <label className={`dock-scene-routing-control__toggle${draftRoute.enabled ? " is-on" : ""}`}>
-              <input
-                type="checkbox"
-                className="dock-scene-routing-control__check"
-                checked={draftRoute.enabled}
-                onChange={(event) => handleRouteEnabledChange(event.target.checked)}
-              />
-              <span className="dock-scene-routing-control__toggle-copy">
-                <span className="dock-scene-routing-control__label">{t("sceneRouting.sendToScene", "Send to another scene")}</span>
-                <small>{t("sceneRouting.sendToSceneHint", "Use the selected scene.")}</small>
-              </span>
-            </label>
+              {/* Option 2: No, send to MCE Presentation alone */}
+              <button
+                type="button"
+                className="dock-btn dock-scene-route-send-menu__action-btn dock-scene-route-send-menu__action-btn--disable"
+                onClick={handleSendToMceAlone}
+                title={t("sceneRouting.sendToMceAlone", "No, send to MCE Presentation alone")}
+              >
+                <div className="dock-scene-route-send-menu__btn-main">
+                  <Icon name="desktop_windows" size={15} />
+                  <span>{t("sceneRouting.sendToMceAlone", "No, send to MCE Presentation alone")}</span>
+                </div>
+                <div className="dock-scene-route-send-menu__btn-sub">
+                  {sendToMceSub}
+                </div>
+              </button>
 
-            <div className="dock-scene-routing-control__section">
-              <div className="dock-scene-routing-control__section-head">
-                <span>{t("sceneRouting.targetScenes", "Target scenes")}</span>
-                <span className="dock-scene-routing-control__count">{selectedTargets.length}</span>
+              {/* Option 3: Configure target scenes */}
+              <button
+                type="button"
+                className="dock-btn dock-btn--ghost dock-btn--compact"
+                style={{ justifyContent: "flex-start", padding: "6px 8px", fontSize: 11.5, color: "var(--dock-text-dim)" }}
+                onClick={handleOpenAdvanced}
+              >
+                <Icon name="settings" size={13} />
+                <span>{t("sceneRouting.configureTargets", "Configure target scenes & settings...")}</span>
+              </button>
+
+              {/* Footer */}
+              <div className="dock-scene-route-send-menu__footer">
+                <button
+                  type="button"
+                  className="dock-btn dock-btn--ghost dock-btn--compact"
+                  style={{ fontSize: 11, color: "var(--dock-text-dim)" }}
+                  onClick={() => setOpen(false)}
+                >
+                  {t("common.cancel", "Cancel")}
+                </button>
               </div>
-              <div className="dock-scene-routing-control__scene-list" role="group" aria-label={t("sceneRouting.targetScenes", "Target scenes")}>
-                {scenes.length === 0 ? (
-                  <div className="dock-scene-routing-control__empty">
-                    {loading ? t("media.loadingScenes", "Loading scenes…") : t("media.noScenesAvailable", "No scenes available")}
+            </div>
+          ) : (
+            <div className="dock-scene-routing-popover">
+              {hasActiveRoute && (
+                <button
+                  type="button"
+                  className="dock-btn dock-btn--ghost dock-btn--compact"
+                  style={{ fontSize: 11, padding: "2px 6px", alignSelf: "flex-start", marginBottom: 6 }}
+                  onClick={() => setShowAdvancedSettings(false)}
+                >
+                  <Icon name="arrow_back" size={12} />
+                  <span>{t("common.back", "Back")}</span>
+                </button>
+              )}
+              <div className="dock-scene-routing-popover__head">
+                <div>
+                  <div className="dock-scene-routing-popover__title">{label}</div>
+                  <div className="dock-scene-routing-popover__sub">
+                    {t("sceneRouting.independentHint", "Separate OBS output.")}
                   </div>
-                ) : scenes.map((sceneName) => {
-                  const target = selectedTargetByScene.get(sceneName);
-                  return (
-                    <div key={sceneName} className={`dock-scene-routing-control__scene-row${target ? " is-selected" : ""}`}>
-                      <label className="dock-scene-routing-control__scene-check">
-                        <input
-                          type="checkbox"
-                          className="dock-scene-routing-control__check"
-                          checked={Boolean(target)}
-                          disabled={loading}
-                          onChange={(event) => handleTargetToggle(sceneName, event.target.checked)}
-                        />
-                        <span title={sceneName}>{sceneName}</span>
-                      </label>
-                      {supportsFormatOverrides && target && (
-                        <select
-                          className="dock-scene-routing-control__mode-select"
-                          value={target.mode}
-                          aria-label={`${sceneName} ${t("sceneRouting.outputFormat", "output format")}`}
-                          onChange={(event) => handleTargetModeChange(sceneName, event.target.value as DockSceneOutputMode)}
-                        >
-                          {formatOptions.map((option) => (
-                            <option key={option.value} value={option.value}>{option.label}</option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
-                  );
-                })}
+                </div>
+                <button
+                  type="button"
+                  className="dock-btn dock-btn--ghost dock-btn--compact dock-scene-routing-popover__refresh"
+                  onClick={() => void loadScenes()}
+                  disabled={loading}
+                  title={t("common.refresh", "Refresh scenes")}
+                  aria-label={t("common.refresh", "Refresh scenes")}
+                >
+                  <Icon name="refresh" size={14} />
+                </button>
               </div>
-              <small className="dock-scene-routing-control__hint">
-                {supportsFormatOverrides
-                  ? t("sceneRouting.targetScenesHint", "Select one or more scenes and choose how each one should receive this content.")
-                  : t("sceneRouting.targetScenesSimpleHint", "Select one or more scenes for this output.")}
-              </small>
+
+              <label className={`dock-scene-routing-control__toggle${draftRoute.enabled ? " is-on" : ""}`}>
+                <input
+                  type="checkbox"
+                  className="dock-scene-routing-control__check"
+                  checked={draftRoute.enabled}
+                  onChange={(event) => handleRouteEnabledChange(event.target.checked)}
+                />
+                <span className="dock-scene-routing-control__toggle-copy">
+                  <span className="dock-scene-routing-control__label">{t("sceneRouting.sendToScene", "Send to another scene")}</span>
+                  <small>{t("sceneRouting.sendToSceneHint", "Use the selected scene.")}</small>
+                </span>
+              </label>
+
+              <div className="dock-scene-routing-control__section">
+                <div className="dock-scene-routing-control__section-head">
+                  <span>{t("sceneRouting.targetScenes", "Target scenes")}</span>
+                  <span className="dock-scene-routing-control__count">{selectedTargets.length}</span>
+                </div>
+                <div className="dock-scene-routing-control__scene-list" role="group" aria-label={t("sceneRouting.targetScenes", "Target scenes")}>
+                  {scenes.length === 0 ? (
+                    <div className="dock-scene-routing-control__empty">
+                      {loading ? t("media.loadingScenes", "Loading scenes…") : t("media.noScenesAvailable", "No scenes available")}
+                    </div>
+                  ) : scenes.map((sceneName) => {
+                    const target = selectedTargetByScene.get(sceneName);
+                    return (
+                      <div key={sceneName} className={`dock-scene-routing-control__scene-row${target ? " is-selected" : ""}`}>
+                        <label className="dock-scene-routing-control__scene-check">
+                          <input
+                            type="checkbox"
+                            className="dock-scene-routing-control__check"
+                            checked={Boolean(target)}
+                            disabled={loading}
+                            onChange={(event) => handleTargetToggle(sceneName, event.target.checked)}
+                          />
+                          <span title={sceneName}>{sceneName}</span>
+                        </label>
+                        {supportsFormatOverrides && target && (
+                          <select
+                            className="dock-scene-routing-control__mode-select"
+                            value={target.mode}
+                            aria-label={`${sceneName} ${t("sceneRouting.outputFormat", "output format")}`}
+                            onChange={(event) => handleTargetModeChange(sceneName, event.target.value as DockSceneOutputMode)}
+                          >
+                            {formatOptions.map((option) => (
+                              <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <small className="dock-scene-routing-control__hint">
+                  {supportsFormatOverrides
+                    ? t("sceneRouting.targetScenesHint", "Select one or more scenes and choose how each one should receive this content.")
+                    : t("sceneRouting.targetScenesSimpleHint", "Select one or more scenes for this output.")}
+                </small>
+              </div>
+
+              <label className="dock-scene-routing-control__sync">
+                <input
+                  type="checkbox"
+                  className="dock-scene-routing-control__check"
+                  checked={draftRoute.syncPresentation}
+                  onChange={(event) => setDraftRoute((current) => ({ ...current, syncPresentation: event.target.checked }))}
+                />
+                <span className="dock-scene-routing-control__toggle-copy">
+                  <span className="dock-scene-routing-control__label">{t("sceneRouting.syncMce", "Also update MCE Presentation")}</span>
+                  <small>{t("sceneRouting.syncMceHint", "Update both outputs.")}</small>
+                </span>
+              </label>
+
+              {error && <div className="dock-scene-routing-popover__error">{error}</div>}
+
+              <div className="dock-scene-routing-popover__footer">
+                <button type="button" className="dock-btn dock-btn--secondary dock-btn--compact" onClick={handleCancel}>
+                  {t("common.cancel", "Cancel")}
+                </button>
+                <button type="button" className="dock-btn dock-btn--primary dock-btn--compact" onClick={handleSave}>
+                  {t("common.save", "Save")}
+                </button>
+              </div>
             </div>
-
-            <label className="dock-scene-routing-control__sync">
-              <input
-                type="checkbox"
-                className="dock-scene-routing-control__check"
-                checked={draftRoute.syncPresentation}
-                onChange={(event) => setDraftRoute((current) => ({ ...current, syncPresentation: event.target.checked }))}
-              />
-              <span className="dock-scene-routing-control__toggle-copy">
-                <span className="dock-scene-routing-control__label">{t("sceneRouting.syncMce", "Also update MCE Presentation")}</span>
-                <small>{t("sceneRouting.syncMceHint", "Update both outputs.")}</small>
-              </span>
-            </label>
-
-            {error && <div className="dock-scene-routing-popover__error">{error}</div>}
-
-            <div className="dock-scene-routing-popover__footer">
-              <button type="button" className="dock-btn dock-btn--secondary dock-btn--compact" onClick={handleCancel}>
-                {t("common.cancel", "Cancel")}
-              </button>
-              <button type="button" className="dock-btn dock-btn--primary dock-btn--compact" onClick={handleSave}>
-                {t("common.save", "Save")}
-              </button>
-            </div>
-          </div>
+          )}
         </div>,
         document.body,
       )}

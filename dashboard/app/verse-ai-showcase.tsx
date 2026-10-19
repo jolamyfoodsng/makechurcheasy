@@ -9,7 +9,7 @@ export default function VerseAiShowcase() {
   const [activeTab, setActiveTab] = useState<1 | 2 | 3>(1);
 
   return (
-    <section className={`${styles.showcase} w-full bg-white relative overflow-hidden border-b border-slate-100`} id="verse-ai-showcase">
+    <section className={`${styles.showcase} w-full bg-white relative overflow-x-clip border-b border-slate-100`} id="verse-ai-showcase">
       <div className={styles.container}>
         {/* Section Header */}
         <header className={styles.header}>
@@ -37,12 +37,13 @@ export default function VerseAiShowcase() {
         <div className={`${styles.featureGrid} grid grid-cols-1 lg:grid-cols-12 items-start`}>
 
           {/* Left Navigation Tabs */}
-          <nav aria-label="Feature Tabs" className={`${styles.featureNav} lg:col-span-4 flex flex-col space-y-4`}>
+          <nav aria-label="Feature Tabs" className={`${styles.featureNav} lg:col-span-5 flex flex-col space-y-4`}>
 
             {/* Tab 1: Speech-to-Scripture */}
             <button
               type="button"
               onClick={() => setActiveTab(1)}
+              aria-pressed={activeTab === 1}
               className={`text-left w-full relative rounded-2xl p-5 sm:p-6 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00c7e5] cursor-pointer ${
                 activeTab === 1
                   ? "bg-[#f4f5f7] shadow-sm border border-slate-200/90"
@@ -80,6 +81,7 @@ export default function VerseAiShowcase() {
             <button
               type="button"
               onClick={() => setActiveTab(2)}
+              aria-pressed={activeTab === 2}
               className={`text-left w-full relative rounded-2xl p-5 sm:p-6 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00c7e5] cursor-pointer ${
                 activeTab === 2
                   ? "bg-[#f4f5f7] shadow-sm border border-slate-200/90"
@@ -117,6 +119,7 @@ export default function VerseAiShowcase() {
             <button
               type="button"
               onClick={() => setActiveTab(3)}
+              aria-pressed={activeTab === 3}
               className={`text-left w-full relative rounded-2xl p-5 sm:p-6 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00c7e5] cursor-pointer ${
                 activeTab === 3
                   ? "bg-[#f4f5f7] shadow-sm border border-slate-200/90"
@@ -153,7 +156,7 @@ export default function VerseAiShowcase() {
           </nav>
 
           {/* Right Column: Interactive Mockup Display with Scaled Fonts */}
-          <div className="lg:col-span-8 flex flex-col items-end w-full">
+          <div className={`${styles.visualColumn} order-first lg:order-none lg:col-span-7 flex flex-col items-end w-full`}>
 
             {/* Top Right Mini Navigation Indicator (Three Dots) */}
             <div className="flex items-center space-x-2.5 mb-3.5 mr-2">

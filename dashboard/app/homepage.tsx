@@ -8,6 +8,8 @@ import { MarketingHeader, MarketingFooter } from "./marketing-shell";
 import VerseAiShowcase from "./verse-ai-showcase";
 import HomepageFeatureShowcases from "./homepage-feature-showcases";
 import PricingContent from "./pricing/PricingContent";
+import ProofStrip from "./proof-strip";
+import StudioModeSection from "./studio-mode-section";
 
 const questions = [
   { q: "Can I compare Bible verses and translations inside OBS?", a: "Yes. MakeChurchEazy brings Bible reference search, verse comparison, and translation comparison into the OBS dock. Explore 10,000+ Bible translations, compare passages side by side, and update displayed scripture in real time. Scripture can appear full screen or as a lower third." },
@@ -61,8 +63,8 @@ export default function Homepage() {
     <main id="main">
       <section className={styles.hero}>
         <div className={styles.heroCopy}>
-          <h1>The Complete Church Presentation Dock.<br /><span>Built Directly Into OBS Studio.</span></h1>
-          <p className={styles.heroDescription}>Everything your church broadcasts, unified in one window: real-time Voice-to-Scripture AI, instant multi-version Bible comparisons, one-click worship setlists, animated lower thirds, and live countdowns. Pre-configured for your stream and projector with zero NDI lag and zero window juggling.</p>
+          <h1>Bible, lyrics and lower thirds.<br /><span>On your stream and in the room.</span></h1>
+          <p className={styles.heroDescription}>MakeChurchEazy works inside OBS Studio for your livestream, and sends scripture, worship lyrics and media straight to your projector or TV with Studio mode. No scenes to build, no window juggling.</p>
           <div className={styles.heroActions}>
             <Link href="/download" className={styles.downloadButton}>
               <Download size={17} /> Download for Free
@@ -71,10 +73,12 @@ export default function Homepage() {
               <Play size={14} fill="currentColor" /> Watch Demo
             </button>
           </div>
-          <p className={styles.platforms}><Monitor size={14} /> Mac &amp; Windows <span>·</span> 30-second setup <span>·</span> 100% Offline Sunday mode</p>
+          <p className={styles.platforms}><Monitor size={14} /> <b>Mac &amp; Windows</b> <span aria-hidden="true">·</span> <b>Set up in minutes</b> <span aria-hidden="true">·</span> <b>Bible &amp; lyrics work offline</b></p>
         </div>
         <div className={styles.heroProduct}><ProductView /></div>
       </section>
+
+      <ProofStrip />
 
       <VerseAiShowcase />
 
@@ -90,6 +94,8 @@ export default function Homepage() {
         </div>
 
       </section>
+
+      <StudioModeSection />
 
       <section id="features" className={styles.featuresSection} aria-labelledby="features-heading">
         <div className={styles.sectionHeading}><p className={styles.eyebrow}>FROM THE FIRST SONG TO THE FINAL AMEN</p><h2 id="features-heading">Everything you need.<br /><span>Right where you need it.</span></h2><p>Bible presentation, worship lyrics, media, lower thirds, tickers, countdowns, and multi-view layouts, all from your OBS workspace.</p></div>

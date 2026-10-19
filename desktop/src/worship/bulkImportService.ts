@@ -33,7 +33,9 @@ export async function extractTextFromFile(file: File): Promise<string> {
       return file.text();
     case "html":
     case "htm":
-      return extractMarkupText(await file.text());
+      return structuredMarkupText(await file.text());
+    case "rtf":
+      return extractRtfText(await file.text());
     case "odt":
     case "odp":
       return extractOpenDocumentText(file);
@@ -41,8 +43,14 @@ export async function extractTextFromFile(file: File): Promise<string> {
       return extractDocxText(file);
     case "pptx":
       return extractPptxText(file);
+    case "doc":
+    case "ppt":
+    case "pages":
+    case "key":
+    case "wps":
+      throw new Error(`.${ext} files can't be read directly. Open it and save it as ${ext === "ppt" || ext === "key" ? "PowerPoint (.pptx)" : "Word (.docx)"} or PDF, then import that file.`);
     default:
-      throw new Error(`Unsupported file type: .${ext}. Use PDF, DOCX, PPTX, ODT, ODP, HTML, Markdown, or TXT.`);
+      throw new Error(`Unsupported file type: .${ext}. Use PDF, DOCX, PPTX, ODT, ODP, RTF, HTML, Markdown, or TXT.`);
   }
 }
 
@@ -59,7 +67,8 @@ async function extractPdfText(file: File): Promise<string> {
   }
   if (!raw.trim()) throw new Error("This PDF contains no readable text. Scanned pages need OCR first; export a searchable PDF or paste the lyrics.");
   // Bilingual tables must reach their parser with both columns still aligned.
-  return normalizeExtractedLyricsText(raw);
+  // PDFs are the one source that wraps long lines, so only they get their halves joined back.
+  return normalizeExtractedLyricsText(raw, { joinWrappedLines: true });
 }
 
 function isBilingualHymnTable(text: string): boolean {
@@ -289,7 +298,7 @@ function isProtectedImportLine(line: string): boolean {
   return false;
 }
 
-function shouldJoinWrappedLine(previous: string, next: string): boolean {
+function shouldJoinWrappedLine(previous: string, next: string, linesStartCapitalised = false): boolean {
   const prev = normalizeExtractedLine(previous);
   const curr = normalizeExtractedLine(next);
   if (!prev || !curr) return false;
@@ -297,6 +306,9 @@ function shouldJoinWrappedLine(previous: string, next: string): boolean {
 
   if (/[\p{L}\p{M}]-$/u.test(prev) && startsWithLowercaseLetter(curr)) return true;
   if (/[.!?;]$/.test(prev)) return false;
+  // When (nearly) every lyric line starts with a capital, a capitalised line is a new line, not
+  // the tail of a wrapped one.
+  if (linesStartCapitalised && !startsWithLowercaseLetter(curr)) return false;
 
   const nextWords = countWords(curr);
   const prevLastWord = getLastWord(prev);
@@ -323,8 +335,14 @@ function appendJoinedLine(previous: string, next: string): string {
   return `${prev} ${curr}`;
 }
 
-export function normalizeExtractedLyricsText(text: string): string {
+/**
+ * Tidy extracted text: line endings, spaces and page breaks. With `joinWrappedLines` (PDFs only),
+ * a lyric line the page wrapped in two is joined back. Text from Word, PowerPoint, HTML or a text
+ * file already has real line breaks, so its lines are kept exactly as written.
+ */
+export function normalizeExtractedLyricsText(text: string, options: { joinWrappedLines?: boolean } = {}): string {
   if (isBilingualHymnTable(text)) return normalizeNfc(text).replace(/\r\n?/g, "\n");
+  const joinWrapped = options.joinWrappedLines === true;
   const pageBreakToken = "__MCE_PAGE_BREAK__";
   const normalized = normalizeNfc(text)
     .replace(/\r\n?/g, "\n")
@@ -332,6 +350,13 @@ export function normalizeExtractedLyricsText(text: string): string {
 
   const output: string[] = [];
   let pending = "";
+  // How this file starts its lines, judged only on lines that surely are line starts (after a
+  // blank line, a label or end punctuation), since wrapped tails would skew it.
+  const allLines = normalized.split("\n").map(normalizeExtractedLine);
+  const lineStarts = allLines.filter((line, i) => /^\P{L}*\p{L}/u.test(line)
+    && (i === 0 || !allLines[i - 1] || /[.,;:!?]$/.test(allLines[i - 1]) || isProtectedImportLine(allLines[i - 1])));
+  const capitalisedStarts = lineStarts.filter((line) => !startsWithLowercaseLetter(line)).length;
+  const linesStartCapitalised = lineStarts.length >= 6 && capitalisedStarts / lineStarts.length >= 0.85;
 
   const flushPending = () => {
     if (!pending) return;
@@ -362,7 +387,7 @@ export function normalizeExtractedLyricsText(text: string): string {
       continue;
     }
 
-    if (shouldJoinWrappedLine(pending, line)) {
+    if (joinWrapped && shouldJoinWrappedLine(pending, line, linesStartCapitalised)) {
       pending = appendJoinedLine(pending, line);
       continue;
     }
@@ -443,16 +468,97 @@ export function assessExtractedTextQuality(text: string): ExtractedTextQuality {
 
 async function extractDocxText(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
+  // As HTML, so headings (song titles), empty paragraphs (verse breaks) and soft line breaks survive.
+  let html: string;
   try {
-    const result = await mammoth.extractRawText({ arrayBuffer: buffer });
-    return result.value;
+    html = (await mammoth.convertToHtml({ arrayBuffer: buffer }, { ignoreEmptyParagraphs: false })).value;
   } catch (error) {
     // The browser Mammoth build accepts ArrayBuffer; the Node build used by
     // tests and desktop tooling accepts Buffer. Support both entrypoints.
     if (typeof Buffer === "undefined") throw error;
-    const result = await mammoth.extractRawText({ buffer: Buffer.from(buffer) });
-    return result.value;
+    html = (await mammoth.convertToHtml({ buffer: Buffer.from(buffer) }, { ignoreEmptyParagraphs: false })).value;
   }
+  return structuredMarkupText(html);
+}
+
+/**
+ * HTML (from Word, OpenDocument or a saved web page) as lyric text that keeps its shape:
+ * - a heading becomes "# Title", which the importer reads as the start of a song;
+ * - a line break inside a paragraph stays a line break;
+ * - when each paragraph is one line (how most people type songs in Word), paragraphs are the lines
+ *   of a verse and an empty paragraph is the gap between verses;
+ * - when paragraphs hold several lines each (a verse per paragraph), each paragraph is a verse.
+ */
+export function structuredMarkupText(markup: string): string {
+  const cleaned = markup
+    .replace(/<(script|style|head)\b[^>]*>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<!--[^]*?-->/g, "");
+  type Block = { kind: "heading" | "para"; lines: string[] };
+  const blocks: Block[] = [];
+  const blockRe = /<(h[1-6]|p|li|div|tr)\b[^>]*?(?:\/>|>([\s\S]*?)<\/\1>)/gi;
+  let match: RegExpExecArray | null;
+  let found = false;
+  while ((match = blockRe.exec(cleaned))) {
+    found = true;
+    const inner = (match[2] ?? "").replace(/<(?:br|line-break)\b[^>]*\/?>/gi, "\n");
+    const text = decodeXmlText(inner.replace(/<[^>]*>/g, "")).replace(/&nbsp;/g, " ").replace(/\u00a0/g, " ");
+    const lines = text.split("\n").map((line) => line.replace(/[ \t]+/g, " ").trim());
+    const kind = /^h/i.test(match[1]) ? "heading" : "para";
+    if (kind === "heading" && lines.join(" ").trim()) blocks.push({ kind, lines: [lines.join(" ").trim()] });
+    else if (kind === "para") blocks.push({ kind, lines: lines.filter((line, i) => line || i > 0) });
+  }
+  if (!found) return extractMarkupText(markup);
+  const paras = blocks.filter((b) => b.kind === "para" && b.lines.some(Boolean));
+  const versePerParagraph = paras.length > 0 && paras.filter((b) => b.lines.filter(Boolean).length > 1).length / paras.length >= 0.3;
+  const out: string[] = [];
+  const gap = () => { if (out.length && out[out.length - 1] !== "") out.push(""); };
+  for (const block of blocks) {
+    if (block.kind === "heading") {
+      gap();
+      out.push(`# ${block.lines[0]}`, "");
+      continue;
+    }
+    const lines = block.lines.filter(Boolean);
+    if (lines.length === 0) { gap(); continue; }
+    if (versePerParagraph) gap();
+    out.push(...lines);
+    if (versePerParagraph) gap();
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/** Removes RTF groups that hold no text (font and colour tables, styles, pictures, {\\* …}), braces balanced. */
+function stripRtfGroups(rtf: string): string {
+  const skip = /^\{\\(?:\*|fonttbl|colortbl|stylesheet|info|pict|header|footer|listtable|listoverridetable|generator)\b/;
+  let out = "";
+  for (let i = 0; i < rtf.length; i += 1) {
+    if (rtf[i] === "{" && rtf[i - 1] !== "\\" && skip.test(rtf.slice(i, i + 24))) {
+      let depth = 0;
+      for (; i < rtf.length; i += 1) {
+        if (rtf[i] === "\\") { i += 1; continue; }
+        if (rtf[i] === "{") depth += 1;
+        else if (rtf[i] === "}" && --depth === 0) break;
+      }
+      continue;
+    }
+    out += rtf[i];
+  }
+  return out;
+}
+
+/** Plain text out of an RTF file (WordPad, TextEdit and older Word save these). */
+export function extractRtfText(rtf: string): string {
+  let text = stripRtfGroups(rtf)
+    .replace(/\\par[d]?\b ?/g, (m) => (m.startsWith("\\pard") ? "" : "\n"))
+    .replace(/\\line\b ?/g, "\n")
+    .replace(/\\tab\b ?/g, " ")
+    .replace(/\\'([0-9a-f]{2})/gi, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)))
+    .replace(/\\u(-?\d+)\??/g, (_, code: string) => String.fromCharCode((Number(code) + 65536) % 65536))
+    .replace(/\\[a-z]+-?\d* ?/gi, "")
+    .replace(/\\([{}\\])/g, "$1")
+    .replace(/[{}]/g, "");
+  text = text.replace(/\r\n?/g, "\n").split("\n").map((line) => line.trim()).join("\n");
+  return text.replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function decodeXmlText(value: string): string {
@@ -486,7 +592,14 @@ async function extractOpenDocumentText(file: File): Promise<string> {
     return Array.from(xml.matchAll(/<draw:page\b[^>]*>([\s\S]*?)<\/draw:page>/g))
       .map((page) => extractMarkupText(page[1])).join("\f");
   }
-  return extractMarkupText(xml);
+  // OpenDocument tags as HTML ones: text:h = heading, text:p = paragraph, text:line-break = <br>.
+  const html = xml
+    .replace(/<text:h\b[^>]*\/>/g, "")
+    .replace(/<text:h\b[^>]*>/g, "<h2>").replace(/<\/text:h>/g, "</h2>")
+    .replace(/<text:p\b[^>]*\/>/g, "<p></p>")
+    .replace(/<text:p\b[^>]*>/g, "<p>").replace(/<\/text:p>/g, "</p>")
+    .replace(/<text:line-break\b[^>]*\/>/g, "<br>");
+  return structuredMarkupText(html);
 }
 
 function readXmlAttribute(tag: string, name: string): string {
@@ -554,12 +667,13 @@ async function extractPptxText(file: File): Promise<string> {
     const paragraphs = Array.from(
       slideXml.matchAll(/<(?:[\w.-]+:)?p\b[^>]*>[\s\S]*?<\/(?:[\w.-]+:)?p>/gi),
     )
+      // Text runs, with a soft line break (Shift+Enter, <a:br/>) kept as a new line.
       .map((paragraph) => Array.from(
-        paragraph[0].matchAll(/<(?:[\w.-]+:)?t\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?t>/gi),
+        paragraph[0].matchAll(/<(?:[\w.-]+:)?t\b[^>]*>([\s\S]*?)<\/(?:[\w.-]+:)?t>|<(?:[\w.-]+:)?br\b[^>]*\/?>/gi),
       )
-        .map((text) => decodeXmlText(text[1] ?? ""))
+        .map((text) => (text[1] === undefined ? "\n" : decodeXmlText(text[1])))
         .join(""))
-      .map((paragraph) => paragraph.trim())
+      .flatMap((paragraph) => paragraph.split("\n").map((line) => line.trim()))
       .filter(Boolean);
 
     slideTexts.push(paragraphs.join("\n"));
@@ -575,6 +689,7 @@ export function getFileTypeLabel(fileName: string): string {
     case "txt": return "Text";
     case "docx": return "DOCX";
     case "pptx": return "PPTX";
+    case "rtf": return "RTF";
     default: return ext?.toUpperCase() || "Unknown";
   }
 }

@@ -1,72 +1,36 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { DocsShell } from "../DocsShell";
-import { DOC_PAGES } from "../docs-data";
+import { getDocNav, getDocNeighbours, getDocPage, getDocPages, getDocSearch } from "../docs-source";
 
-type Props = {
-  params: Promise<{ slug: string }>;
-};
+type Props = { params: Promise<{ slug: string }> };
 
-const SUBPAGE_SLUGS = [
-  "obs-setup",
-  "scripture-engine",
-  "worship-lyrics",
-  "multiview-production",
-  "stage-display",
-  "hardware-projection",
-  "troubleshooting",
-];
+// Every docs page is built ahead of time from content/docs/*.md.
+export const dynamic = "force-static";
+export const dynamicParams = false;
 
 export function generateStaticParams() {
-  return SUBPAGE_SLUGS.map((slug) => ({ slug }));
+  return getDocPages().filter((p) => p.slug !== "index").map((p) => ({ slug: p.slug }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const page = DOC_PAGES[slug];
-
-  if (!page) {
-    return {
-      title: "Document Not Found | MakeChurchEazy Docs",
-      description: "The requested documentation guide could not be located.",
-    };
-  }
-
+  const p = getDocPage(slug);
+  if (!p || slug === "index") return { title: "Page not found · Docs" };
+  const title = `${p.title} · Docs`;
   return {
-    title: page.seoTitle,
-    description: page.description,
-    keywords: page.keywords,
+    title,
+    description: p.description,
     alternates: { canonical: `/docs/${slug}` },
-    openGraph: {
-      title: page.seoTitle,
-      description: page.description,
-      url: `https://makechurcheazy.com/docs/${slug}`,
-      type: "article",
-      siteName: "MakeChurchEazy",
-      images: [
-        {
-          url: "/og-image.jpg",
-          width: 1376,
-          height: 768,
-          alt: `${page.title} — MakeChurchEazy Documentation`,
-        },
-      ],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: page.seoTitle,
-      description: page.description,
-    },
+    openGraph: { title, description: p.description, url: `https://makechurcheazy.com/docs/${slug}`, type: "article", siteName: "MakeChurchEazy" },
+    twitter: { card: "summary_large_image", title, description: p.description },
   };
 }
 
 export default async function DocSubPage({ params }: Props) {
   const { slug } = await params;
-  const page = DOC_PAGES[slug];
-
-  if (!page) {
-    notFound();
-  }
-
-  return <DocsShell page={page} />;
+  const p = getDocPage(slug);
+  if (!p || slug === "index") notFound();
+  const { prev, next } = getDocNeighbours(p.slug);
+  return <DocsShell page={p} nav={getDocNav()} search={getDocSearch()} prev={prev} next={next} />;
 }

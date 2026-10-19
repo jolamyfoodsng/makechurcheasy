@@ -35,8 +35,24 @@ function toTitleCase(label: string): string {
     .replace(/\bV(\d+)\b/i, "Verse $1");
 }
 
+/**
+ * A label can say which language (or part) it is: "Verse 1 (Yoruba)", "Chorus (English)".
+ * The qualifier stays on the label. "(cont)" is only ever a continuation marker, so it is dropped.
+ */
 function classifySectionLabel(rawLabel: string): SectionLabel | null {
-  const label = normalizeLabelText(rawLabel.replace(/^[<\[]|[>\]]$/g, ""));
+  const cleaned = normalizeLabelText(rawLabel.replace(/^[<\[]|[>\]]$/g, ""));
+  const qualified = cleaned.match(/^(.*?)\s*\(([^()]{1,24})\)$/);
+  if (qualified && qualified[1]) {
+    const base = classifyBaseSectionLabel(qualified[1]);
+    if (!base) return null;
+    const qualifier = qualified[2].trim();
+    if (!qualifier || /^cont(?:inued)?\.?$/i.test(qualifier)) return base;
+    return { ...base, label: `${base.label} (${qualifier})` };
+  }
+  return classifyBaseSectionLabel(cleaned);
+}
+
+function classifyBaseSectionLabel(label: string): SectionLabel | null {
   if (!label) return null;
 
   const verseMatch = label.match(/^(?:v|verse)\s*(\d+|[ivx]+)?$/i);
@@ -101,7 +117,8 @@ function parseSectionLabelLine(line: string): { section: SectionLabel; rest: str
     if (section) return { section, rest: bracketMatch[2]?.trim() ?? "" };
   }
 
-  const numberedVerseMatch = trimmed.match(/^(\d+)\s*:\s*(.*)$/);
+  // "2: When Jesus has come," and, as hymn books print it, "2. When Jesus has come,".
+  const numberedVerseMatch = trimmed.match(/^(\d{1,2})\s*:\s*(.*)$/) ?? trimmed.match(/^(\d{1,2})\.\s+(\p{L}.*)$/u);
   if (numberedVerseMatch) {
     const number = numberedVerseMatch[1];
     return {
@@ -110,7 +127,7 @@ function parseSectionLabelLine(line: string): { section: SectionLabel; rest: str
     };
   }
 
-  const colonMatch = trimmed.match(/^([A-Za-z][A-Za-z\s-]*\d*)\s*:\s*(.*)$/);
+  const colonMatch = trimmed.match(/^([A-Za-z][A-Za-z\s-]*\d*(?:\s*\([^()\n]{1,24}\))?)\s*:\s*(.*)$/);
   if (colonMatch) {
     const section = classifySectionLabel(colonMatch[1]);
     if (section) return { section, rest: colonMatch[2]?.trim() ?? "" };
@@ -172,6 +189,38 @@ export function extractStructuredTextTitle(rawText: string): StructuredTextDocum
     title,
     body: bodyLines.join("\n").replace(/^\n+|\n+$/g, "").trim(),
   };
+}
+
+/** A standalone "Hymn 8" / "Orin 8" / "Song 3" first line: the hymn's number, not words for the screen. */
+const HYMN_HEADING_RE = /^(?:hymn|orin|song)\s*\d{1,4}\s*[.:]?$/i;
+
+/** Splits off a "Hymn 8" heading that a pasted hymn starts with. */
+function splitHymnHeading(body: string): { heading: string; rest: string } {
+  const lines = body.split("\n");
+  const first = lines.findIndex((line) => line.trim().length > 0);
+  if (first < 0 || !HYMN_HEADING_RE.test(lines[first].trim())) return { heading: "", rest: body };
+  return { heading: lines[first].trim(), rest: lines.slice(first + 1).join("\n").trim() };
+}
+
+/**
+ * A section label in the middle of a block ("2: When Jesus has come," or "Chorus: Forgive me")
+ * starts a new block, exactly as if there were a blank line before it. Mid-block, only a label
+ * written with a colon or brackets counts, so a lyric line such as "End" is never taken for one.
+ */
+function breakBeforeInlineLabels(text: string): string {
+  const out: string[] = [];
+  for (const line of text.split("\n")) {
+    const previous = out[out.length - 1];
+    const trimmed = line.trim();
+    if (previous && previous.trim() && (/:/.test(trimmed) || /^[<\[]/.test(trimmed)) && parseSectionLabelLine(line)) out.push("");
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
+/** Wide gaps inside a line (from PDFs: "comes.            Amen") become one space on the screen. */
+function tidyLyricLine(line: string): string {
+  return line.replace(/[ \t\u00a0]{2,}/g, " ").trimEnd();
 }
 
 function wrapLyricLine(line: string, maxLineLength: number): string[] {
@@ -247,7 +296,8 @@ export function autoSplitLyricsText(
   options: { maxLineLength?: number } = {},
 ): string {
   const structured = extractStructuredTextTitle(rawLyrics);
-  const normalized = structured.body.trim();
+  const { heading, rest } = splitHymnHeading(structured.body.trim());
+  const normalized = rest.trim();
   if (!normalized) return rawLyrics;
 
   const safeLinesPerSlide = Math.max(1, Math.min(12, Math.floor(linesPerSlide) || 2));
@@ -271,7 +321,7 @@ export function autoSplitLyricsText(
   const blocks: string[] = [];
 
   for (const section of sections) {
-    const wrappedLines = section.lines.flatMap((line) => wrapLyricLine(line, maxLineLength));
+    const wrappedLines = section.lines.flatMap((line) => wrapLyricLine(tidyLyricLine(line), maxLineLength));
     for (let start = 0; start < wrappedLines.length; start += safeLinesPerSlide) {
       const chunk = wrappedLines.slice(start, start + safeLinesPerSlide);
       if (chunk.length === 0) continue;
@@ -281,7 +331,9 @@ export function autoSplitLyricsText(
     }
   }
 
-  const result = blocks.join("\n\n") || structured.body;
+  const flowed = blocks.join("\n\n") || structured.body;
+  // The "Hymn 8" heading stays in the text on its own (it is never put on a slide).
+  const result = heading ? `${heading}\n\n${flowed}` : flowed;
   return structured.title ? `[${structured.title}]\n\n${result}` : result;
 }
 
@@ -314,7 +366,7 @@ export function parseWorshipLyricSections(
   autoSplit = true,
   continuousLineCount = false,
 ): LyricSection[] {
-  const normalizedLyrics = extractStructuredTextTitle(rawLyrics).body.trim();
+  const normalizedLyrics = breakBeforeInlineLabels(splitHymnHeading(extractStructuredTextTitle(rawLyrics).body.trim()).rest).trim();
   if (!normalizedLyrics) return [];
 
   // Split on one or more blank lines (spaces/tabs allowed between newlines).
@@ -464,8 +516,8 @@ export function generateSlides(
   identifyChorus: boolean,
   options: GenerateSlidesOptions = {},
 ): Slide[] {
-  const normalized = extractStructuredTextTitle(rawLyrics).body.trim();
-  if (!normalized) return [];
+  const normalized = breakBeforeInlineLabels(splitHymnHeading(extractStructuredTextTitle(rawLyrics).body.trim()).rest);
+  if (!normalized.trim()) return [];
 
   // 1. Split into stanzas using blank lines as boundaries
   const stanzas = normalized
@@ -473,7 +525,7 @@ export function generateSlides(
     .map((block) =>
       block
         .split("\n")
-        .map((line) => line.trimEnd())
+        .map(tidyLyricLine)
         .join("\n")
         .trim(),
     )

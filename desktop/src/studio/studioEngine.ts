@@ -14,6 +14,7 @@
  * Preview (what's next) is the same overlay page in an iframe that ignores the relay
  * (`mceRelay=0`, its own `mceSource`) and gets its packet through the URL hash.
  */
+import { DEFAULT_TEXT_LOOK, withTextLook, type StudioTextLook } from "./textLook";
 import { chunkLines } from "./studioTextLayout";
 import type { BibleTheme, BibleThemeSettings } from "../bible/types";
 import { buildDockProductionSettingsPayload } from "../services/productionSettings";
@@ -187,7 +188,7 @@ function resolveSettings(
   const theme = mode === "lower-third" ? set.lowerThird ?? set.fullscreen : set.fullscreen ?? set.lowerThird;
   const settings = themeSettingsForMode(theme, mode);
   if (!settings) return null;
-  const scaled = withTextStyle(withTextScale(settings, textScale), textBold, textItalic);
+  const scaled = withTextLook(withTextStyle(withTextScale(settings, textScale), textBold, textItalic), textLook);
   return (transition === "cut" ? withoutAnimation(scaled) : scaled) as unknown as Record<string, unknown>;
 }
 
@@ -203,6 +204,12 @@ let textItalic = false;
 export function setStudioTextStyle(bold: boolean, italic: boolean): void {
   textBold = bold === true;
   textItalic = italic === true;
+}
+
+/** Quick colour / shadow / alignment / background from Text Settings (see textLook.ts). */
+let textLook: StudioTextLook = DEFAULT_TEXT_LOOK;
+export function setStudioTextLook(look: StudioTextLook): void {
+  textLook = look;
 }
 
 /** The theme made bolder and/or italic (classic font weight and style, and every layer-theme text layer). */
@@ -302,7 +309,7 @@ export interface StudioBrand {
 }
 
 /** Bumped when public/studio-output.html changes in a way an already-open projector window must reload for. */
-export const OUTPUT_PAGE_REV = 10;
+export const OUTPUT_PAGE_REV = 12;
 
 export interface StudioProgramState {
   revision: number;
@@ -330,6 +337,9 @@ export interface StudioProgramState {
   camera?: StudioCamera;
   /** The camera as arranged in Preview (it goes live with Go Live). */
   previewCamera?: StudioCamera;
+  /** The camera is running and ready while an output is open, even if it is not on the screen, so
+   *  the screens keep its newest picture and show it the instant it goes on (like an OBS source). */
+  cameraWarm?: boolean;
   /** Screen Mix: video / camera behind the words, banners and the logo on top. */
   mix?: StudioMixLayer[];
   /** What Preview shows, for Preview projectors (always rendered as Cut, no curtain). */
@@ -517,6 +527,12 @@ export function setProgramMix(mix: StudioMixLayer[]): Promise<boolean> {
 /** Open, move or hide the live camera. Hiding keeps it open so it comes back at once. */
 export function setProgramCamera(camera: StudioCamera): Promise<boolean> {
   return commit({ ...program, camera: { ...camera } });
+}
+
+/** Tell the screens whether the camera is warm (running and ready to show at once). */
+export function setProgramCameraWarm(warm: boolean): Promise<boolean> {
+  if (Boolean(program.cameraWarm) === warm) return Promise.resolve(true);
+  return commit({ ...program, cameraWarm: warm });
 }
 
 /** Arrange the camera in Preview only (the screen does not change until Go Live). */

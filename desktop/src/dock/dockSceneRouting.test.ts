@@ -176,9 +176,7 @@ describe("dock scene routing", () => {
     expect(obsClientSource).toContain("private async tryPushRestoredLiveBiblePacket");
     expect(obsClientSource).toContain("if (await this.tryPushRestoredLiveBiblePacket(data)) return;");
     expect(obsClientSource).toContain("await this.deliverCssOverlayPacket(sourceName, \"bible\", packet, baseUrl, themeCss)");
-    expect(obsClientSource).toContain("const preserveExistingLiveBibleSource = !data.targetScene");
-    expect(obsClientSource).toContain('MCE_PRESENTATION_ACTIVE_MODULE_KEY) === "bible"');
-    expect(obsClientSource).toContain('this._ensureFullscreenScene("bible", mode, preserveExistingLiveBibleSource)');
+    expect(obsClientSource).toContain('await this._ensureFullscreenScene("bible", mode, "keep")');
   });
 
   it("paints Worship from native and cached local state before background refresh", () => {
@@ -216,7 +214,8 @@ describe("dock scene routing", () => {
     expect(keepSet.has("MCE BG - Bible")).toBe(true);
     expect(keepSet.has("MCE Program Scene Reference")).toBe(true);
     expect(keepSet.has("MCE Browser - Worship")).toBe(false);
-    expect(keepSet.has("MCE Ticker")).toBe(false);
+    // The ticker is started and stopped only from the Ministry tab; a verse never hides it.
+    expect(keepSet.has("MCE Ticker")).toBe(true);
     expect(keepSet.has("User Camera")).toBe(false);
   });
 
@@ -241,7 +240,7 @@ describe("dock scene routing", () => {
     expect(activeOnly.has("MCE LT: Speaker strap")).toBe(true);
     expect(activeOnly.has("MCE Browser - Bible")).toBe(false);
     expect(activeOnly.has("MCE Browser - Worship")).toBe(false);
-    expect(activeOnly.has("MCE Ticker")).toBe(false);
+    expect(activeOnly.has("MCE Ticker")).toBe(true);
   });
 
   it("recognises every lower-third source name", () => {

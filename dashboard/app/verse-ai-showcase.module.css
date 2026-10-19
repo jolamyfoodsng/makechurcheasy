@@ -60,31 +60,23 @@
   .showcase .featureNav p { font-size: 1rem; }
 }
 
-/* Keep the three Verse AI explanations visually distinct. */
-.showcase .featureNav { gap: 4rem; }
-.showcase .featureNav > :not([hidden]) ~ :not([hidden]) { margin-top: 0; }
-.showcase .featureNav h3 { text-wrap: balance; }
-.showcase .featureNav p { font-weight: 400; }
-@media (min-width: 1024px) {
-  .featureGrid { column-gap: 3.75rem; }
-}
-@media (max-width: 760px) {
-  .showcase .featureNav { gap: 3.75rem; }
-}
-
 .showcase .serviceNote {
   margin: 1.5rem 0 0;
   color: #64748B;
   font-size: 1rem;
   line-height: 1.6;
 }
-.showcase .featureNav { gap: 4rem; }
+/* The three explanations are tabs: keep them together so the picture beside them fills the row. */
+.showcase .featureNav { gap: .75rem; }
 .showcase .featureNav > :not([hidden]) ~ :not([hidden]) { margin-top: 0; }
 .showcase .featureNav h3 { text-wrap: balance; }
 .showcase .featureNav p { font-weight: 400; }
 @media (min-width: 1024px) {
   .featureGrid { column-gap: 3.75rem; }
+  /* The picture stays in view while the tab text is read. */
+  .showcase .visualColumn { position: sticky; top: 6rem; align-self: start; }
 }
-@media (max-width: 760px) {
-  .showcase .featureNav { gap: 3.75rem; }
-}
+
+/* Closed tabs show just their title; the open one shows its explanation and points. */
+.showcase .featureNav button[aria-pressed="false"] p { display: none; }
+.showcase .featureNav button[aria-pressed="false"] h3 { margin-bottom: 0; }

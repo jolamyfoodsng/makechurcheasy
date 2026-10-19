@@ -6,7 +6,10 @@
  *   Camera                just the camera, no words.
  *   Camera + lower third  the camera with the words as a bar across the bottom.
  *
- * Picking one puts it on the screen straight away. The camera only opens for the two camera choices.
+ * Straight to screen: picking one puts it on the screen at once. Preview first: it is set up in
+ * Preview and goes on the screen with Send to Screen. The camera only opens for the camera choices.
+ *
+ * Media and Docs (`fillLabel`): just two choices, the picture / document or the camera.
  */
 import { Monitor, PanelBottom, Video } from "../../components/icons/NativeIcons";
 import { comboLabel, useShortcutBindings, type ShortcutId } from "../shortcuts";
@@ -32,9 +35,20 @@ interface ScenePickerProps {
   /** The choice that matches what is set up now (none when it is a mix the picker doesn't offer). */
   active: StudioScene | null;
   onChoose: (scene: StudioScene) => void;
+  /** Media / Docs: name of the "no camera" choice ("Media", "Document"); only it and Camera are offered. */
+  fillLabel?: string;
 }
 
-export default function ScenePicker({ active, onChoose }: ScenePickerProps) {
+/** The choices shown: all four, or the picture and the camera for Media / Docs. */
+export function sceneChoices(fillLabel?: string): typeof SCENES {
+  if (!fillLabel) return SCENES;
+  return [
+    { id: "fullscreen", label: fillLabel, title: `The ${fillLabel.toLowerCase()} fills the screen, no camera`, icon: <Monitor size={16} /> },
+    { id: "camera", label: "Camera", title: "Just the camera", icon: <Video size={16} /> },
+  ];
+}
+
+export default function ScenePicker({ active, onChoose, fillLabel }: ScenePickerProps) {
   const bindings = useShortcutBindings();
   const keyText = (scene: StudioScene) => {
     const combo = bindings[SCENE_SHORTCUT[scene]]?.[0];
@@ -42,7 +56,7 @@ export default function ScenePicker({ active, onChoose }: ScenePickerProps) {
   };
   return (
     <div className="st-lo__tiles2 st-lo__tiles3" role="group" aria-label="What's on the screen">
-      {SCENES.map((scene) => (
+      {sceneChoices(fillLabel).map((scene) => (
         <button
           key={scene.id}
           type="button"

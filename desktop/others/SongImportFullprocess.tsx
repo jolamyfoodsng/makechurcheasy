@@ -502,7 +502,7 @@ export default function SongImportFullprocess({
                     ref={fileInputRef}
                     className="song-import-hidden-input"
                     type="file"
-                    accept=".pdf,.docx,.pptx,.odt,.odp,.html,.htm,.md,.markdown,.txt"
+                    accept=".pdf,.docx,.doc,.pptx,.ppt,.odt,.odp,.rtf,.html,.htm,.md,.markdown,.txt"
                     onClick={(event) => event.stopPropagation()}
                     onChange={(event) => { handleFileSelected(event.target.files?.[0] ?? null); event.target.value = ""; }}
                   />

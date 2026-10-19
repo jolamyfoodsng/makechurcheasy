@@ -758,7 +758,7 @@
       var value = String(text == null ? "" : text);
       if (textCase === "upper") return value.toUpperCase();
       if (textCase === "lower") return value.toLowerCase();
-      if (textCase === "title") return value.toLowerCase().replace(/(^|[\s\-/("'\u201c\u2018|])(\p{L})/gu, function (_m, sep, ch) { return sep + ch.toUpperCase(); });
+      if (textCase === "title") return value.toLowerCase().replace(/(?<=^|[\s\-/(|]|(?:^|[\s(])["'\u201c\u2018])\p{L}/gu, function (ch) { return ch.toUpperCase(); });
       if (textCase === "sentence") return value.toLowerCase().replace(/(^\s*|[.!?|]\s+)(\p{L})/gu, function (_m, sep, ch) { return sep + ch.toUpperCase(); });
       return value;
     }
@@ -2373,6 +2373,13 @@
           const handled = animateCurrentOverlayOut();
           writeRenderAck(packet, "animate-out");
           return handled;
+        }
+        // Empty the page at once. The Dock sends this just before it hides the source,
+        // so OBS keeps an empty picture instead of a half-finished exit of the old graphic.
+        if (packet.action === "clear") {
+          applyTheme(null);
+          writeRenderAck(packet, "clear");
+          return true;
         }
         applyTheme(packet);
         writeRenderAck(packet, "lower-third");

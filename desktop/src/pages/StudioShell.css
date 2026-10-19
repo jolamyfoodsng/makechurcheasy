@@ -534,6 +534,8 @@ html.st-resizing iframe { pointer-events: none !important; }
 .st-lib__sub { color: var(--st-text-3); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .st-lib__foot { padding: 8px; border-top: 1px solid var(--st-line); }
 .st-lib__foot .studio-btn { width: 100%; justify-content: center; }
+.st-lib__foot--pair { display: flex; gap: 6px; }
+.st-lib__foot--pair .studio-btn { flex: 1 1 0; width: auto; }
 .st-star { flex: none; width: 28px; height: 28px; border: 0; background: transparent; color: var(--st-text-3); cursor: pointer; }
 .st-star.is-on { color: var(--st-orange); }
 .st-star.is-on svg { fill: currentColor; }
@@ -2227,3 +2229,48 @@ html.st-resizing iframe { pointer-events: none !important; }
 .st .st-nav__btn.is-on { box-shadow: none; }
 .st .st-brand__logo { background: var(--st-blue); }
 .st .st-outpop__help { max-width: 100%; }
+
+/* Settings: a plain checkbox row (Keep the camera ready) */
+.st-set__check { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; font-size: 13px; color: var(--st-text); cursor: pointer; }
+.st-set__check input { width: 15px; height: 15px; margin: 0; accent-color: var(--st-blue); }
+
+/* ── Studio controls: Display Mode | Text Settings | Camera ── */
+.st-lo__stackfull { grid-column: 1 / -1; }
+.st-lo__minihead strong { display: inline-flex; align-items: center; gap: 7px; }
+@container stpv (min-width: 760px) {
+  .st-lo__stack { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.st-textcard { gap: 8px; }
+.st-textcard.is-disabled .st-textcard__row { opacity: 0.55; }
+.st-textcard__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; }
+.st-textcard__label { font-size: 12.5px; color: var(--st-text-2); flex: none; }
+.st-textcard__step { display: inline-flex; align-items: stretch; height: 30px; border: 1px solid var(--st-line); border-radius: 8px; overflow: hidden; background: var(--st-raised); }
+.st-textcard__step button { width: 32px; border: 0; background: transparent; color: var(--st-text); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.st-textcard__step button:hover:not(:disabled) { background: var(--st-panel); }
+.st-textcard__step button:disabled { opacity: 0.4; cursor: default; }
+.st-textcard__step span { min-width: 52px; display: inline-flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 700; border-left: 1px solid var(--st-line); border-right: 1px solid var(--st-line); }
+.st-textcard__seg { display: inline-flex; height: 30px; border: 1px solid var(--st-line); border-radius: 8px; overflow: hidden; background: var(--st-raised); }
+.st-textcard__seg button { min-width: 36px; padding: 0 10px; border: 0; border-right: 1px solid var(--st-line); background: transparent; color: var(--st-text-2); font-size: 12px; font-weight: 650; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.st-textcard__seg button:last-child { border-right: 0; }
+.st-textcard__seg button:hover:not(:disabled):not(.is-on) { color: var(--st-text); background: var(--st-panel); }
+.st-textcard__seg button.is-on { background: var(--st-blue); color: #fff; }
+.st-textcard__color { position: relative; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; flex: none; }
+.st-textcard__color input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.st-textcard__color i { display: block; width: 100%; height: 100%; border-radius: 50%; border: 2px solid var(--st-line); box-sizing: border-box; }
+.st-textcard__color.is-theme i { border-style: dashed; }
+.st-textcard__switch { position: relative; width: 42px; height: 24px; border: 0; border-radius: 12px; background: var(--st-raised); cursor: pointer; flex: none; transition: background 0.15s; }
+.st-textcard__switch i { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
+.st-textcard__switch.is-on { background: var(--st-blue); }
+.st-textcard__switch.is-on i { transform: translateX(18px); }
+.st-textcard__bg { position: relative; }
+.st-textcard__bgbtn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 3px 8px 3px 4px; border: 1px solid var(--st-line); border-radius: 8px; background: var(--st-raised); color: var(--st-text-2); cursor: pointer; }
+.st-textcard__bgbtn i, .st-textcard__bgmenu i { display: block; width: 54px; height: 22px; border-radius: 5px; border: 1px solid rgba(255, 255, 255, 0.15); flex: none; }
+.st-textcard__bgmenu { position: absolute; right: 0; bottom: calc(100% + 4px); z-index: 20; margin: 0; padding: 4px; list-style: none; min-width: 190px; border: 1px solid var(--st-line); border-radius: 10px; background: var(--st-panel); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5); }
+.st-textcard__bgmenu button { width: 100%; display: flex; align-items: center; gap: 8px; padding: 5px 6px; border: 0; border-radius: 7px; background: transparent; color: var(--st-text); font-size: 12.5px; cursor: pointer; text-align: left; }
+.st-textcard__bgmenu button:hover, .st-textcard__bgmenu button.is-on { background: var(--st-raised); }
+/* Camera card: picture area with "Camera is off" and a Turn on button. */
+.st-cm__stage { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; aspect-ratio: 16 / 9; min-height: 96px; border: 1px solid var(--st-line); border-radius: 10px; background: var(--st-raised); color: var(--st-text-2); font-size: 12.5px; overflow: hidden; }
+.st-cm__stage.is-on { padding: 0; background: #000; }
+.st-cm__stage video { width: 100%; height: 100%; object-fit: cover; }
+.st-cm__turnon { height: 30px; padding: 0 14px; border: 1px solid var(--st-line); border-radius: 8px; background: var(--st-panel); color: var(--st-text); font-size: 12.5px; font-weight: 650; cursor: pointer; }
+.st-cm__turnon:hover { background: var(--st-raised); }

@@ -299,16 +299,17 @@ function brushCircle(): ThemeLayout {
       gradient: { type: "linear", angle: 170, stops: [{ color: "#1d2a3a", at: 0 }, { color: "#0c1119", at: 100 }] },
     }, { in: anim("none", 0), out: anim("none", 0) }),
     box("shade", CX, CY, W, H, { fill: "rgba(0,0,0,0.28)" }, { in: anim("none", 0), out: anim("none", 0) }),
-    box("ring-outer", CX, CY, 720, 720, { radius: 9999, borderWidth: 5, borderColor: "#ffffff" }, { in: anim("pop", 650) }),
-    box("ring-inner", CX, CY, 664, 664, { radius: 9999, borderWidth: 2, borderColor: "rgba(255,255,255,0.8)" }, { in: anim("pop", 650, 100) }),
-    text("time", "{sign}{tm}", CX, CY - 10, 560, 330, {
-      fontFamily: "Kaushan Script", fontWeight: 400, fontSize: 290, color: "#ffffff", textShadow: "0 6px 30px rgba(0,0,0,0.5)",
+    box("ring-outer", CX, CY, 940, 940, { radius: 9999, borderWidth: 6, borderColor: "#ffffff" }, { in: anim("pop", 650) }),
+    box("ring-inner", CX, CY, 872, 872, { radius: 9999, borderWidth: 3, borderColor: "rgba(255,255,255,0.8)" }, { in: anim("pop", 650, 100) }),
+    // The script leans past its own box, so the box stays well inside the inner ring (872 across).
+    text("time", "{sign}{tm}", CX, CY - 12, 620, 400, {
+      fontFamily: "Kaushan Script", fontWeight: 400, fontSize: 330, color: "#ffffff", textShadow: "0 6px 30px rgba(0,0,0,0.5)",
     }, { in: anim("scale", 600, 300) }),
-    text("subtitle", "{subtitle}", CX, CY + 215, 460, 60, {
-      fontFamily: "Montserrat", fontWeight: 600, fontSize: 32, letterSpacing: 10, color: "rgba(255,255,255,0.9)", textTransform: "uppercase",
+    text("subtitle", "{subtitle}", CX, CY + 282, 600, 76, {
+      fontFamily: "Montserrat", fontWeight: 600, fontSize: 42, letterSpacing: 13, color: "rgba(255,255,255,0.9)", textTransform: "uppercase",
     }, { in: anim("fade", 500, 500) }),
-    text("title", "{title}", CX, CY - 255, 460, 60, {
-      fontFamily: "Montserrat", fontWeight: 700, fontSize: 34, letterSpacing: 12, color: "rgba(255,255,255,0.95)", textTransform: "uppercase",
+    text("title", "{title}", CX, CY - 334, 600, 76, {
+      fontFamily: "Montserrat", fontWeight: 700, fontSize: 44, letterSpacing: 15, color: "rgba(255,255,255,0.95)", textTransform: "uppercase",
     }, { in: anim("fade", 500, 500) }),
   ]);
 }

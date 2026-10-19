@@ -22,6 +22,12 @@ const nextConfig: NextConfig = {
         destination: "/pricing",
         permanent: true,
       },
+      // Old docs pages, renamed when the docs moved to task-based Markdown pages.
+      { source: "/docs/scripture-engine", destination: "/docs/bible", permanent: true },
+      { source: "/docs/worship-lyrics", destination: "/docs/worship", permanent: true },
+      { source: "/docs/multiview-production", destination: "/docs/media", permanent: true },
+      { source: "/docs/stage-display", destination: "/docs/mobile-remote", permanent: true },
+      { source: "/docs/hardware-projection", destination: "/docs/studio-mode", permanent: true },
       {
         source: "/:path*",
         has: [

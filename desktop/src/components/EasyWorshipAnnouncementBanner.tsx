@@ -13,6 +13,7 @@ import {
   type EWImportProgress,
   type EWImportSummary,
 } from "../worship/easyWorshipBackgroundImporter";
+import EasyWorshipOneClickImportModal from "../worship/EasyWorshipOneClickImportModal";
 import "./easyWorshipAnnouncementBanner.css";
 
 export const OPEN_EW_BANNER_EVENT = "mce-open-ew-import-banner";
@@ -24,6 +25,7 @@ export function triggerEasyWorshipBanner() {
 const EW_BANNER_DISMISS_KEY = "mce_ew_banner_dismissed";
 
 export default function EasyWorshipAnnouncementBanner() {
+  const [chooserOpen, setChooserOpen] = useState(false);
   const [visible, setVisible] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     const status = ewBackgroundImporter.getStatus();
@@ -96,14 +98,8 @@ export default function EasyWorshipAnnouncementBanner() {
 
   if (!visible) return null;
 
-  const handleStartImport = async () => {
-    try {
-      setStage("running");
-      await ewBackgroundImporter.startImport();
-    } catch {
-      // Handled via background importer state
-    }
-  };
+  // Choosing which EasyWorship library to import (and seeing how many songs it has) happens in the dialog.
+  const handleStartImport = () => setChooserOpen(true);
 
   const handleDismiss = () => {
     localStorage.setItem(EW_BANNER_DISMISS_KEY, "true");
@@ -114,6 +110,8 @@ export default function EasyWorshipAnnouncementBanner() {
   };
 
   return (
+    <>
+    {chooserOpen && <EasyWorshipOneClickImportModal onClose={() => setChooserOpen(false)} />}
     <div className={`ew-announcement-banner ew-announcement-banner--${stage}`} role="alert">
       <div className="ew-announcement-banner__container">
         {/* Left Icon + Text */}
@@ -143,7 +141,7 @@ export default function EasyWorshipAnnouncementBanner() {
                   Import from EasyWorship
                 </strong>
                 <span className="ew-announcement-desc">
-                  Import your songs, lyrics, background videos, images, and presentation themes in one click.
+                  Bring your EasyWorship songs and lyrics into MakeChurchEazy. EasyWorship can stay open.
                 </span>
               </>
             )}
@@ -162,10 +160,12 @@ export default function EasyWorshipAnnouncementBanner() {
             {stage === "completed" && (
               <>
                 <strong className="ew-announcement-title">
-                  Fully Imported!
+                  EasyWorship songs imported
                 </strong>
                 <span className="ew-announcement-desc">
-                  Successfully imported {summary?.songsCount ?? 223} songs & lyrics, {summary?.videosCount ?? 12} videos, {summary?.imagesCount ?? 8} images, and {summary?.themesCount ?? 4} themes.
+                  {summary
+                    ? `Added ${summary.importedCount.toLocaleString()} ${summary.importedCount === 1 ? "song" : "songs"}${summary.alreadyInLibraryCount ? `; ${summary.alreadyInLibraryCount.toLocaleString()} you already had were skipped` : ""}${summary.overLimitCount ? `; ${summary.overLimitCount.toLocaleString()} didn’t fit your plan’s song limit` : ""}.`
+                    : "Your songs are in the library."}
                 </span>
               </>
             )}
@@ -182,7 +182,7 @@ export default function EasyWorshipAnnouncementBanner() {
                 onClick={handleStartImport}
               >
                 <Download size={15} />
-                <span>Yes, Import Everything</span>
+                <span>Choose songs to import</span>
               </button>
               <button
                 type="button"
@@ -219,5 +219,6 @@ export default function EasyWorshipAnnouncementBanner() {
         </div>
       </div>
     </div>
+    </>
   );
 }

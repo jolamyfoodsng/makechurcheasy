@@ -230,6 +230,33 @@ export function getFirstEmptySlot(themeId: string, editorId: string): number {
   return -1;
 }
 
+/**
+ * Copy a theme's slots and chosen slot from one editor to another (a cloned Dock tab
+ * starts with exactly what the tab it came from had).
+ */
+export function copyEditorSlots(themeId: string, fromEditorId: string, toEditorId: string): void {
+  try {
+    const raw = localStorage.getItem(storageKey(themeId, fromEditorId));
+    if (raw) localStorage.setItem(storageKey(themeId, toEditorId), raw);
+    else localStorage.removeItem(storageKey(themeId, toEditorId));
+    saveActiveSlotIndex(themeId, toEditorId, loadActiveSlotIndex(themeId, fromEditorId));
+  } catch { /* storage full or unavailable */ }
+}
+
+/** Remove every theme's slots for an editor (a closed Dock tab). */
+export function deleteEditorSlots(editorId: string): void {
+  try {
+    const suffix = `-${editorId}`;
+    const doomed: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.endsWith(suffix)) continue;
+      if (key.startsWith(`${STORAGE_PREFIX}-`) || key.startsWith(`${ACTIVE_SLOT_STORAGE_PREFIX}-`)) doomed.push(key);
+    }
+    for (const key of doomed) localStorage.removeItem(key);
+  } catch { /* ignore */ }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

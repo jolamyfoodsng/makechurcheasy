@@ -3943,8 +3943,8 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
         "default": "#4a0b0e"
       }
     ],
-    "html": "\n<div class=\"gb\">\n  <div class=\"gb-bg pkg-fullscreen\"><i class=\"gb-glow\"></i></div>\n  {{#logo}}<div class=\"gb-church\">{{image:logo}}</div>{{/logo}}\n  <div class=\"gb-plaque\"><i class=\"gb-shine\"></i><i class=\"gb-dot\"></i><span class=\"gb-title\">{{title|chars}}</span><i class=\"gb-dot\"></i></div>\n  <div class=\"gb-grid\"><i class=\"gb-div\"></i>\n    {{#bank1}}<div class=\"gb-e\"><div class=\"gb-h\"><span class=\"gb-logo\">{{icon=bank}}{{image:logo1}}</span><span class=\"gb-name\">{{bank1}}</span></div><div class=\"gb-nr\"><div class=\"gb-num\">{{num1}}</div></div></div>{{/bank1}}\n    {{#bank2}}<div class=\"gb-e\"><div class=\"gb-h\"><span class=\"gb-logo\">{{icon=bank}}{{image:logo2}}</span><span class=\"gb-name\">{{bank2}}</span></div><div class=\"gb-nr\"><div class=\"gb-num\">{{num2}}</div></div></div>{{/bank2}}\n    {{#bank3}}<div class=\"gb-e\"><div class=\"gb-h\"><span class=\"gb-logo\">{{icon=bank}}{{image:logo3}}</span><span class=\"gb-name\">{{bank3}}</span></div><div class=\"gb-nr\"><div class=\"gb-num\">{{num3}}</div></div></div>{{/bank3}}\n    {{#bank4}}<div class=\"gb-e\"><div class=\"gb-h\"><span class=\"gb-logo\">{{icon=bank}}{{image:logo4}}</span><span class=\"gb-name\">{{bank4}}</span></div><div class=\"gb-nr\"><div class=\"gb-num\">{{num4}}</div></div></div>{{/bank4}}\n    {{#bank5}}<div class=\"gb-e\"><div class=\"gb-h\"><span class=\"gb-logo\">{{icon=bank}}{{image:logo5}}</span><span class=\"gb-name\">{{bank5}}</span></div><div class=\"gb-nr\"><div class=\"gb-num\">{{num5}}</div></div></div>{{/bank5}}\n    {{#bank6}}<div class=\"gb-e\"><div class=\"gb-h\"><span class=\"gb-logo\">{{icon=bank}}{{image:logo6}}</span><span class=\"gb-name\">{{bank6}}</span></div><div class=\"gb-nr\"><div class=\"gb-num\">{{num6}}</div></div></div>{{/bank6}}\n  </div>\n  {{#footer}}<div class=\"gb-foot\"><span>{{footer}}</span></div>{{/footer}}\n</div>",
-    "css": "\n.gb{position:relative;width:1920px;height:1080px;display:flex;flex-direction:column;align-items:center}\n.gb-bg{position:absolute;inset:0;overflow:hidden;background:radial-gradient(ellipse 70% 60% at 50% 18%,var(--bg-l) 0%,var(--bg) 45%,var(--bg-d) 100%)}\n.gb-glow{position:absolute;left:-20%;top:-30%;width:70%;height:90%;background:radial-gradient(closest-side,rgba(255,180,140,.16),rgba(255,180,140,0));transform:translateX(0)}\n.gb-church{position:absolute;left:56px;top:46px;width:200px;height:120px;display:flex;align-items:flex-start}\n.gb-church .pkg-img{max-height:120px;max-width:200px}\n.gb-plaque{position:relative;overflow:hidden;margin-top:58px;display:flex;align-items:center;gap:34px;padding:18px 54px 16px;background:linear-gradient(180deg,var(--plaque-l) 0%,var(--plaque) 45%,var(--plaque-d) 140%);clip-path:polygon(16px 0,calc(100% - 16px) 0,100% 16px,100% calc(100% - 16px),calc(100% - 16px) 100%,16px 100%,0 calc(100% - 16px),0 16px);box-shadow:0 10px 30px rgba(0,0,0,.35)}\n.gb-shine{position:absolute;top:0;bottom:0;left:0;width:14%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent);transform:translateX(-150%)}\n.gb-dot{position:relative;display:block;width:14px;height:14px;border-radius:50%;background:var(--plaquet)}\n.gb-title{position:relative;font:700 92px/1 Tinos,'Times New Roman',serif;color:var(--plaquet);letter-spacing:.01em;text-transform:uppercase;white-space:nowrap}\n.gb-title .w,.gb-title .ch{display:inline-block}\n.gb-grid{position:relative;flex:1;width:1560px;display:grid;grid-template-columns:1fr 1fr;align-content:center;row-gap:46px;padding:20px 0 30px}\n.gb-div{position:absolute;left:50%;top:56px;bottom:62px;width:3px;margin-left:-1.5px;background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.75) 12%,rgba(255,255,255,.75) 88%,rgba(255,255,255,0))}\n.gb-e{display:flex;flex-direction:column;align-items:center}\n.gb-h{display:flex;align-items:center;gap:20px}\n.gb-logo{position:relative;flex:none;width:76px;height:76px;border-radius:10px;overflow:hidden;background:var(--tile);color:var(--ic);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.3)}\n.gb-logo .ic{width:46px;height:46px}\n.gb-logo .pkg-img{position:absolute;inset:0;width:100%;height:100%;max-width:none;max-height:none;object-fit:cover;background:var(--tile)}\n.gb-name{font:700 50px/1 Montserrat,Arial,sans-serif;color:var(--t);text-transform:uppercase;white-space:nowrap}\n.gb-nr{overflow:hidden;margin-top:14px;padding:0 8px}\n.gb-num{font:900 92px/1.05 Montserrat,Arial,sans-serif;color:var(--nt);letter-spacing:.01em;white-space:nowrap;text-shadow:0 4px 14px rgba(0,0,0,.35)}\n.gb-foot{position:relative;width:1560px;padding:30px 40px 34px;background:var(--foot);border-radius:46px 46px 0 0;text-align:center;box-shadow:0 -8px 30px rgba(0,0,0,.25)}\n.gb-foot span{display:block;font:800 42px/1 Montserrat,Arial,sans-serif;color:var(--foott);text-transform:uppercase;white-space:nowrap}\n",
+    "html": "\n<div class=\"gb\">\n  <div class=\"gb-bg pkg-fullscreen\"><i class=\"gb-glow\"></i></div>\n  {{#logo}}<div class=\"gb-church\">{{image:logo}}</div>{{/logo}}\n  <div class=\"gb-plaque\"><i class=\"gb-shine\"></i><i class=\"gb-dot\"></i><span class=\"gb-title\">{{title|chars}}</span><i class=\"gb-dot\"></i></div>\n  <div class=\"gb-grid\">\n    {{#bank1}}<div class=\"gb-e\"><div class=\"gb-h\"><span class=\"gb-logo\">{{icon=bank}}{{image:logo1}}</span><span class=\"gb-name\">{{bank1}}</span></div><div class=\"gb-nr\"><div class=\"gb-num\">{{num1}}</div></div></div>{{/bank1}}\n    {{#bank2}}<div class=\"gb-e\"><div class=\"gb-h\"><span class=\"gb-logo\">{{icon=bank}}{{image:logo2}}</span><span class=\"gb-name\">{{bank2}}</span></div><div class=\"gb-nr\"><div class=\"gb-num\">{{num2}}</div></div></div>{{/bank2}}\n    {{#bank3}}<div class=\"gb-e\"><div class=\"gb-h\"><span class=\"gb-logo\">{{icon=bank}}{{image:logo3}}</span><span class=\"gb-name\">{{bank3}}</span></div><div class=\"gb-nr\"><div class=\"gb-num\">{{num3}}</div></div></div>{{/bank3}}\n    {{#bank4}}<div class=\"gb-e\"><div class=\"gb-h\"><span class=\"gb-logo\">{{icon=bank}}{{image:logo4}}</span><span class=\"gb-name\">{{bank4}}</span></div><div class=\"gb-nr\"><div class=\"gb-num\">{{num4}}</div></div></div>{{/bank4}}\n    {{#bank5}}<div class=\"gb-e\"><div class=\"gb-h\"><span class=\"gb-logo\">{{icon=bank}}{{image:logo5}}</span><span class=\"gb-name\">{{bank5}}</span></div><div class=\"gb-nr\"><div class=\"gb-num\">{{num5}}</div></div></div>{{/bank5}}\n    {{#bank6}}<div class=\"gb-e\"><div class=\"gb-h\"><span class=\"gb-logo\">{{icon=bank}}{{image:logo6}}</span><span class=\"gb-name\">{{bank6}}</span></div><div class=\"gb-nr\"><div class=\"gb-num\">{{num6}}</div></div></div>{{/bank6}}\n    <i class=\"gb-div\"></i>\n  </div>\n  {{#footer}}<div class=\"gb-foot\"><span>{{footer}}</span></div>{{/footer}}\n</div>",
+    "css": "\n.gb{position:relative;width:1920px;height:1080px;display:flex;flex-direction:column;align-items:center}\n.gb-bg{position:absolute;inset:0;overflow:hidden;background:radial-gradient(ellipse 70% 60% at 50% 18%,var(--bg-l) 0%,var(--bg) 45%,var(--bg-d) 100%)}\n.gb-glow{position:absolute;left:-20%;top:-30%;width:70%;height:90%;background:radial-gradient(closest-side,rgba(255,180,140,.16),rgba(255,180,140,0));transform:translateX(0)}\n.gb-church{position:absolute;left:56px;top:46px;width:200px;height:120px;display:flex;align-items:flex-start}\n.gb-church .pkg-img{max-height:120px;max-width:200px}\n.gb-plaque{position:relative;overflow:hidden;margin-top:58px;display:flex;align-items:center;gap:34px;padding:18px 54px 16px;background:linear-gradient(180deg,var(--plaque-l) 0%,var(--plaque) 45%,var(--plaque-d) 140%);clip-path:polygon(16px 0,calc(100% - 16px) 0,100% 16px,100% calc(100% - 16px),calc(100% - 16px) 100%,16px 100%,0 calc(100% - 16px),0 16px);box-shadow:0 10px 30px rgba(0,0,0,.35)}\n.gb-shine{position:absolute;top:0;bottom:0;left:0;width:14%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent);transform:translateX(-150%)}\n.gb-dot{position:relative;display:block;width:14px;height:14px;border-radius:50%;background:var(--plaquet)}\n.gb-title{position:relative;font:700 92px/1 Tinos,'Times New Roman',serif;color:var(--plaquet);letter-spacing:.01em;text-transform:uppercase;white-space:nowrap}\n.gb-title .w,.gb-title .ch{display:inline-block}\n.gb-grid{position:relative;flex:1;width:1560px;display:grid;grid-template-columns:1fr 1fr;align-content:center;row-gap:46px;padding:20px 0 30px}\n.gb-div{position:absolute;left:50%;top:56px;bottom:62px;width:3px;margin-left:-1.5px;background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.75) 12%,rgba(255,255,255,.75) 88%,rgba(255,255,255,0))}\n.gb-e{display:flex;flex-direction:column;align-items:center}\n.gb-e:only-of-type{grid-column:1/-1;align-self:center}\n.gb-e:only-of-type~.gb-div{display:none}\n.gb-h{display:flex;align-items:center;gap:20px}\n.gb-logo{position:relative;flex:none;width:76px;height:76px;border-radius:10px;overflow:hidden;background:var(--tile);color:var(--ic);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.3)}\n.gb-logo .ic{width:46px;height:46px}\n.gb-logo .pkg-img{position:absolute;inset:0;width:100%;height:100%;max-width:none;max-height:none;object-fit:cover;background:var(--tile)}\n.gb-name{font:700 50px/1 Montserrat,Arial,sans-serif;color:var(--t);text-transform:uppercase;white-space:nowrap}\n.gb-nr{overflow:hidden;margin-top:14px;padding:0 8px}\n.gb-num{font:900 92px/1.05 Montserrat,Arial,sans-serif;color:var(--nt);letter-spacing:.01em;white-space:nowrap;text-shadow:0 4px 14px rgba(0,0,0,.35)}\n.gb-foot{position:relative;width:1560px;padding:30px 40px 34px;background:var(--foot);border-radius:46px 46px 0 0;text-align:center;box-shadow:0 -8px 30px rgba(0,0,0,.25)}\n.gb-foot span{display:block;font:800 42px/1 Montserrat,Arial,sans-serif;color:var(--foott);text-transform:uppercase;white-space:nowrap}\n",
     "animation": {
       "in": [
         [
@@ -4681,5 +4681,999 @@ export const BUNDLED_GRAPHIC_PACKAGES: GraphicPackage[] = [
     },
     "css": ".sq{position:relative;width:1920px;height:1080px;overflow:hidden;font-family:Montserrat,'Segoe UI',Arial,sans-serif}\n.sq .hl{color:var(--hl);font-weight:800}\n.sq .sq-ref{color:var(--hl);font-weight:800}\n.sq p{margin:0}\n.sq .pkg-img{display:block;width:100%;height:100%;object-fit:cover}\n\n.sq-d{background:var(--bg);color:#fff}\n.sq-d .sq-ph{position:absolute;left:0;top:0;bottom:0;width:820px;background:#2a2d33}\n.sq-d .sq-ph .pkg-img{position:absolute;inset:0}\n.sq-d .sq-ph::after{content:\"\";position:absolute;inset:0;background:linear-gradient(90deg,transparent 45%,var(--bg) 100%)}\n.sq-d .sq-content{position:absolute;left:200px;right:200px;top:0;bottom:0;display:flex;flex-direction:column;justify-content:center;gap:48px}\n.sq-d.has-photo .sq-content{left:820px;right:140px}\n.sq-d .sq-series{display:flex;align-items:center;gap:18px;font:700 30px Montserrat,Arial,sans-serif;letter-spacing:.2em;text-transform:uppercase;color:var(--hl)}\n.sq-d .sq-series::before{content:\"\";width:70px;height:6px;background:var(--hl)}\n.sq-d .sq-quote{font:700 84px/1.3 'Saira Semi Condensed',Montserrat,Arial,sans-serif;text-wrap:balance}\n.sq-sz-s.sq-d .sq-quote{font-size:64px}.sq-sz-m.sq-d .sq-quote{font-size:76px}.sq-sz-xl.sq-d .sq-quote{font-size:100px}\n.sq-d .sq-quote .hl{color:var(--bg);background:var(--hl);padding:0 .14em;box-decoration-break:clone;-webkit-box-decoration-break:clone;font-weight:700}\n.sq-d .sq-ref{display:block;font:700 40px Montserrat,Arial,sans-serif;color:var(--hl);margin-top:26px}\n.sq-d .sq-name{font:800 50px Montserrat,Arial,sans-serif}\n.sq-d .sq-name small{display:block;font:500 34px Montserrat,Arial,sans-serif;color:rgba(255,255,255,.7);margin-top:8px}\n",
     "html": "<div class=\"sq sq-d sq-sz-{{size}} pkg-fullscreen {{#photo}}has-photo{{/photo}}\">\n  {{#photo}}<div class=\"sq-ph\">{{image:photo}}</div>{{/photo}}\n  <div class=\"sq-content\">\n    {{#series}}<div class=\"sq-series\">{{series}}</div>{{/series}}\n    <p class=\"sq-quote\">{{quote|rich}}{{#ref}}<span class=\"sq-ref\">{{ref}}</span>{{/ref}}</p>\n    {{#name}}<div class=\"sq-name\">{{name}}{{#title}}<small>{{title}}</small>{{/title}}</div>{{/name}}\n  </div>\n</div>"
+  },
+  {
+    "format": "mce-graphic@1",
+    "id": "speaker-bar-strip",
+    "version": 1,
+    "name": "Speaker · Bar and Strip",
+    "category": "speaker",
+    "description": "Name on a solid bar with the title on a white strip below it. The bar wipes in from the left, the strip follows and each line slides into place",
+    "color": "#0f6e8c",
+    "hold": 5,
+    "placement": {
+      "x": 110,
+      "y": 90,
+      "scale": 1
+    },
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "default": "Your Name"
+      },
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "default": "Your Title"
+      },
+      {
+        "key": "plate",
+        "label": "Bar colour",
+        "type": "color",
+        "default": "#0f6e8c",
+        "shades": true
+      },
+      {
+        "key": "plate2",
+        "label": "Second bar colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "t",
+        "label": "Name colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "t2",
+        "label": "Title colour",
+        "type": "color",
+        "default": "#0b2230"
+      }
+    ],
+    "animation": {
+      "in": [
+        [
+          ".s1-name",
+          "wipeL",
+          0,
+          {
+            "d": 0.6
+          }
+        ],
+        [
+          ".s1-name span",
+          "left",
+          0.25,
+          {
+            "d": 0.5
+          }
+        ],
+        [
+          ".s1-title",
+          "wipeL",
+          0.35,
+          {
+            "d": 0.55
+          }
+        ],
+        [
+          ".s1-title span",
+          "left",
+          0.55,
+          {
+            "d": 0.45
+          }
+        ]
+      ]
+    },
+    "css": ".s1{display:inline-flex;flex-direction:column;align-items:flex-start}\n.s1-name{background:var(--plate);padding:16px 36px 18px;overflow:hidden}\n.s1-name span{display:block;font:800 58px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t);white-space:nowrap}\n.s1-title{background:var(--plate2);padding:11px 36px 12px;overflow:hidden}\n.s1-title span{display:block;font:700 32px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t2);white-space:nowrap}",
+    "html": "<div class=\"s1\">\n  <div class=\"s1-name\"><span>{{name}}</span></div>\n  {{#title}}<div class=\"s1-title\"><span>{{title}}</span></div>{{/title}}\n</div>"
+  },
+  {
+    "format": "mce-graphic@1",
+    "id": "speaker-offset-strip",
+    "version": 1,
+    "name": "Speaker · Offset Strip",
+    "category": "speaker",
+    "description": "Name bar with the title strip set off to the right underneath, like a step. The bar wipes in, then the strip wipes the other way",
+    "color": "#0f6e8c",
+    "hold": 5,
+    "placement": {
+      "x": 110,
+      "y": 90,
+      "scale": 1
+    },
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "default": "Your Name"
+      },
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "default": "Your Title"
+      },
+      {
+        "key": "plate",
+        "label": "Bar colour",
+        "type": "color",
+        "default": "#0f6e8c",
+        "shades": true
+      },
+      {
+        "key": "plate2",
+        "label": "Second bar colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "t",
+        "label": "Name colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "t2",
+        "label": "Title colour",
+        "type": "color",
+        "default": "#0b2230"
+      }
+    ],
+    "animation": {
+      "in": [
+        [
+          ".s2-name",
+          "wipeL",
+          0,
+          {
+            "d": 0.6
+          }
+        ],
+        [
+          ".s2-name span",
+          "maskUp",
+          0.3
+        ],
+        [
+          ".s2-title",
+          "wipeR",
+          0.4,
+          {
+            "d": 0.55
+          }
+        ],
+        [
+          ".s2-title span",
+          "right",
+          0.6,
+          {
+            "d": 0.45
+          }
+        ]
+      ]
+    },
+    "css": ".s2{display:inline-flex;flex-direction:column;align-items:flex-end}\n.s2-name{background:var(--plate);padding:14px 40px 16px;margin-right:64px;overflow:hidden}\n.s2-name span{display:block;font:800 56px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t);white-space:nowrap}\n.s2-title{background:var(--plate2);padding:9px 30px 10px;overflow:hidden;min-width:60%}\n.s2-title span{display:block;font:700 30px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t2);white-space:nowrap;text-align:right}",
+    "html": "<div class=\"s2\">\n  <div class=\"s2-name\"><span>{{name}}</span></div>\n  {{#title}}<div class=\"s2-title\"><span>{{title}}</span></div>{{/title}}\n</div>"
+  },
+  {
+    "format": "mce-graphic@1",
+    "id": "speaker-underline-duo",
+    "version": 1,
+    "name": "Speaker · Underlines",
+    "category": "speaker",
+    "description": "First and last name in capitals over thin rules, the last name larger and stepped to the right. No box, just lines that draw across and letters that rise",
+    "color": "#0f6e8c",
+    "hold": 5,
+    "placement": {
+      "x": 110,
+      "y": 90,
+      "scale": 1
+    },
+    "fields": [
+      {
+        "key": "firstName",
+        "label": "First name",
+        "type": "text",
+        "default": "Your"
+      },
+      {
+        "key": "lastName",
+        "label": "Last name",
+        "type": "text",
+        "default": "Name"
+      },
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "default": "Your Title"
+      },
+      {
+        "key": "t",
+        "label": "Name colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "line",
+        "label": "Line colour",
+        "type": "color",
+        "default": "#ffffff"
+      }
+    ],
+    "animation": {
+      "in": [
+        [
+          ".s3-r1 .s3-rule",
+          "growX",
+          0,
+          {
+            "d": 0.6
+          }
+        ],
+        [
+          ".s3-r2 .s3-rule",
+          "growX",
+          0.15,
+          {
+            "d": 0.6
+          }
+        ],
+        [
+          ".s3-r1 .s3-tx span",
+          "maskUp",
+          0.3
+        ],
+        [
+          ".s3-r2 .s3-tx span",
+          "maskUp",
+          0.42
+        ],
+        [
+          ".s3-title",
+          "fade",
+          0.7
+        ]
+      ]
+    },
+    "css": ".s3{display:inline-flex;flex-direction:column;align-items:flex-start}\n.s3-row{position:relative;display:inline-block;padding:0 26px 10px 4px}\n.s3-r2{margin-left:90px;margin-top:6px}\n.s3-tx{overflow:hidden}\n.s3-r1 .s3-tx span{display:block;font:700 46px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t);text-transform:uppercase;letter-spacing:.02em;white-space:nowrap}\n.s3-r2 .s3-tx span{display:block;font:800 74px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t);text-transform:uppercase;letter-spacing:.01em;white-space:nowrap}\n.s3-rule{position:absolute;left:0;right:0;bottom:0;height:4px;background:var(--line)}\n.s3-title{margin:14px 0 0 94px;font:600 28px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t);white-space:nowrap;text-shadow:0 2px 6px rgba(0,0,0,.45)}\n.s3-tx span{text-shadow:0 2px 8px rgba(0,0,0,.4)}",
+    "html": "<div class=\"s3\">\n  <div class=\"s3-row s3-r1\"><div class=\"s3-tx\"><span>{{firstName}}</span></div><i class=\"s3-rule\"></i></div>\n  <div class=\"s3-row s3-r2\"><div class=\"s3-tx\"><span>{{lastName}}</span></div><i class=\"s3-rule\"></i></div>\n  {{#title}}<div class=\"s3-title\">{{title}}</div>{{/title}}\n</div>"
+  },
+  {
+    "format": "mce-graphic@1",
+    "id": "speaker-solid-box",
+    "version": 1,
+    "name": "Speaker · Solid Box",
+    "category": "speaker",
+    "description": "Name in bold capitals with the title underneath, together in one solid box. The box wipes up and the words rise inside it",
+    "color": "#0f6e8c",
+    "hold": 5,
+    "placement": {
+      "x": 110,
+      "y": 90,
+      "scale": 1
+    },
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "default": "Your Name"
+      },
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "default": "Your Title"
+      },
+      {
+        "key": "plate",
+        "label": "Bar colour",
+        "type": "color",
+        "default": "#0f6e8c",
+        "shades": true
+      },
+      {
+        "key": "t",
+        "label": "Name colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "t2",
+        "label": "Title colour",
+        "type": "color",
+        "default": "#ffffff"
+      }
+    ],
+    "animation": {
+      "in": [
+        [
+          ".s4",
+          "wipeU",
+          0,
+          {
+            "d": 0.55
+          }
+        ],
+        [
+          ".s4-name span",
+          "maskUp",
+          0.25
+        ],
+        [
+          ".s4-title span",
+          "maskUp",
+          0.4
+        ]
+      ]
+    },
+    "css": ".s4{display:inline-block;background:var(--plate);padding:18px 38px 20px;overflow:hidden;box-shadow:0 12px 30px rgba(0,0,0,.28)}\n.s4-name,.s4-title{overflow:hidden}\n.s4-name span{display:block;font:800 54px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t);text-transform:uppercase;white-space:nowrap}\n.s4-title span{display:block;margin-top:8px;font:600 30px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t2);white-space:nowrap}",
+    "html": "<div class=\"s4\"><div class=\"s4-name\"><span>{{name}}</span></div>{{#title}}<div class=\"s4-title\"><span>{{title}}</span></div>{{/title}}</div>"
+  },
+  {
+    "format": "mce-graphic@1",
+    "id": "speaker-bold-outline",
+    "version": 1,
+    "name": "Speaker · Bold Outline",
+    "category": "speaker",
+    "description": "A big name in capitals inside a white outline, the title tucked in at the bottom right. The frame opens from the middle and the name sweeps in",
+    "color": "#0f6e8c",
+    "hold": 5,
+    "placement": {
+      "x": 110,
+      "y": 90,
+      "scale": 1
+    },
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "default": "Your Name"
+      },
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "default": "Your Title"
+      },
+      {
+        "key": "t",
+        "label": "Name colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "line",
+        "label": "Line colour",
+        "type": "color",
+        "default": "#ffffff"
+      }
+    ],
+    "animation": {
+      "in": [
+        [
+          ".s5-frame",
+          "wipeC",
+          0,
+          {
+            "d": 0.6
+          }
+        ],
+        [
+          ".s5-name",
+          "blurL",
+          0.3
+        ],
+        [
+          ".s5-title",
+          "fade",
+          0.55
+        ]
+      ]
+    },
+    "css": ".s5{position:relative;display:inline-flex;flex-direction:column;align-items:flex-start;padding:14px 30px 14px 24px}\n.s5-frame{position:absolute;inset:0;border:4px solid var(--line)}\n.s5-name{font:900 84px/0.95 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t);text-transform:uppercase;white-space:nowrap;text-shadow:0 2px 10px rgba(0,0,0,.35)}\n.s5-title{align-self:flex-end;margin-top:4px;font:600 28px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t);white-space:nowrap}",
+    "html": "<div class=\"s5\"><i class=\"s5-frame\"></i><div class=\"s5-name\">{{name}}</div>{{#title}}<div class=\"s5-title\">{{title}}</div>{{/title}}</div>"
+  },
+  {
+    "format": "mce-graphic@1",
+    "id": "speaker-wide-box",
+    "version": 1,
+    "name": "Speaker · Wide Box",
+    "category": "speaker",
+    "description": "Name and title on one wide coloured box with generous room. The box stretches out from the left and both lines rise in",
+    "color": "#0f6e8c",
+    "hold": 5,
+    "placement": {
+      "x": 110,
+      "y": 90,
+      "scale": 1
+    },
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "default": "Your Name"
+      },
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "default": "Your Title"
+      },
+      {
+        "key": "plate",
+        "label": "Bar colour",
+        "type": "color",
+        "default": "#0f6e8c",
+        "shades": true
+      },
+      {
+        "key": "t",
+        "label": "Name colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "t2",
+        "label": "Title colour",
+        "type": "color",
+        "default": "#ffffff"
+      }
+    ],
+    "animation": {
+      "in": [
+        [
+          ".s6",
+          "growX",
+          0,
+          {
+            "d": 0.65
+          }
+        ],
+        [
+          ".s6-name span",
+          "maskUp",
+          0.3
+        ],
+        [
+          ".s6-title span",
+          "maskUp",
+          0.45
+        ]
+      ]
+    },
+    "css": ".s6{display:inline-block;min-width:560px;background:var(--plate);padding:20px 70px 22px 40px;overflow:hidden}\n.s6-name,.s6-title{overflow:hidden}\n.s6-name span{display:block;font:800 56px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t);white-space:nowrap}\n.s6-title span{display:block;margin-top:6px;font:600 32px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t2);white-space:nowrap}",
+    "html": "<div class=\"s6\"><div class=\"s6-name\"><span>{{name}}</span></div>{{#title}}<div class=\"s6-title\"><span>{{title}}</span></div>{{/title}}</div>"
+  },
+  {
+    "format": "mce-graphic@1",
+    "id": "speaker-stacked-pair",
+    "version": 1,
+    "name": "Speaker · Stacked Pair",
+    "category": "speaker",
+    "description": "Name on a coloured bar stacked on a white title bar of the same width. The bars wipe in one after the other and the text rises",
+    "color": "#0f6e8c",
+    "hold": 5,
+    "placement": {
+      "x": 110,
+      "y": 90,
+      "scale": 1
+    },
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "default": "Your Name"
+      },
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "default": "Your Title"
+      },
+      {
+        "key": "plate",
+        "label": "Bar colour",
+        "type": "color",
+        "default": "#0f6e8c",
+        "shades": true
+      },
+      {
+        "key": "plate2",
+        "label": "Second bar colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "t",
+        "label": "Name colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "t2",
+        "label": "Title colour",
+        "type": "color",
+        "default": "#0b2230"
+      }
+    ],
+    "animation": {
+      "in": [
+        [
+          ".s7-name",
+          "wipeL",
+          0,
+          {
+            "d": 0.55
+          }
+        ],
+        [
+          ".s7-title",
+          "wipeL",
+          0.18,
+          {
+            "d": 0.55
+          }
+        ],
+        [
+          ".s7-name span",
+          "maskUp",
+          0.35
+        ],
+        [
+          ".s7-title span",
+          "fade",
+          0.55
+        ]
+      ]
+    },
+    "css": ".s7{display:inline-grid}\n.s7-name{background:var(--plate);padding:12px 30px 12px;overflow:hidden}\n.s7-name span{display:block;font:800 52px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t);white-space:nowrap}\n.s7-title{background:var(--plate2);padding:8px 30px 9px;overflow:hidden}\n.s7-title span{display:block;font:700 28px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t2);white-space:nowrap}",
+    "html": "<div class=\"s7\"><div class=\"s7-name\"><span>{{name}}</span></div>{{#title}}<div class=\"s7-title\"><span>{{title}}</span></div>{{/title}}</div>"
+  },
+  {
+    "format": "mce-graphic@1",
+    "id": "speaker-split-name",
+    "version": 1,
+    "name": "Speaker · Split Name",
+    "category": "speaker",
+    "description": "First name on a coloured block, last name on a white block beside it, both in heavy capitals. The blocks wipe towards each other",
+    "color": "#0f6e8c",
+    "hold": 5,
+    "placement": {
+      "x": 110,
+      "y": 90,
+      "scale": 1
+    },
+    "fields": [
+      {
+        "key": "firstName",
+        "label": "First name",
+        "type": "text",
+        "default": "Your"
+      },
+      {
+        "key": "lastName",
+        "label": "Last name",
+        "type": "text",
+        "default": "Name"
+      },
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "default": "Your Title"
+      },
+      {
+        "key": "plate",
+        "label": "Bar colour",
+        "type": "color",
+        "default": "#0f6e8c",
+        "shades": true
+      },
+      {
+        "key": "plate2",
+        "label": "Second bar colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "t",
+        "label": "Name colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "t2",
+        "label": "Last name colour",
+        "type": "color",
+        "default": "#0b2230"
+      }
+    ],
+    "animation": {
+      "in": [
+        [
+          ".s8-first",
+          "wipeR",
+          0,
+          {
+            "d": 0.55
+          }
+        ],
+        [
+          ".s8-last",
+          "wipeL",
+          0.15,
+          {
+            "d": 0.55
+          }
+        ],
+        [
+          ".s8-first span",
+          "maskUp",
+          0.35
+        ],
+        [
+          ".s8-last span",
+          "maskUp",
+          0.45
+        ],
+        [
+          ".s8-title",
+          "up",
+          0.65,
+          {
+            "d": 0.45
+          }
+        ]
+      ]
+    },
+    "css": ".s8{display:inline-flex;align-items:stretch}\n.s8-first{background:var(--plate);padding:12px 22px 10px 28px;overflow:hidden}\n.s8-last{background:var(--plate2);padding:12px 28px 10px 22px;overflow:hidden}\n.s8-first span{display:block;font:900 66px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t);text-transform:uppercase;white-space:nowrap}\n.s8-last span{display:block;font:900 66px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t2);text-transform:uppercase;white-space:nowrap}\n.s8-title{margin-top:10px;font:600 28px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:#fff;white-space:nowrap;text-shadow:0 2px 6px rgba(0,0,0,.45)}",
+    "html": "<div class=\"s8\"><div class=\"s8-first\"><span>{{firstName}}</span></div><div class=\"s8-last\"><span>{{lastName}}</span></div></div>{{#title}}<div class=\"s8-title\">{{title}}</div>{{/title}}"
+  },
+  {
+    "format": "mce-graphic@1",
+    "id": "speaker-thin-frame",
+    "version": 1,
+    "name": "Speaker · Thin Frame",
+    "category": "speaker",
+    "description": "Name and title inside a thin white frame. A light, open look that suits busy pictures. The frame opens from the middle and the words slide in",
+    "color": "#0f6e8c",
+    "hold": 5,
+    "placement": {
+      "x": 110,
+      "y": 90,
+      "scale": 1
+    },
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "default": "Your Name"
+      },
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "default": "Your Title"
+      },
+      {
+        "key": "t",
+        "label": "Name colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "line",
+        "label": "Line colour",
+        "type": "color",
+        "default": "#ffffff"
+      }
+    ],
+    "animation": {
+      "in": [
+        [
+          ".s9-frame",
+          "wipeC",
+          0,
+          {
+            "d": 0.6
+          }
+        ],
+        [
+          ".s9-name",
+          "left",
+          0.3,
+          {
+            "d": 0.5
+          }
+        ],
+        [
+          ".s9-title",
+          "left",
+          0.45,
+          {
+            "d": 0.5
+          }
+        ]
+      ]
+    },
+    "css": ".s9{position:relative;display:inline-block;min-width:440px;padding:16px 60px 18px 24px}\n.s9-frame{position:absolute;inset:0;border:3px solid var(--line)}\n.s9-name{font:700 44px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t);white-space:nowrap;text-shadow:0 2px 8px rgba(0,0,0,.4)}\n.s9-title{margin-top:6px;font:600 26px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t);white-space:nowrap;text-shadow:0 2px 6px rgba(0,0,0,.4)}",
+    "html": "<div class=\"s9\"><i class=\"s9-frame\"></i><div class=\"s9-name\">{{name}}</div>{{#title}}<div class=\"s9-title\">{{title}}</div>{{/title}}</div>"
+  },
+  {
+    "format": "mce-graphic@1",
+    "id": "speaker-clean-text",
+    "version": 1,
+    "name": "Speaker · Clean Text",
+    "category": "speaker",
+    "description": "Just the name and title, no box. Bold white type with a soft shadow so it reads over any picture. Each line rises out of a mask",
+    "color": "#0f6e8c",
+    "hold": 5,
+    "placement": {
+      "x": 110,
+      "y": 90,
+      "scale": 1
+    },
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "default": "Your Name"
+      },
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "default": "Your Title"
+      },
+      {
+        "key": "t",
+        "label": "Name colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "t2",
+        "label": "Title colour",
+        "type": "color",
+        "default": "#ffffff"
+      }
+    ],
+    "animation": {
+      "in": [
+        [
+          ".s10-name",
+          "maskUp",
+          0,
+          {
+            "d": 0.55
+          }
+        ],
+        [
+          ".s10-title",
+          "maskUp",
+          0.22,
+          {
+            "d": 0.55
+          }
+        ]
+      ]
+    },
+    "css": ".s10{display:inline-block}\n.s10-l{overflow:hidden;padding:0 8px 4px 0}\n.s10-name{display:block;font:800 60px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t);white-space:nowrap;text-shadow:0 3px 12px rgba(0,0,0,.55)}\n.s10-title{display:block;margin-top:2px;font:700 32px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t2);white-space:nowrap;text-shadow:0 2px 8px rgba(0,0,0,.55)}",
+    "html": "<div class=\"s10\"><div class=\"s10-l\"><span class=\"s10-name\">{{name}}</span></div>{{#title}}<div class=\"s10-l\"><span class=\"s10-title\">{{title}}</span></div>{{/title}}</div>"
+  },
+  {
+    "format": "mce-graphic@1",
+    "id": "speaker-spaced-caps",
+    "version": 1,
+    "name": "Speaker · Spaced Capitals",
+    "category": "speaker",
+    "description": "Name in widely spaced capitals on a coloured bar with the title centred on a small white strip below. The letters settle into place as the bar opens from the middle",
+    "color": "#0f6e8c",
+    "hold": 5,
+    "placement": {
+      "x": 110,
+      "y": 90,
+      "scale": 1
+    },
+    "fields": [
+      {
+        "key": "name",
+        "label": "Name",
+        "type": "text",
+        "default": "Your Name"
+      },
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "default": "Your Title"
+      },
+      {
+        "key": "plate",
+        "label": "Bar colour",
+        "type": "color",
+        "default": "#0f6e8c",
+        "shades": true
+      },
+      {
+        "key": "plate2",
+        "label": "Second bar colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "t",
+        "label": "Name colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "t2",
+        "label": "Title colour",
+        "type": "color",
+        "default": "#0b2230"
+      }
+    ],
+    "animation": {
+      "in": [
+        [
+          ".s11-name",
+          "wipeC",
+          0,
+          {
+            "d": 0.6
+          }
+        ],
+        {
+          "sel": ".s11-name span",
+          "from": {
+            "letterSpacing": "0.5em",
+            "opacity": 0
+          },
+          "to": {
+            "letterSpacing": "0.12em",
+            "opacity": 1
+          },
+          "at": 0.2,
+          "d": 0.8,
+          "e": "expo.out"
+        },
+        [
+          ".s11-title",
+          "wipeC",
+          0.45,
+          {
+            "d": 0.5
+          }
+        ],
+        [
+          ".s11-title span",
+          "fade",
+          0.6
+        ]
+      ]
+    },
+    "css": ".s11{display:inline-flex;flex-direction:column;align-items:center}\n.s11-name{background:var(--plate);padding:12px 34px 13px;overflow:hidden}\n.s11-name span{display:block;font:800 48px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t);text-transform:uppercase;letter-spacing:.12em;white-space:nowrap}\n.s11-title{background:var(--plate2);padding:7px 26px 8px;margin-top:6px;overflow:hidden}\n.s11-title span{display:block;font:700 24px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t2);letter-spacing:.14em;white-space:nowrap}",
+    "html": "<div class=\"s11\"><div class=\"s11-name\"><span>{{name}}</span></div>{{#title}}<div class=\"s11-title\"><span>{{title}}</span></div>{{/title}}</div>"
+  },
+  {
+    "format": "mce-graphic@1",
+    "id": "speaker-two-tone-tag",
+    "version": 1,
+    "name": "Speaker · Two-Tone and Tag",
+    "category": "speaker",
+    "description": "A large first name on a coloured block, the last name on a white block beside it and the title on a small coloured tag underneath. Each piece wipes in in turn",
+    "color": "#0f6e8c",
+    "hold": 5,
+    "placement": {
+      "x": 110,
+      "y": 90,
+      "scale": 1
+    },
+    "fields": [
+      {
+        "key": "firstName",
+        "label": "First name",
+        "type": "text",
+        "default": "Your"
+      },
+      {
+        "key": "lastName",
+        "label": "Last name",
+        "type": "text",
+        "default": "Name"
+      },
+      {
+        "key": "title",
+        "label": "Title",
+        "type": "text",
+        "default": "Your Title"
+      },
+      {
+        "key": "plate",
+        "label": "Bar colour",
+        "type": "color",
+        "default": "#0f6e8c",
+        "shades": true
+      },
+      {
+        "key": "plate2",
+        "label": "Second bar colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "t",
+        "label": "Name colour",
+        "type": "color",
+        "default": "#ffffff"
+      },
+      {
+        "key": "t2",
+        "label": "Title colour",
+        "type": "color",
+        "default": "#0b2230"
+      }
+    ],
+    "animation": {
+      "in": [
+        [
+          ".s12-first",
+          "wipeL",
+          0,
+          {
+            "d": 0.55
+          }
+        ],
+        [
+          ".s12-last",
+          "wipeL",
+          0.2,
+          {
+            "d": 0.5
+          }
+        ],
+        [
+          ".s12-tag",
+          "wipeL",
+          0.38,
+          {
+            "d": 0.45
+          }
+        ],
+        [
+          ".s12-first span",
+          "maskUp",
+          0.3
+        ],
+        [
+          ".s12-last span",
+          "maskUp",
+          0.42
+        ],
+        [
+          ".s12-tag span",
+          "fade",
+          0.6
+        ]
+      ]
+    },
+    "css": ".s12{display:inline-flex;flex-direction:column;align-items:flex-start}\n.s12-row{display:inline-flex;align-items:flex-end}\n.s12-first{background:var(--plate);padding:8px 22px 8px 26px;overflow:hidden}\n.s12-first span{display:block;font:800 72px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t);white-space:nowrap}\n.s12-last{background:var(--plate2);padding:6px 20px 6px 18px;overflow:hidden;margin-bottom:6px}\n.s12-last span{display:block;font:700 42px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t2);white-space:nowrap}\n.s12-tag{background:var(--plate);padding:6px 24px 7px;margin-left:56px;overflow:hidden}\n.s12-tag span{display:block;font:600 26px/1 Montserrat,\"MCE Archivo\",Arial,sans-serif;color:var(--t);white-space:nowrap}",
+    "html": "<div class=\"s12\"><div class=\"s12-row\"><div class=\"s12-first\"><span>{{firstName}}</span></div><div class=\"s12-last\"><span>{{lastName}}</span></div></div>{{#title}}<div class=\"s12-tag\"><span>{{title}}</span></div>{{/title}}</div>"
   }
 ];

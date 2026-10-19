@@ -28,6 +28,7 @@ import { dockClient } from "../../services/dockBridge";
 import { trackGraphicUsage } from "../../services/tracking";
 import type { LowerThirdTheme } from "../../lowerthirds/types";
 import type { LTSize } from "../../lowerthirds/types";
+import { applyTextCase, TEXT_CASE_CONVERSIONS } from "../../lowerthirds/textStyle";
 import { LT_SIZE_FONT_SCALE, LT_SIZE_LABELS } from "../../lowerthirds/types";
 import type { BibleTheme } from "../../bible/types";
 import type { BibleThemeSettings } from "../../bible/types";
@@ -41,6 +42,22 @@ import { getStoredLocalDevPlanOverride } from "../../services/localDevPlanOverri
 import { checkEntitlementSync } from "../../services/entitlementClient";
 import { getUserScopedKey } from "../../services/userScopedStorage";
 import { readNativeDockSetting, writeNativeDockSetting } from "../../services/localDockSettings";
+import { copyEditorSlots, deleteEditorSlots } from "../../lowerthirds/contentSlots";
+import {
+  canAddLtTab,
+  cloneLtTab,
+  closeLtTab,
+  createFirstLtTab,
+  FIRST_LT_TAB_ID,
+  ltTabEditorId,
+  ltTabLimitForPlan,
+  MINISTRY_LT_TABS_STORAGE_KEY,
+  newLtTabId,
+  parseLtTabs,
+  updateLtTab,
+  usableLtTabs,
+  type MinistryLtTab,
+} from "../ministryLtTabs";
 import { getSettings } from "../../multiview/mvStore";
 import { normalizeBrandColor } from "../../lowerthirds/runtimeBranding";
 import { loadProjectionSettings, saveProjectionSettings } from "../dockProjectionSettings";
@@ -71,7 +88,8 @@ import {
   mergeRemoteLowerThirdThemes,
   type RemoteProductionTheme,
 } from "../../services/remoteProductionThemes";
-import { useDockSceneRoute } from "../dockSceneRouting";
+import { loadDockSceneRoute, useDockSceneRoute } from "../dockSceneRouting";
+import DockSceneRouteSendControl from "../components/DockSceneRouteSendControl";
 
 const ALL_LT_THEMES: LowerThirdTheme[] = [
   ...LT_ALL_THEMES,
@@ -165,6 +183,9 @@ const SETTINGS_KEY = "dock-ticker-settings";
 const BIBLE_LT_COLOR_OVERRIDES_KEY = "dock-bible-lt-color-overrides";
 const MINISTRY_LT_SIZE_STORAGE_KEY = "dock-ministry-lower-third-size";
 const MINISTRY_LT_THEME_STORAGE_KEY = "dock-ministry-lower-third-theme";
+/** "shared": all tabs use one OBS source; "per-tab": each tab has its own (they can be on screen together). */
+const MINISTRY_LT_SOURCE_MODE_KEY = "dock-ministry-lower-third-source-mode";
+type LtSourceMode = "shared" | "per-tab";
 const ltEntryKey = (entry: MixedLTThemeEntry) => `${entry.kind}:${entry.theme.id}:${entry.label}`;
 const MAX_CHARS = 140;
 const TICKER_HEIGHT = 80;
@@ -451,8 +472,23 @@ export default function DockMinistryTab({
   const [ltSending, setLtSending] = useState(false);
   const [ltFeedback, setLtFeedback] = useState<string | null>(null);
   const [ltFeedbackTone, setLtFeedbackTone] = useState<"success" | "error">("success");
-  const [ltSize, setLtSize] = useState<LTSize>(loadMinistryLtSize);
-  const [ltLive, setLtLive] = useState(false);
+  // Lower-third tabs: each keeps its own theme, size and content slots.
+  const [ltTabsState, setLtTabsState] = useState<{ tabs: MinistryLtTab[]; activeId: string }>(() => (
+    parseLtTabs(readNativeDockSetting(MINISTRY_LT_TABS_STORAGE_KEY))
+    ?? { tabs: [createFirstLtTab(null)], activeId: FIRST_LT_TAB_ID }
+  ));
+  const ltTabsTouchedRef = useRef(false);
+  const ltEditorFlushRef = useRef<(() => void) | null>(null);
+  // Tabs that have a lower third on screen. With one shared OBS source that is at most one.
+  const [liveLtTabIds, setLiveLtTabIds] = useState<string[]>([]);
+  // One shared OBS source (Show swaps: the old one plays out, then the new one in) or a source per tab.
+  const [ltSourceMode, setLtSourceModeState] = useState<LtSourceMode>(() => (
+    readNativeDockSetting(MINISTRY_LT_SOURCE_MODE_KEY) === "per-tab" ? "per-tab" : "shared"
+  ));
+  const ltPerTab = ltSourceMode === "per-tab";
+  const ltPerTabRef = useRef(ltPerTab);
+  ltPerTabRef.current = ltPerTab;
+  dockObsClient.setLowerThirdPerTabSources(ltPerTab);
   // BibleTheme lower-third text input (used when a BibleTheme is selected)
   const [bibleLtText, setBibleLtText] = useState("");
 
@@ -553,6 +589,16 @@ export default function DockMinistryTab({
     });
     return () => { cancelled = true; };
   }, [subTab, activeTabLocked]);
+
+  // Saved lower-third tabs are cut to the plan's limit, so check the plan as soon as the
+  // Dock opens. A stale cached "free" plan must not hide tabs that were saved earlier.
+  useEffect(() => {
+    let cancelled = false;
+    void refreshDockPlanNow().then((plan) => {
+      if (!cancelled && mountedRef.current) setDockPlan(plan);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   // Refresh dock plan every 30s (matches DockAuthGate polling)
   useEffect(() => {
@@ -793,6 +839,44 @@ export default function DockMinistryTab({
   const tickerBrandName = tickerBranding.brandName || "MakeChurchEazy";
   const obsFontFamily = loadDockOutputFontFamily();
 
+  const ltTabLimit = ltTabLimitForPlan(dockPlan);
+  const ltTabs = usableLtTabs(ltTabsState.tabs, ltTabLimit);
+  const activeLtTab = ltTabs.find((tab) => tab.id === ltTabsState.activeId) ?? ltTabs[0];
+  const activeLtTabIdRef = useRef(activeLtTab.id);
+  activeLtTabIdRef.current = activeLtTab.id;
+  // Is the open tab's lower third on screen? (With one shared source: is any tab's?)
+  const ltLive = ltPerTab ? liveLtTabIds.includes(activeLtTab.id) : liveLtTabIds.length > 0;
+  const setLtLive = useCallback((on: boolean) => {
+    const id = activeLtTabIdRef.current;
+    setLiveLtTabIds((current) => {
+      if (!ltPerTabRef.current) return on ? [id] : [];
+      const others = current.filter((x) => x !== id);
+      return on ? [...others, id] : others;
+    });
+  }, []);
+  /** The OBS source the open tab sends to. */
+  const activeLtSource = () => dockObsClient.lowerThirdSourceForTab(activeLtTabIdRef.current, activeLtTabIdRef.current === FIRST_LT_TAB_ID);
+  const setLtSourceMode = useCallback((mode: LtSourceMode) => {
+    setLtSourceModeState(mode);
+    void writeNativeDockSetting(MINISTRY_LT_SOURCE_MODE_KEY, mode);
+    // What is on screen stays where it is; the next Show uses the new choice.
+    setLiveLtTabIds([]);
+  }, []);
+  const ltSize: LTSize = activeLtTab.size ?? loadMinistryLtSize();
+  const commitLtTabs = useCallback((next: { tabs: MinistryLtTab[]; activeId: string }) => {
+    ltTabsTouchedRef.current = true;
+    setLtTabsState(next);
+    void writeNativeDockSetting(MINISTRY_LT_TABS_STORAGE_KEY, next);
+  }, []);
+  const setLtSize = useCallback((size: LTSize) => {
+    setLtTabsState((current) => {
+      const next = { ...current, tabs: updateLtTab(current.tabs, activeLtTabIdRef.current, { size }) };
+      ltTabsTouchedRef.current = true;
+      void writeNativeDockSetting(MINISTRY_LT_TABS_STORAGE_KEY, next);
+      return next;
+    });
+  }, []);
+
   const fallbackLtTheme = (availableLtThemes[0] ?? ALL_LT_THEMES[0]) as LowerThirdTheme;
   const ltSelectedEntry = ltFavorites[ltSelectedIdx] ?? ltFavorites[0] ?? { kind: "lt" as const, theme: fallbackLtTheme, label: fallbackLtTheme?.name ?? "Speaker" };
   // Motion straps (public/kinetic) have their own Size slider, so the SM/LG/XL row is hidden for them.
@@ -827,18 +911,70 @@ export default function DockMinistryTab({
 
   // Reset selected index when favorites change
   // The chosen theme is remembered, so it is still selected after a reload.
+  // Each tab remembers its theme. Saved tabs may arrive after the first render (the
+  // Dock settings load in the background), so adopt them until the operator changes a tab.
   useEffect(() => {
-    const saved = readNativeDockSetting<string>(MINISTRY_LT_THEME_STORAGE_KEY);
-    const savedIdx = typeof saved === "string" ? ltFavorites.findIndex((entry) => ltEntryKey(entry) === saved) : -1;
-    setLtSelectedIdx(savedIdx >= 0 ? savedIdx : 0);
+    if (ltTabsTouchedRef.current) return;
+    const stored = parseLtTabs(readNativeDockSetting(MINISTRY_LT_TABS_STORAGE_KEY));
+    if (stored) {
+      setLtTabsState(stored);
+      return;
+    }
+    const legacy = readNativeDockSetting<string>(MINISTRY_LT_THEME_STORAGE_KEY);
+    if (typeof legacy === "string") {
+      setLtTabsState((current) => ({ ...current, tabs: updateLtTab(current.tabs, FIRST_LT_TAB_ID, { themeKey: legacy }) }));
+    }
   }, [ltFavorites]);
+
+  useEffect(() => {
+    const key = activeLtTab.themeKey;
+    const idx = key ? ltFavorites.findIndex((entry) => ltEntryKey(entry) === key) : -1;
+    setLtSelectedIdx(idx >= 0 ? idx : 0);
+  }, [ltFavorites, activeLtTab.themeKey]);
 
   const handleSelectLtTheme = useCallback((entryIdx: number) => {
     if (entryIdx >= 0 && entryIdx < ltFavorites.length) {
+      const themeKey = ltEntryKey(ltFavorites[entryIdx]);
       setLtSelectedIdx(entryIdx);
-      void writeNativeDockSetting(MINISTRY_LT_THEME_STORAGE_KEY, ltEntryKey(ltFavorites[entryIdx]));
+      commitLtTabs({ ...ltTabsState, tabs: updateLtTab(ltTabsState.tabs, activeLtTab.id, { themeKey }) });
+      // The first tab also keeps the older single-theme setting current.
+      if (activeLtTab.id === FIRST_LT_TAB_ID) void writeNativeDockSetting(MINISTRY_LT_THEME_STORAGE_KEY, themeKey);
     }
-  }, [ltFavorites]);
+  }, [ltFavorites, ltTabsState, activeLtTab.id, commitLtTabs]);
+
+  const handleSwitchLtTab = useCallback((id: string) => {
+    if (id === activeLtTab.id) return;
+    commitLtTabs({ ...ltTabsState, activeId: id });
+  }, [activeLtTab.id, ltTabsState, commitLtTabs]);
+
+  // + clones the open tab: same theme, size and content (all slots), then opens the copy.
+  const handleAddLtTab = useCallback(() => {
+    if (!canAddLtTab(ltTabs.length, ltTabLimit)) return;
+    ltEditorFlushRef.current?.();
+    const id = newLtTabId(ltTabsState.tabs);
+    const selected = ltFavorites[ltSelectedIdx];
+    const themeKey = selected ? ltEntryKey(selected) : activeLtTab.themeKey;
+    if (selected?.kind === "lt") {
+      copyEditorSlots(selected.theme.id, ltTabEditorId(activeLtTab), ltTabEditorId({ id }));
+    }
+    const withKey = updateLtTab(ltTabsState.tabs, activeLtTab.id, { themeKey, size: ltSize });
+    commitLtTabs({ tabs: cloneLtTab(withKey, activeLtTab.id, id), activeId: id });
+  }, [ltTabs.length, ltTabLimit, ltTabsState, ltFavorites, ltSelectedIdx, activeLtTab, ltSize, commitLtTabs]);
+
+  const handleCloseLtTab = useCallback((id: string) => {
+    const next = closeLtTab(ltTabsState.tabs, id, activeLtTab.id);
+    if (next.tabs === ltTabsState.tabs) return;
+    // After the closing editor has unmounted (it saves once more on the way out).
+    if (id !== FIRST_LT_TAB_ID) window.setTimeout(() => deleteEditorSlots(ltTabEditorId({ id })), 0);
+    if (liveLtTabIds.includes(id)) {
+      // A tab with its own source takes its lower third off with it.
+      if (ltPerTab && id !== FIRST_LT_TAB_ID) {
+        void dockObsClient.animateLowerThirdOverlayUrlOut("", 900, { sourceName: dockObsClient.lowerThirdSourceForTab(id, false) }).catch(() => { });
+      }
+      setLiveLtTabIds((current) => current.filter((x) => x !== id));
+    }
+    commitLtTabs(next);
+  }, [ltTabsState.tabs, activeLtTab.id, liveLtTabIds, ltPerTab, commitLtTabs]);
 
   const setTickerColorOverride = useCallback((key: TickerColorKey, value: string) => {
     setSettings((current) => {
@@ -1626,8 +1762,24 @@ export default function DockMinistryTab({
                     <Icon name="add" size={14} />
                   </button>
                 </div>
-                <div style={{ fontSize: 9, color: "var(--dock-text-dim)", textAlign: "right", marginTop: 2 }}>
-                  {newText.length}/{MAX_CHARS}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, marginTop: 4 }}>
+                  <div className="dock-console-segmented dock-console-segmented--compact" role="group" aria-label={t("ministry.textCase", "Text case")}>
+                    {TEXT_CASE_CONVERSIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        className="dock-console-segmented__item"
+                        onClick={() => setNewText((text) => applyTextCase(text, opt.value).slice(0, MAX_CHARS))}
+                        disabled={!newText.trim()}
+                        title={opt.hint}
+                        aria-label={opt.hint}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <span style={{ fontSize: 9, color: "var(--dock-text-dim)" }}>
+                    {newText.length}/{MAX_CHARS}
+                  </span>
                 </div>
               </div>
 
@@ -1833,6 +1985,81 @@ export default function DockMinistryTab({
           )}
 
           <div className="dock-mv-tab__list">
+            {/* Tabs: keep several lower thirds ready; + clones the open one. */}
+            <div className="dock-lt-tabs" role="tablist" aria-label={t("ministry.ltTabs", "Lower-third tabs")}>
+              <div className="dock-lt-tabs__strip">
+                {ltTabs.map((tab, i) => {
+                  const active = tab.id === activeLtTab.id;
+                  const entry = tab.themeKey ? ltFavorites.find((e) => ltEntryKey(e) === tab.themeKey) : undefined;
+                  const label = t("ministry.ltTabLabel", { n: i + 1, defaultValue: "Tab {{n}}" });
+                  return (
+                    <div
+                      key={tab.id}
+                      role="tab"
+                      aria-selected={active}
+                      tabIndex={0}
+                      className={`dock-lt-tabs__tab${active ? " dock-lt-tabs__tab--active" : ""}`}
+                      title={entry ? `${label} · ${entry.label}` : label}
+                      onClick={() => handleSwitchLtTab(tab.id)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleSwitchLtTab(tab.id); } }}
+                      onAuxClick={(e) => { if (e.button === 1 && ltTabs.length > 1) handleCloseLtTab(tab.id); }}
+                    >
+                      {liveLtTabIds.includes(tab.id) && <span className="dock-lt-tabs__live" aria-label={t("ministry.live", "Live")} />}
+                      <span className="dock-lt-tabs__label">{label}</span>
+                      {ltTabs.length > 1 && (
+                        <button
+                          type="button"
+                          className="dock-lt-tabs__close"
+                          onClick={(e) => { e.stopPropagation(); handleCloseLtTab(tab.id); }}
+                          title={t("ministry.closeTab", "Close tab")}
+                          aria-label={t("ministry.closeTab", "Close tab")}>
+                          <Icon name="close" size={10} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                className="dock-lt-tabs__add"
+                onClick={handleAddLtTab}
+                disabled={!canAddLtTab(ltTabs.length, ltTabLimit)}
+                title={
+                  ltTabLimit === 1
+                    ? t("ministry.ltTabsUpgrade", "Upgrade to Basic to open more lower-third tabs")
+                    : canAddLtTab(ltTabs.length, ltTabLimit)
+                      ? t("ministry.ltTabAdd", "New tab (copy of this one)")
+                      : t("ministry.ltTabsLimit", { n: ltTabLimit, defaultValue: "Your plan allows {{n}} tabs" })
+                }
+                aria-label={t("ministry.ltTabAdd", "New tab (copy of this one)")}>
+                <Icon name="add" size={14} />
+              </button>
+            </div>
+            {ltTabLimit !== 1 && (
+              <div className="dock-lt-source-mode" role="radiogroup" aria-label={t("ministry.ltSourceMode", "How tabs go to OBS")}>
+                <span className="dock-lt-source-mode__label">{t("ministry.ltSourceModeLabel", "In OBS")}</span>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!ltPerTab}
+                  className={!ltPerTab ? "is-on" : ""}
+                  onClick={() => setLtSourceMode("shared")}
+                  title={t("ministry.ltSourceSharedHint", "All tabs use one OBS source. Show plays out what is on screen, then plays the new one in.")}>
+                  {t("ministry.ltSourceShared", "One source")}
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={ltPerTab}
+                  className={ltPerTab ? "is-on" : ""}
+                  onClick={() => setLtSourceMode("per-tab")}
+                  title={t("ministry.ltSourcePerTabHint", "Each tab gets its own OBS source, so several lower thirds can be on screen together.")}>
+                  {t("ministry.ltSourcePerTab", "Source per tab")}
+                </button>
+              </div>
+            )}
+
             {/* Theme Picker */}
             <div className="dock-mv-tab__section" style={{ marginBottom: 6 }}>
               <div className="dock-mv-tab__section-label" style={{ paddingBottom: 3 }}>{t("ministry.theme")}</div>
@@ -1917,6 +2144,9 @@ export default function DockMinistryTab({
             {/* Render editor based on selected theme type */}
             {ltSelectedEntry?.kind === "lt" ? (
               <DockLowerThirdEditor
+                key={activeLtTab.id}
+                editorId={ltTabEditorId(activeLtTab)}
+                flushRef={ltEditorFlushRef}
                 theme={ltSelectedEntry.theme}
                 themes={ltFavorites.filter((e) => e.kind === "lt").map((e) => (e as LTThemeEntry).theme)}
                 onSelectTheme={(themeId) => {
@@ -1925,7 +2155,9 @@ export default function DockMinistryTab({
                 }}
                 sending={ltSending}
                 size={ltSize}
-                onSend={async (url) => {
+                sceneRoute={lowerThirdSceneRoute}
+                onUpdateSceneRoute={updateLowerThirdSceneRoute}
+                onSend={async (url, options) => {
                   if (!(await requireEntitlement("lowerThirds", 0))) return;
                   setLtSending(true);
                   setLtFeedback(null);
@@ -1949,27 +2181,40 @@ export default function DockMinistryTab({
                       sourceWidth: 1920,
                       sourceHeight: 1080,
                     };
-                    if (hasLowerThirdSceneRoute) {
-                      await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                    const ltSourceOptions = { ...sourceSize, sourceName: activeLtSource() };
+                    const currentRoute = loadDockSceneRoute("lower-third");
+                    const useSceneRoute = !options?.bypassSceneRoute && currentRoute.enabled && currentRoute.targets.length > 0;
+                    if (useSceneRoute) {
+                      await Promise.all(currentRoute.targets.map((target) => (
                         dockObsClient.pushLowerThirdOverlayUrlToScene(url, target.sceneName, sourceSize)
                       )));
-                      if (lowerThirdSceneRoute.syncPresentation) {
-                        if (ltLive) {
+                      if (currentRoute.syncPresentation) {
+                        // Something already on this source plays out first, then the new one comes in.
+                        if (ltLive || await dockObsClient.isLowerThirdSourceShowing(ltSourceOptions.sourceName)) {
                           const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
-                          await dockObsClient.replaceLiveLowerThirdOverlayUrl(url, sourceSize, exitDuration);
+                          await dockObsClient.replaceLiveLowerThirdOverlayUrl(url, ltSourceOptions, exitDuration);
                         } else {
-                          await dockObsClient.pushLowerThirdOverlayUrl(url, sourceSize);
+                          await dockObsClient.pushLowerThirdOverlayUrl(url, ltSourceOptions);
                         }
                       }
-                    } else if (ltLive) {
-                      const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
-                      await dockObsClient.replaceLiveLowerThirdOverlayUrl(url, sourceSize, exitDuration);
                     } else {
-                      await dockObsClient.pushLowerThirdOverlayUrl(url, sourceSize);
+                      if (options?.bypassSceneRoute && currentRoute.targets.length > 0) {
+                        await Promise.allSettled(currentRoute.targets.map((target) => (
+                          dockObsClient.clearSceneRouteSource("lower-third", target.sceneName)
+                        )));
+                      }
+                      // Something already on this source (from any tab, or left from before the
+                      // Dock reloaded) plays out first, then the new one comes in.
+                      if (ltLive || await dockObsClient.isLowerThirdSourceShowing(ltSourceOptions.sourceName)) {
+                        const exitDuration = ((ltSelectedEntry?.theme as LowerThirdTheme)?.exitAnimation?.duration ?? 800) + 100;
+                        await dockObsClient.replaceLiveLowerThirdOverlayUrl(url, ltSourceOptions, exitDuration);
+                      } else {
+                        await dockObsClient.pushLowerThirdOverlayUrl(url, ltSourceOptions);
+                      }
                     }
                     setLtLive(true);
                     setLtFeedbackTone("success");
-                    setLtFeedback(t("ministry.lowerThirdLive"));
+                    setLtFeedback(options?.bypassSceneRoute ? t("ministry.routingDisabledSent", "Scene routing disabled. Sent to OBS") : t("ministry.lowerThirdLive"));
                     if (ltSelectedEntry?.kind === "lt") {
                       const ltEntry = ltSelectedEntry as LTThemeEntry;
                       trackGraphicUsage("shown", ltEntry.templateId || ltEntry.theme?.id, ltEntry.theme?.name);
@@ -2006,10 +2251,10 @@ export default function DockMinistryTab({
                         dockObsClient.clearSceneRouteSource("lower-third", target.sceneName)
                       )));
                       if (lowerThirdSceneRoute.syncPresentation) {
-                        await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration);
+                        await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration, { sourceName: activeLtSource() });
                       }
                     } else {
-                      await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration);
+                      await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration, { sourceName: activeLtSource() });
                     }
                     setLtLive(false);
                     setLtFeedbackTone("success");
@@ -2046,10 +2291,10 @@ export default function DockMinistryTab({
                         dockObsClient.clearSceneRouteSource("lower-third", target.sceneName)
                       )));
                       if (lowerThirdSceneRoute.syncPresentation) {
-                        await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration);
+                        await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration, { sourceName: activeLtSource() });
                       }
                     } else {
-                      await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration);
+                      await dockObsClient.animateLowerThirdOverlayUrlOut(url, exitDuration, { sourceName: activeLtSource() });
                     }
                     setLtLive(false);
                     setLtFeedbackTone("success");
@@ -2179,11 +2424,10 @@ export default function DockMinistryTab({
 
                 {/* Action buttons */}
                 <div style={{ display: "flex", gap: 6, padding: "6px 0" }}>
-                  <button
-                    type="button"
-                    className={`dock-btn dock-btn--sm ${ltSending ? "dock-btn--loading" : "dock-btn--primary"}`}
-                    disabled={ltSending || !bibleLtText.trim() || !obsConnected}
-                    onClick={async () => {
+                  <DockSceneRouteSendControl
+                    route={lowerThirdSceneRoute}
+                    onRouteChange={updateLowerThirdSceneRoute}
+                    onSend={async (options) => {
                       if (!bibleLtText.trim() || ltSelectedEntry?.kind !== "bible") return;
                       setLtSending(true);
                       setLtFeedback(null);
@@ -2201,19 +2445,26 @@ export default function DockMinistryTab({
                           overlayMode: "lower-third",
                           bibleThemeSettings: selectedBibleLtEffectiveSettings,
                         } as const;
-                        if (hasLowerThirdSceneRoute) {
-                          await Promise.all(lowerThirdSceneRoute.targets.map((target) => (
+                        const currentRoute = loadDockSceneRoute("lower-third");
+                        const useSceneRoute = !options?.bypassSceneRoute && currentRoute.enabled && currentRoute.targets.length > 0;
+                        if (useSceneRoute) {
+                          await Promise.all(currentRoute.targets.map((target) => (
                             dockObsClient.pushBibleToScene(bibleLowerThirdData, target.sceneName, "lower-third")
                           )));
-                          if (lowerThirdSceneRoute.syncPresentation) {
+                          if (currentRoute.syncPresentation) {
                             await dockObsClient.pushBible(bibleLowerThirdData);
                           }
                         } else {
+                          if (options?.bypassSceneRoute && currentRoute.targets.length > 0) {
+                            await Promise.allSettled(currentRoute.targets.map((target) => (
+                              dockObsClient.clearSceneRouteSource("lower-third", target.sceneName)
+                            )));
+                          }
                           await dockObsClient.pushBible(bibleLowerThirdData);
                         }
                         setLtLive(true);
-                        setLtFeedbackTone("success");
-                        setLtFeedback(t("ministry.lowerThirdLive"));
+                          setLtFeedbackTone("success");
+                        setLtFeedback(options?.bypassSceneRoute ? t("ministry.routingDisabledSent", "Scene routing disabled. Sent to OBS") : t("ministry.lowerThirdLive"));
                       } catch (err) {
                         setLtFeedbackTone("error");
                         setLtFeedback(err instanceof Error ? err.message : t("ministry.sendFailed"));
@@ -2221,11 +2472,10 @@ export default function DockMinistryTab({
                         setLtSending(false);
                       }
                     }}
+                    sending={ltSending}
+                    disabled={ltSending || !bibleLtText.trim() || !obsConnected}
                     style={{ flex: 1 }}
-                  >
-                    <Icon name="play_arrow" size={14} />
-                    <span>{t("common.sendToObs", "Send to OBS")}</span>
-                  </button>
+                  />
                   {ltLive && (
                     <button
                       type="button"

@@ -25,6 +25,7 @@ import Icon from "../DockIcon";
 import DockBottomToolbar from "../components/DockBottomToolbar";
 import DockBottomSearchPanel from "../components/DockBottomSearchPanel";
 import DockSceneRoutingControl from "../components/DockSceneRoutingControl";
+import DockSceneRouteConfirmDialog from "../components/DockSceneRouteConfirmDialog";
 import DockThemeSettingsModal from "../components/DockThemeSettingsModal";
 import {
   DOCK_THEME_SYNC_EVENT,
@@ -519,11 +520,27 @@ export default function DockNotesTab({
   const [sceneRoute, updateSceneRoute] = useDockSceneRoute("notes");
   const hasSceneRoute = sceneRoute.enabled && sceneRoute.targets.length > 0;
 
+  const notesSceneRouteConfirmedRef = useRef(false);
+  const [pendingNotesRouteConfirm, setPendingNotesRouteConfirm] = useState<{
+    idx: number;
+    quickSettingsOverride?: DockFullscreenQuickThemeSettings;
+    fitOptions?: DockOverlayFitOptions;
+  } | null>(null);
+
+  const sceneRouteTargetsKey = useMemo(() => {
+    return `${sceneRoute.enabled ? "1" : "0"}:${sceneRoute.targets.map((t) => `${t.sceneName}:${t.mode}`).join(",")}`;
+  }, [sceneRoute.enabled, sceneRoute.targets]);
+
+  useEffect(() => {
+    notesSceneRouteConfirmedRef.current = false;
+  }, [sceneRouteTargetsKey]);
+
   const pushNotesToConfiguredOutput = useCallback(async (
     data: DockTabContentPushData,
     options?: DockOverlayFitOptions,
+    pushOptions?: { bypassSceneRoute?: boolean },
   ) => {
-    if (!hasSceneRoute) {
+    if (!hasSceneRoute || pushOptions?.bypassSceneRoute) {
       return dockObsClient.pushNotesLyrics(data, options);
     }
     await Promise.all(sceneRoute.targets.map((target) => {
@@ -1292,7 +1309,12 @@ export default function DockNotesTab({
       idx: number,
       quickSettingsOverride?: DockFullscreenQuickThemeSettings,
       fitOptions?: DockOverlayFitOptions,
+      pushOptions?: { bypassSceneRoute?: boolean },
     ) => {
+      if (hasSceneRoute && !notesSceneRouteConfirmedRef.current && !pushOptions?.bypassSceneRoute) {
+        setPendingNotesRouteConfirm({ idx, quickSettingsOverride, fitOptions });
+        return;
+      }
       void dockObsClient.ensureModuleSourceOpenAndOnTop("notes", overlayMode);
       const payload = buildNoteObsPayload(idx, quickSettingsOverride);
       if (!payload) return;
@@ -1307,11 +1329,11 @@ export default function DockNotesTab({
         return;
       }
 
-      const pushLive = () => hasSceneRoute
-        ? pushNotesToConfiguredOutput(payload.obsData, fitOptions)
-          : payload.obsData.overlayMode === "lower-third"
-          ? dockObsClient.pushNotesOverlayFast(payload.obsData, fitOptions)
-          : pushNotesToConfiguredOutput(payload.obsData, fitOptions);
+      const pushLive = () => (hasSceneRoute && !pushOptions?.bypassSceneRoute)
+        ? pushNotesToConfiguredOutput(payload.obsData, fitOptions, pushOptions)
+        : payload.obsData.overlayMode === "lower-third"
+        ? dockObsClient.pushNotesOverlayFast(payload.obsData, fitOptions)
+        : pushNotesToConfiguredOutput(payload.obsData, fitOptions, pushOptions);
       if (fitOptions?.waitForFit) {
         return pushLive()
           .then((measurement) => {
@@ -1591,6 +1613,31 @@ export default function DockNotesTab({
       setVisibilityActionPending(false);
     }
   }, [overlayVisible, activeSlideIndex, clearNotesFromConfiguredOutput, hasSceneRoute, overlayMode, presentationLinkMode, pushNoteSlide, sceneRoute.syncPresentation, sceneRoute.targets]);
+
+  const handleConfirmNotesRoute = useCallback(() => {
+    if (!pendingNotesRouteConfirm) return;
+    notesSceneRouteConfirmedRef.current = true;
+    const { idx, quickSettingsOverride, fitOptions } = pendingNotesRouteConfirm;
+    setPendingNotesRouteConfirm(null);
+    void pushNoteSlide(idx, quickSettingsOverride, fitOptions, { bypassSceneRoute: false });
+  }, [pendingNotesRouteConfirm, pushNoteSlide]);
+
+  const handleSendNotesToMceAlone = useCallback(async () => {
+    if (!pendingNotesRouteConfirm) return;
+    const { idx, quickSettingsOverride, fitOptions } = pendingNotesRouteConfirm;
+    setPendingNotesRouteConfirm(null);
+    updateSceneRoute({ enabled: false });
+    if (sceneRoute.targets.length > 0) {
+      await Promise.allSettled(sceneRoute.targets.map((t) => (
+        dockObsClient.clearSceneRouteSource("notes", t.sceneName)
+      )));
+    }
+    void pushNoteSlide(idx, quickSettingsOverride, fitOptions, { bypassSceneRoute: true });
+  }, [pendingNotesRouteConfirm, pushNoteSlide, sceneRoute.targets, updateSceneRoute]);
+
+  const handleCancelNotesRouteConfirm = useCallback(() => {
+    setPendingNotesRouteConfirm(null);
+  }, []);
 
   const handleOverlayModeChange = useCallback((nextMode: OverlayMode) => {
     if (nextMode === overlayMode) return;
@@ -1907,6 +1954,20 @@ export default function DockNotesTab({
                 onRouteChange={updateSceneRoute}
                 disabled={presentationLinkMode}
                 title={t("notes.output")}
+                itemLabel={t("notes.note", "note")}
+                onSend={(opts) => {
+                  const targetSlideIndex = activeSlideIndex ?? (selectedNoteSlides.length > 0 ? 0 : null);
+                  if (targetSlideIndex !== null) {
+                    if (opts?.bypassSceneRoute) {
+                      notesSceneRouteConfirmedRef.current = false;
+                    } else {
+                      notesSceneRouteConfirmedRef.current = true;
+                    }
+                    void pushNoteSlide(targetSlideIndex, undefined, undefined, {
+                      bypassSceneRoute: opts?.bypassSceneRoute,
+                    });
+                  }
+                }}
               />
               <button
                 type="button"
@@ -2660,6 +2721,20 @@ export default function DockNotesTab({
                       placement="above"
                       showLabel
                       iconName="cast"
+                      itemLabel={t("notes.note", "note")}
+                      onSend={(opts) => {
+                        const targetSlideIndex = activeSlideIndex ?? (selectedNoteSlides.length > 0 ? 0 : null);
+                        if (targetSlideIndex !== null) {
+                          if (opts?.bypassSceneRoute) {
+                            notesSceneRouteConfirmedRef.current = false;
+                          } else {
+                            notesSceneRouteConfirmedRef.current = true;
+                          }
+                          void pushNoteSlide(targetSlideIndex, undefined, undefined, {
+                            bypassSceneRoute: opts?.bypassSceneRoute,
+                          });
+                        }
+                      }}
                     />
                   </>
                 )}
@@ -2759,6 +2834,15 @@ export default function DockNotesTab({
           ))}
         </div>
       )}
+
+      <DockSceneRouteConfirmDialog
+        open={Boolean(pendingNotesRouteConfirm)}
+        route={sceneRoute}
+        itemLabel={t("notes.note", "note")}
+        onConfirmRouted={handleConfirmNotesRoute}
+        onSendToMceAlone={handleSendNotesToMceAlone}
+        onCancel={handleCancelNotesRouteConfirm}
+      />
     </div>
   );
 }

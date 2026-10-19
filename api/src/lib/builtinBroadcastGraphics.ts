@@ -670,5 +670,101 @@ export const BUILTIN_BROADCAST_GRAPHICS: BuiltinBroadcastGraphic[] = [
     "accentColor": "#14161b",
     "description": "Full-screen sermon quote with a large photo on the left and bold type on the right. *Asterisk* words get a highlighted block in the highlight colour.",
     "sortOrder": 81
+  },
+  {
+    "graphicId": "lt-pkg-speaker-bar-strip",
+    "name": "Speaker · Bar and Strip",
+    "category": "speaker",
+    "accentColor": "#0f6e8c",
+    "description": "Name on a solid bar with the title on a white strip below it. The bar wipes in from the left, the strip follows and each line slides into place",
+    "sortOrder": 82
+  },
+  {
+    "graphicId": "lt-pkg-speaker-offset-strip",
+    "name": "Speaker · Offset Strip",
+    "category": "speaker",
+    "accentColor": "#0f6e8c",
+    "description": "Name bar with the title strip set off to the right underneath, like a step. The bar wipes in, then the strip wipes the other way",
+    "sortOrder": 83
+  },
+  {
+    "graphicId": "lt-pkg-speaker-underline-duo",
+    "name": "Speaker · Underlines",
+    "category": "speaker",
+    "accentColor": "#0f6e8c",
+    "description": "First and last name in capitals over thin rules, the last name larger and stepped to the right. No box, just lines that draw across and letters that rise",
+    "sortOrder": 84
+  },
+  {
+    "graphicId": "lt-pkg-speaker-solid-box",
+    "name": "Speaker · Solid Box",
+    "category": "speaker",
+    "accentColor": "#0f6e8c",
+    "description": "Name in bold capitals with the title underneath, together in one solid box. The box wipes up and the words rise inside it",
+    "sortOrder": 85
+  },
+  {
+    "graphicId": "lt-pkg-speaker-bold-outline",
+    "name": "Speaker · Bold Outline",
+    "category": "speaker",
+    "accentColor": "#0f6e8c",
+    "description": "A big name in capitals inside a white outline, the title tucked in at the bottom right. The frame opens from the middle and the name sweeps in",
+    "sortOrder": 86
+  },
+  {
+    "graphicId": "lt-pkg-speaker-wide-box",
+    "name": "Speaker · Wide Box",
+    "category": "speaker",
+    "accentColor": "#0f6e8c",
+    "description": "Name and title on one wide coloured box with generous room. The box stretches out from the left and both lines rise in",
+    "sortOrder": 87
+  },
+  {
+    "graphicId": "lt-pkg-speaker-stacked-pair",
+    "name": "Speaker · Stacked Pair",
+    "category": "speaker",
+    "accentColor": "#0f6e8c",
+    "description": "Name on a coloured bar stacked on a white title bar of the same width. The bars wipe in one after the other and the text rises",
+    "sortOrder": 88
+  },
+  {
+    "graphicId": "lt-pkg-speaker-split-name",
+    "name": "Speaker · Split Name",
+    "category": "speaker",
+    "accentColor": "#0f6e8c",
+    "description": "First name on a coloured block, last name on a white block beside it, both in heavy capitals. The blocks wipe towards each other",
+    "sortOrder": 89
+  },
+  {
+    "graphicId": "lt-pkg-speaker-thin-frame",
+    "name": "Speaker · Thin Frame",
+    "category": "speaker",
+    "accentColor": "#0f6e8c",
+    "description": "Name and title inside a thin white frame. A light, open look that suits busy pictures. The frame opens from the middle and the words slide in",
+    "sortOrder": 90
+  },
+  {
+    "graphicId": "lt-pkg-speaker-clean-text",
+    "name": "Speaker · Clean Text",
+    "category": "speaker",
+    "accentColor": "#0f6e8c",
+    "description": "Just the name and title, no box. Bold white type with a soft shadow so it reads over any picture. Each line rises out of a mask",
+    "sortOrder": 91
+  },
+  {
+    "graphicId": "lt-pkg-speaker-spaced-caps",
+    "name": "Speaker · Spaced Capitals",
+    "category": "speaker",
+    "accentColor": "#0f6e8c",
+    "description": "Name in widely spaced capitals on a coloured bar with the title centred on a small white strip below. The letters settle into place as the bar opens from the middle",
+    "sortOrder": 92
+  },
+  {
+    "graphicId": "lt-pkg-speaker-two-tone-tag",
+    "name": "Speaker · Two-Tone and Tag",
+    "category": "speaker",
+    "accentColor": "#0f6e8c",
+    "description": "A large first name on a coloured block, the last name on a white block beside it and the title on a small coloured tag underneath. Each piece wipes in in turn",
+    "sortOrder": 93
   }
 ];

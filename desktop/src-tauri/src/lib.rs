@@ -321,12 +321,117 @@ static STUDIO_STATE: OnceLock<Mutex<(u64, String)>> = OnceLock::new();
 /// camera is opened only once (many cameras and capture cards allow a single user).
 static STUDIO_CAMERA_FRAME: OnceLock<Mutex<(u64, Vec<u8>)>> = OnceLock::new();
 
+/// Wakes every open camera stream (`api/studio-camera/stream`) when a new picture arrives.
+static STUDIO_CAMERA_SIGNAL: OnceLock<std::sync::Condvar> = OnceLock::new();
+
+fn studio_camera_frame() -> &'static Mutex<(u64, Vec<u8>)> {
+    STUDIO_CAMERA_FRAME.get_or_init(|| Mutex::new((0, Vec::new())))
+}
+
+fn studio_camera_signal() -> &'static std::sync::Condvar {
+    STUDIO_CAMERA_SIGNAL.get_or_init(std::sync::Condvar::new)
+}
+
 /// Stores the newest native camera picture where `api/studio-camera` serves it (empty = camera off).
 fn publish_studio_camera_frame(bytes: Vec<u8>) {
-    let frame = STUDIO_CAMERA_FRAME.get_or_init(|| Mutex::new((0, Vec::new())));
-    if let Ok(mut state) = frame.lock() {
+    if let Ok(mut state) = studio_camera_frame().lock() {
         state.0 += 1;
         state.1 = bytes;
+    }
+    studio_camera_signal().notify_all();
+}
+
+/// The live camera as one long MJPEG response (multipart/x-mixed-replace): each new picture is
+/// written the moment it exists, like a video stream, instead of every window asking for it again
+/// and again. Runs on its own thread, so a video or a page being served never holds it up.
+#[cfg(test)]
+mod studio_camera_stream_tests {
+    use super::*;
+
+    #[test]
+    fn writes_each_new_picture_as_one_mjpeg_part() {
+        publish_studio_camera_frame(vec![0xFF, 0xD8, 1, 2, 3]);
+        let start = studio_camera_frame().lock().unwrap().0 - 1;
+        let mut stream = StudioCameraStream { seq: start, chunk: Vec::new(), pos: 0, sent_any: false, opened: Instant::now() };
+        let mut buf = [0u8; 4096];
+        let n = stream.read(&mut buf).unwrap();
+        let text = String::from_utf8_lossy(&buf[..n]).to_string();
+        assert!(text.starts_with("--mceframe\r\nContent-Type: image/jpeg\r\nContent-Length: 5\r\n"), "{text}");
+        assert!(buf[..n].ends_with(&[0xFF, 0xD8, 1, 2, 3, b'\r', b'\n']));
+        // The next picture wakes the waiting stream at once.
+        std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_millis(50));
+            publish_studio_camera_frame(vec![9, 9]);
+        });
+        let started = Instant::now();
+        let n = stream.read(&mut buf).unwrap();
+        assert!(started.elapsed() < Duration::from_millis(1000));
+        assert!(buf[..n].ends_with(&[9, 9, b'\r', b'\n']));
+        // Camera off after pictures were sent: the stream ends so the window knows.
+        publish_studio_camera_frame(Vec::new());
+        assert_eq!(stream.read(&mut buf).unwrap(), 0);
+    }
+}
+
+struct StudioCameraStream {
+    seq: u64,
+    chunk: Vec<u8>,
+    pos: usize,
+    sent_any: bool,
+    opened: Instant,
+}
+
+impl Read for StudioCameraStream {
+    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+        loop {
+            if self.pos < self.chunk.len() {
+                let n = (self.chunk.len() - self.pos).min(out.len());
+                out[..n].copy_from_slice(&self.chunk[self.pos..self.pos + n]);
+                self.pos += n;
+                return Ok(n);
+            }
+            let lock_err = |_| std::io::Error::new(std::io::ErrorKind::Other, "camera frame lock");
+            let mut state = studio_camera_frame().lock().map_err(lock_err)?;
+            // Wait for a newer picture. After 2 s the last one is sent again: that keeps the
+            // connection alive, and a window that has gone away is noticed when the write fails.
+            let deadline = Instant::now() + Duration::from_secs(2);
+            while state.0 <= self.seq {
+                let now = Instant::now();
+                if now >= deadline {
+                    break;
+                }
+                state = studio_camera_signal()
+                    .wait_timeout(state, deadline - now)
+                    .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "camera frame wait"))?
+                    .0;
+            }
+            if state.1.is_empty() {
+                // Camera off. Before the first picture, wait a while (it may still be opening);
+                // after pictures were sent, end the stream so the window knows.
+                if self.sent_any || self.opened.elapsed() > Duration::from_secs(20) {
+                    return Ok(0);
+                }
+                self.seq = state.0;
+                continue;
+            }
+            self.seq = state.0;
+            let jpeg = state.1.clone();
+            drop(state);
+            if let Ok(mut last) = STUDIO_CAMERA_WANTED.get_or_init(|| Mutex::new(None)).lock() {
+                *last = Some(Instant::now());
+            }
+            let mut chunk = format!(
+                "--mceframe\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nX-Frame-Seq: {}\r\n\r\n",
+                jpeg.len(),
+                self.seq
+            )
+            .into_bytes();
+            chunk.extend_from_slice(&jpeg);
+            chunk.extend_from_slice(b"\r\n");
+            self.chunk = chunk;
+            self.pos = 0;
+            self.sent_any = true;
+        }
     }
 }
 /// When a screen window last asked for a camera picture (the Studio sends fewer while nobody does).
@@ -3944,89 +4049,282 @@ struct EasyWorshipRawRecord {
     pub words_rtf: String,
 }
 
-fn find_file_recursive(dir: &Path, name_part: &str, depth: usize) -> Option<PathBuf> {
-    if depth > 4 {
+// ── EasyWorship song library ─────────────────────────────────────────────
+//
+// EasyWorship 6 and 7 keep each profile's songs in two SQLite files in the same folder:
+// Songs.db (titles, authors, CCLI numbers) and SongWords.db (the lyrics as RTF). On Windows that
+// folder is usually C:\Users\Public\Documents\Softouch\EasyWorship\<Profile>\v6.1\Databases\Data,
+// and C:\ProgramData\Softouch\EasyWorship.v7\Profiles\<Profile>.ewp says where each profile lives
+// (AppInstDataDir). The files are only ever opened read-only, so EasyWorship can stay open.
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EasyWorshipLibrary {
+    /// The profile name ("Default"), or the folder's name.
+    name: String,
+    /// The folder that holds Songs.db and SongWords.db.
+    data_dir: String,
+    song_count: i64,
+}
+
+fn is_easyworship_songs_db(name: &str) -> bool {
+    let n = name.to_lowercase();
+    // "Songs.db", and copies such as "Songs (1).db".
+    n.ends_with(".db") && n.starts_with("songs") && !n.starts_with("songwords")
+}
+
+fn is_easyworship_words_db(name: &str) -> bool {
+    let n = name.to_lowercase();
+    n.ends_with(".db") && n.starts_with("songwords")
+}
+
+/// Songs.db and SongWords.db side by side in `dir` (exact names first, then copies like "Songs (1).db").
+fn easyworship_files_in(dir: &Path) -> Option<(PathBuf, PathBuf)> {
+    let entries: Vec<PathBuf> = fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).filter(|p| p.is_file()).collect();
+    let pick = |test: fn(&str) -> bool, exact: &str| -> Option<PathBuf> {
+        let matching: Vec<&PathBuf> = entries
+            .iter()
+            .filter(|p| p.file_name().map(|n| test(&n.to_string_lossy())).unwrap_or(false))
+            .collect();
+        matching
+            .iter()
+            .find(|p| p.file_name().map(|n| n.to_string_lossy().eq_ignore_ascii_case(exact)).unwrap_or(false))
+            .or_else(|| matching.first())
+            .map(|p| (*p).clone())
+    };
+    Some((pick(is_easyworship_songs_db, "Songs.db")?, pick(is_easyworship_words_db, "SongWords.db")?))
+}
+
+/// The folder at or under `dir` that holds an EasyWorship song library (Songs.db + SongWords.db).
+/// Looks through at most a few thousand folders, so picking a big folder (a whole drive) stays quick.
+fn find_easyworship_data_dir(dir: &Path, depth: usize) -> Option<(PathBuf, PathBuf, PathBuf)> {
+    let mut budget = 4000usize;
+    find_easyworship_data_dir_within(dir, depth, &mut budget)
+}
+
+fn find_easyworship_data_dir_within(dir: &Path, depth: usize, budget: &mut usize) -> Option<(PathBuf, PathBuf, PathBuf)> {
+    if depth > 7 || *budget == 0 {
         return None;
     }
-    if let Ok(entries) = fs::read_dir(dir) {
-        let name_lower = name_part.to_lowercase();
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file() {
-                let fname = entry.file_name().to_string_lossy().to_lowercase();
-                if fname.contains(&name_lower) && fname.ends_with(".db") {
-                    return Some(path);
-                }
-            } else if path.is_dir() {
-                if let Some(found) = find_file_recursive(&path, name_part, depth + 1) {
-                    return Some(found);
+    *budget -= 1;
+    if let Some((songs, words)) = easyworship_files_in(dir) {
+        return Some((dir.to_path_buf(), songs, words));
+    }
+    let mut subdirs: Vec<PathBuf> = fs::read_dir(dir).ok()?.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+    // EasyWorship's own folders first ("Databases", "Data", "v6.1"); hidden, system and code folders never.
+    const SKIP: [&str; 9] = ["node_modules", "library", "appdata", "windows", "program files", "program files (x86)", "$recycle.bin", "system volume information", "target"];
+    subdirs.retain(|p| {
+        let n = p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+        !n.is_empty() && !n.starts_with('.') && !SKIP.contains(&n.as_str())
+    });
+    subdirs.sort_by_key(|p| {
+        let n = p.file_name().map(|n| n.to_string_lossy().to_lowercase()).unwrap_or_default();
+        if n == "databases" || n == "data" || n.starts_with("v6") || n.starts_with("v7") { 0 } else { 1 }
+    });
+    subdirs.into_iter().find_map(|sub| find_easyworship_data_dir_within(&sub, depth + 1, budget))
+}
+
+fn open_easyworship_db(path: &Path) -> Result<rusqlite::Connection, String> {
+    rusqlite::Connection::open_with_flags(
+        path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|e| format!("Could not open {}: {}", path.display(), e))
+}
+
+fn count_easyworship_songs(songs_path: &Path) -> Result<i64, String> {
+    let conn = open_easyworship_db(songs_path)?;
+    conn.query_row("SELECT COUNT(*) FROM song", [], |row| row.get(0))
+        .map_err(|_| "This Songs.db is not an EasyWorship 6 or 7 song library.".to_string())
+}
+
+fn easyworship_library_at(dir: &Path, name_hint: Option<&str>) -> Result<EasyWorshipLibrary, String> {
+    let (data_dir, songs, _) = find_easyworship_data_dir(dir, 0).ok_or_else(|| {
+        "No EasyWorship song library was found in this folder. Choose the folder that holds Songs.db and SongWords.db \
+         (in EasyWorship it's usually Documents\\Softouch\\EasyWorship\\Default\\v6.1\\Databases\\Data), or a folder above it."
+            .to_string()
+    })?;
+    let song_count = count_easyworship_songs(&songs)?;
+    let name = name_hint.map(|s| s.to_string()).unwrap_or_else(|| {
+        // "...\EasyWorship\Default\v6.1\Databases\Data" -> "Default"
+        data_dir
+            .ancestors()
+            .filter_map(|a| a.file_name().map(|n| n.to_string_lossy().to_string()))
+            .find(|n| !matches!(n.to_lowercase().as_str(), "data" | "databases") && !n.to_lowercase().starts_with("v6") && !n.to_lowercase().starts_with("v7"))
+            .unwrap_or_else(|| "EasyWorship".to_string())
+    });
+    Ok(EasyWorshipLibrary { name, data_dir: data_dir.to_string_lossy().to_string(), song_count })
+}
+
+/// Where EasyWorship libraries usually are on this computer (profiles first).
+fn easyworship_candidate_roots() -> Vec<(PathBuf, Option<String>)> {
+    let mut roots: Vec<(PathBuf, Option<String>)> = Vec::new();
+    // Profiles: C:\ProgramData\Softouch\EasyWorship.v7\Profiles\*.ewp → AppInstDataDir
+    if let Ok(program_data) = std::env::var("PROGRAMDATA") {
+        let softouch = PathBuf::from(program_data).join("Softouch");
+        if let Ok(apps) = fs::read_dir(&softouch) {
+            for app in apps.flatten() {
+                let profiles = app.path().join("Profiles");
+                let Ok(files) = fs::read_dir(&profiles) else { continue };
+                for file in files.flatten() {
+                    let path = file.path();
+                    if path.extension().map(|e| e.eq_ignore_ascii_case("ewp")).unwrap_or(false) {
+                        let text = fs::read(&path).map(|b| String::from_utf8_lossy(&b).to_string()).unwrap_or_default();
+                        if let Some(dir) = text.lines().find_map(|l| l.trim().strip_prefix("AppInstDataDir=")) {
+                            let name = path.file_stem().map(|n| n.to_string_lossy().to_string());
+                            roots.push((PathBuf::from(dir.trim()), name));
+                        }
+                    }
                 }
             }
         }
     }
-    None
+    // The shared documents folder EasyWorship uses by default, one folder per profile.
+    let mut documents: Vec<PathBuf> = Vec::new();
+    if let Ok(public) = std::env::var("PUBLIC") {
+        documents.push(PathBuf::from(public).join("Documents"));
+    }
+    if let Some(home) = dirs::document_dir() {
+        documents.push(home);
+    }
+    for docs in documents {
+        for brand in ["Softouch\\EasyWorship", "Softouch/EasyWorship", "EasyWorship"] {
+            let base = docs.join(brand);
+            if let Ok(profiles) = fs::read_dir(&base) {
+                for profile in profiles.flatten() {
+                    if profile.path().is_dir() {
+                        roots.push((profile.path(), Some(profile.file_name().to_string_lossy().to_string())));
+                    }
+                }
+            }
+        }
+    }
+    roots
 }
 
+/// The EasyWorship song libraries found on this computer, with how many songs each holds.
+#[tauri::command]
+fn find_easyworship_libraries() -> Vec<EasyWorshipLibrary> {
+    let mut seen = std::collections::HashSet::new();
+    let mut found = Vec::new();
+    for (root, name) in easyworship_candidate_roots() {
+        if !root.is_dir() {
+            continue;
+        }
+        if let Ok(lib) = easyworship_library_at(&root, name.as_deref()) {
+            let key = fs::canonicalize(&lib.data_dir).map(|p| p.to_string_lossy().to_lowercase()).unwrap_or_else(|_| lib.data_dir.to_lowercase());
+            if seen.insert(key) {
+                found.push(lib);
+            }
+        }
+    }
+    found
+}
+
+/// Checks a folder (or a Songs.db file) the operator picked: where the library is and how many songs it has.
+#[tauri::command]
+fn inspect_easyworship_folder(folder_path: String) -> Result<EasyWorshipLibrary, String> {
+    let picked = PathBuf::from(folder_path.trim());
+    let dir = if picked.is_file() { picked.parent().unwrap_or(&picked).to_path_buf() } else { picked };
+    if !dir.is_dir() {
+        return Err("That folder can't be opened. Check it still exists and try again.".to_string());
+    }
+    easyworship_library_at(&dir, None)
+}
+
+/// Reads every song with its lyrics from an EasyWorship library (read-only).
 #[tauri::command]
 fn read_easyworship_db_folder(folder_path: String) -> Result<Vec<EasyWorshipRawRecord>, String> {
-    let base_path = PathBuf::from(&folder_path);
+    let picked = PathBuf::from(folder_path.trim());
+    let dir = if picked.is_file() { picked.parent().unwrap_or(&picked).to_path_buf() } else { picked };
+    let (_, songs_path, words_path) = find_easyworship_data_dir(&dir, 0).ok_or_else(|| {
+        "No EasyWorship song library was found in this folder (it needs Songs.db and SongWords.db).".to_string()
+    })?;
 
-    let search_dir = if base_path.is_file() {
-        base_path.parent().unwrap_or(&base_path).to_path_buf()
-    } else {
-        base_path.clone()
-    };
-
-    let songs_path = find_file_recursive(&search_dir, "songs", 0)
-        .ok_or_else(|| format!("Could not find Songs.db in {}", folder_path))?;
-    let words_path = find_file_recursive(&search_dir, "songwords", 0)
-        .ok_or_else(|| format!("Could not find SongWords.db in {}", folder_path))?;
-
-    let conn = rusqlite::Connection::open(&songs_path)
-        .map_err(|e| format!("Failed to open Songs.db: {}", e))?;
-
-    let attach_sql = format!(
-        "ATTACH DATABASE '{}' AS words_db;",
-        words_path.to_string_lossy().replace("'", "''")
-    );
-    conn.execute(&attach_sql, [])
-        .map_err(|e| format!("Failed to attach SongWords.db: {}", e))?;
-
-    let mut stmt = conn
-        .prepare(
-            "SELECT s.rowid, s.title, s.author, s.copyright, s.administrator, s.reference_number, w.words \
-             FROM song s \
-             JOIN words_db.word w ON s.rowid = w.song_id ORDER BY s.title ASC"
-        )
-        .map_err(|e| format!("Query preparation failed: {}", e))?;
-
-    let rows = stmt
-        .query_map([], |row| {
-            Ok(EasyWorshipRawRecord {
-                rowid: row.get(0)?,
-                title: row.get(1)?,
-                author: row.get(2).ok(),
-                copyright: row.get(3).ok(),
-                administrator: row.get(4).ok(),
-                reference_number: row.get(5).ok(),
-                words_rtf: row.get(6)?,
-            })
-        })
-        .map_err(|e| format!("Query execution failed: {}", e))?;
-
-    let mut records = Vec::new();
-    for row in rows {
-        if let Ok(record) = row {
-            records.push(record);
+    // The lyrics, by song.
+    let words_conn = open_easyworship_db(&words_path)?;
+    let mut words_by_song: HashMap<i64, String> = HashMap::new();
+    {
+        let mut stmt = words_conn
+            .prepare("SELECT song_id, words FROM word")
+            .map_err(|_| "This SongWords.db is not an EasyWorship 6 or 7 lyrics file.".to_string())?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?)))
+            .map_err(|e| format!("Could not read the lyrics: {}", e))?;
+        for (song_id, words) in rows.flatten() {
+            if let Some(words) = words.filter(|w| !w.trim().is_empty()) {
+                words_by_song.entry(song_id).or_insert(words);
+            }
         }
     }
 
+    let conn = open_easyworship_db(&songs_path)?;
+    let mut stmt = conn
+        .prepare("SELECT rowid, title, author, copyright, administrator, reference_number FROM song ORDER BY title COLLATE NOCASE ASC")
+        .map_err(|_| "This Songs.db is not an EasyWorship 6 or 7 song library.".to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2).ok().flatten(),
+                row.get::<_, Option<String>>(3).ok().flatten(),
+                row.get::<_, Option<String>>(4).ok().flatten(),
+                row.get::<_, Option<String>>(5).ok().flatten(),
+            ))
+        })
+        .map_err(|e| format!("Could not read the songs: {}", e))?;
+
+    let mut records = Vec::new();
+    for (rowid, title, author, copyright, administrator, reference_number) in rows.flatten() {
+        // A song with no lyrics has nothing to show, so it is left out.
+        let Some(words_rtf) = words_by_song.remove(&rowid) else { continue };
+        records.push(EasyWorshipRawRecord {
+            rowid,
+            title: title.unwrap_or_default(),
+            author,
+            copyright,
+            administrator,
+            reference_number,
+            words_rtf,
+        });
+    }
     Ok(records)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The sample EasyWorship library in the repo (eazyworship/), with copied names like "Songs (1).db".
+    #[test]
+    fn reads_the_sample_easyworship_library_read_only() {
+        let sample = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../eazyworship");
+        if !sample.join("Songs (1).db").exists() {
+            eprintln!("sample EasyWorship library not found; skipping");
+            return;
+        }
+        // Found from a folder above it too (the repo root, with its big code folders skipped).
+        let above = inspect_easyworship_folder(sample.parent().unwrap().to_string_lossy().to_string()).expect("from above");
+        assert!(above.data_dir.ends_with("eazyworship"), "{}", above.data_dir);
+        let lib = inspect_easyworship_folder(sample.to_string_lossy().to_string()).expect("library");
+        assert_eq!(lib.song_count, 223);
+        let records = read_easyworship_db_folder(sample.to_string_lossy().to_string()).expect("songs");
+        assert!(records.len() > 200 && records.len() <= 223, "{} songs", records.len());
+        assert!(records.iter().all(|r| r.words_rtf.starts_with("{\\rtf")));
+        // Picking the Songs.db file itself works the same.
+        let by_file = read_easyworship_db_folder(sample.join("Songs (1).db").to_string_lossy().to_string()).expect("by file");
+        assert_eq!(by_file.len(), records.len());
+    }
+
+    #[test]
+    fn explains_a_folder_without_an_easyworship_library() {
+        let empty = std::env::temp_dir().join(format!("mce-ew-empty-{}", std::process::id()));
+        let _ = fs::create_dir_all(&empty);
+        let err = inspect_easyworship_folder(empty.to_string_lossy().to_string()).unwrap_err();
+        assert!(err.contains("Songs.db and SongWords.db"), "{err}");
+        let _ = fs::remove_dir_all(&empty);
+    }
 
     #[test]
     fn cleanup_song_title_handles_accented_utf8() {
@@ -7437,8 +7735,24 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
             // API: Presentation Studio camera picture (JPEG frames). POST = the Studio sends its newest
             // frame (an empty body means the camera is off). GET ?since=<n> = the newest frame, or
             // 204 when nothing newer than <n> exists. The frame number is in the X-Frame-Seq header.
+            // API: the live camera as one continuous stream (see StudioCameraStream).
+            if clean == "api/studio-camera/stream" {
+                let headers = vec![
+                    tiny_http::Header::from_bytes("Content-Type", "multipart/x-mixed-replace; boundary=mceframe").unwrap(),
+                    tiny_http::Header::from_bytes("Cache-Control", "no-store").unwrap(),
+                    tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap(),
+                    tiny_http::Header::from_bytes("Access-Control-Expose-Headers", "X-Frame-Seq").unwrap(),
+                ];
+                let stream = StudioCameraStream { seq: 0, chunk: Vec::new(), pos: 0, sent_any: false, opened: Instant::now() };
+                std::thread::spawn(move || {
+                    let response = tiny_http::Response::new(tiny_http::StatusCode(200), headers, stream, None, None);
+                    let _ = request.respond(response);
+                });
+                continue;
+            }
+
             if clean == "api/studio-camera" {
-                let frame = STUDIO_CAMERA_FRAME.get_or_init(|| Mutex::new((0, Vec::new())));
+                let frame = studio_camera_frame();
                 let cors =
                     tiny_http::Header::from_bytes("Access-Control-Allow-Origin", "*").unwrap();
 
@@ -7475,6 +7789,7 @@ fn start_overlay_server(resource_dir: std::path::PathBuf) -> u16 {
                         state.0 += 1;
                         state.1 = body;
                     }
+                    studio_camera_signal().notify_all();
                     let wanted = STUDIO_CAMERA_WANTED
                         .get_or_init(|| Mutex::new(None))
                         .lock()
@@ -9801,6 +10116,8 @@ pub fn run() {
             delete_dock_setting,
             search_online_song_lyrics,
             read_easyworship_db_folder,
+            find_easyworship_libraries,
+            inspect_easyworship_folder,
             load_transcripts,
             save_transcript,
             delete_transcript,

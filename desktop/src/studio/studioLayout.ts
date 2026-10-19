@@ -5,9 +5,10 @@
  * Saved on every change and read back when the Studio opens. The microphone and Auto mode are
  * NOT restored as running: the operator starts listening and turns Auto mode on again.
  */
+import { TEXT_BACKGROUNDS } from "./textLook";
 import type { StudioCameraLayout, StudioMode, StudioTransition } from "./studioEngine";
 
-export type StudioSection = "bible" | "worship" | "media" | "docs";
+export type StudioSection = "bible" | "worship" | "media" | "docs" | "ministry";
 
 export interface StudioLayout {
   section: StudioSection;
@@ -33,6 +34,11 @@ export interface StudioLayout {
   /** Quick Bold / Italic on top of any theme. */
   textBold: boolean;
   textItalic: boolean;
+  /** Text Settings on top of any theme: colour ("" = the theme's), shadow, alignment and background preset. */
+  textColor: string;
+  textShadow: "theme" | "on" | "off";
+  textAlign: "theme" | "left" | "center" | "right";
+  textBackground: string;
   /** Logo size on the screen, percent of its normal size. */
   logoScale: number;
 }
@@ -80,6 +86,10 @@ export const DEFAULT_LAYOUT: StudioLayout = {
   textScale: 100,
   textBold: false,
   textItalic: false,
+  textColor: "",
+  textShadow: "theme",
+  textAlign: "theme",
+  textBackground: "theme",
   logoScale: 100,
 };
 
@@ -88,7 +98,7 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-const SECTIONS: StudioSection[] = ["bible", "worship", "media", "docs"];
+const SECTIONS: StudioSection[] = ["bible", "worship", "media", "docs", "ministry"];
 const LAYOUTS: StudioCameraLayout[] = ["camera-only", "behind-content", "in-front", "hidden"];
 
 /** Merge saved values over the defaults, dropping anything unknown or out of range. */
@@ -130,6 +140,10 @@ export function normalizeLayout(raw: unknown): StudioLayout {
     textScale: clamp(Number(r.textScale ?? d.textScale), 70, 160),
     textBold: r.textBold === true,
     textItalic: r.textItalic === true,
+    textColor: typeof r.textColor === "string" && /^#[0-9a-f]{6}$/i.test(r.textColor) ? r.textColor : "",
+    textShadow: r.textShadow === "on" || r.textShadow === "off" ? r.textShadow : "theme",
+    textAlign: r.textAlign === "left" || r.textAlign === "center" || r.textAlign === "right" ? r.textAlign : "theme",
+    textBackground: typeof r.textBackground === "string" && TEXT_BACKGROUNDS.some((p) => p.id === r.textBackground) ? r.textBackground : "theme",
     logoScale: clamp(Number(r.logoScale ?? d.logoScale), 30, 250),
   };
 }
